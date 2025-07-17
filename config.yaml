@@ -17,9 +17,9 @@ overlay:
   # Field of view in degrees
   field_of_view: 1.5
   # Maximum magnitude of objects to display
-  magnitude_limit: 10.0
+  magnitude_limit: 9.0
   # Include objects without magnitude (galaxies, etc.)
-  include_no_magnitude: true
+  include_no_magnitude: false
   # Object types to include (empty = all types)
   # Common types: *, G (galaxy), AG? (active galaxy), Le? (lens), etc.
   object_types: []
@@ -31,8 +31,6 @@ overlay:
   output_format: "png"
   # Default output filename
   default_filename: "overlay.png"
-  # SIMBAD query timeout (not used in newer versions)
-  # simbad_timeout: 30
   # Maximum length for object names (truncate if longer)
   max_name_length: 15
 

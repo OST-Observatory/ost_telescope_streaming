@@ -6,6 +6,10 @@ astropy>=5.0
 
 # Image processing
 Pillow>=9.0.0
+numpy>=1.20.0
+
+# Video processing
+opencv-python>=4.5.0
 
 # Configuration management
 PyYAML>=6.0
