@@ -1,0 +1,99 @@
+# OST Telescope Streaming Configuration
+# =====================================
+
+# Telescope Mount Settings
+# ------------------------
+mount:
+  # ASCOM driver program ID
+  driver_id: "ASCOM.tenmicron_mount.Telescope"
+  # Connection timeout in seconds
+  connection_timeout: 10
+  # Coordinate validation
+  validate_coordinates: true
+
+# Overlay Generation Settings
+# ---------------------------
+overlay:
+  # Field of view in degrees
+  field_of_view: 1.5
+  # Maximum magnitude of objects to display
+  magnitude_limit: 10.0
+  # Image size in pixels (width, height)
+  image_size: [800, 800]
+  # Font size for object labels
+  font_size: 14
+  # Output file format
+  output_format: "png"
+  # Default output filename
+  default_filename: "overlay.png"
+  # SIMBAD query timeout in seconds
+  simbad_timeout: 30
+  # Maximum length for object names (truncate if longer)
+  max_name_length: 15
+
+# Streaming Settings
+# ------------------
+streaming:
+  # Update interval in seconds
+  update_interval: 30
+  # Maximum consecutive failures before stopping
+  max_retries: 3
+  # Delay between retry attempts in seconds
+  retry_delay: 5
+  # Enable timestamped filenames
+  use_timestamps: true
+  # Timestamp format for filenames
+  timestamp_format: "%Y%m%d_%H%M%S"
+
+# Display Settings
+# ----------------
+display:
+  # Object marker color (RGB)
+  object_color: [255, 0, 0]  # Red
+  # Text color (RGB)
+  text_color: [255, 255, 255]  # White
+  # Object marker size in pixels
+  marker_size: 5
+  # Text offset from marker in pixels
+  text_offset: [8, -8]
+
+# Logging Settings
+# ----------------
+logging:
+  # Enable detailed logging
+  verbose: true
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  # Show emojis in console output
+  show_emojis: true
+  # Log to file
+  log_to_file: false
+  # Log file path
+  log_file: "telescope_streaming.log"
+
+# Platform Settings
+# -----------------
+platform:
+  # Font paths for different operating systems
+  fonts:
+    windows:
+      - "arial.ttf"
+      - "C:/Windows/Fonts/arial.ttf"
+    linux:
+      - "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+      - "/usr/share/fonts/TTF/arial.ttf"
+    macos:
+      - "/System/Library/Fonts/Arial.ttf"
+      - "/Library/Fonts/Arial.ttf"
+
+# Advanced Settings
+# -----------------
+advanced:
+  # Enable coordinate transformation debugging
+  debug_coordinates: false
+  # Enable SIMBAD query debugging
+  debug_simbad: false
+  # Save empty overlays when no objects found
+  save_empty_overlays: true
+  # Enable automatic error recovery
+  auto_recovery: true 

@@ -1,0 +1,17 @@
+# OST Telescope Streaming - Dependencies
+
+# Core astronomy libraries
+astroquery>=0.4.6
+astropy>=5.0
+
+# Image processing
+Pillow>=9.0.0
+
+# Configuration management
+PyYAML>=6.0
+
+# Windows-specific (only needed on Windows)
+pywin32>=305; sys_platform == "win32"
+
+# Optional: For better error handling and logging
+colorama>=0.4.4 
