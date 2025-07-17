@@ -2,6 +2,7 @@
 import argparse
 import sys
 import platform
+import numpy as np
 from astroquery.simbad import Simbad
 from astropy.coordinates import SkyCoord
 import astropy.units as u
@@ -40,7 +41,7 @@ def skycoord_to_pixel(obj_coord, center_coord, size_px, fov_deg):
     """Converts sky coordinates to pixel coordinates."""
     try:
         delta_ra = (obj_coord.ra.degree - center_coord.ra.degree) * \
-            u.deg.to(u.arcmin) * u.cos(center_coord.dec.radian)
+            u.deg.to(u.arcmin) * np.cos(center_coord.dec.radian)
         delta_dec = (obj_coord.dec.degree - center_coord.dec.degree) * u.deg.to(u.arcmin)
 
         scale = size_px[0] / (fov_deg * 60)  # arcmin -> pixels
@@ -79,6 +80,8 @@ def main():
         # Get configuration values
         fov_deg = overlay_config.get('field_of_view', 1.5)
         mag_limit = overlay_config.get('magnitude_limit', 10.0)
+        include_no_magnitude = overlay_config.get('include_no_magnitude', True)
+        object_types = overlay_config.get('object_types', [])
         image_size = tuple(overlay_config.get('image_size', [800, 800]))
         # simbad_timeout = overlay_config.get('simbad_timeout', 30)  # Not used in newer versions
         max_name_length = overlay_config.get('max_name_length', 15)
@@ -130,10 +133,22 @@ def main():
         objects_drawn = 0
         for row in result:
             try:
-                if 'V' not in row.colnames or row['V'] is None:
+                # Handle objects with and without V magnitude
+                has_v_magnitude = 'V' in row.colnames and row['V'] is not None and row['V'] != '--'
+                
+                # Skip objects that are too faint (if they have magnitude)
+                if has_v_magnitude and row['V'] > mag_limit:
                     continue
-                if row['V'] > mag_limit:
+                
+                # Skip objects without magnitude if configured
+                if not has_v_magnitude and not include_no_magnitude:
                     continue
+                
+                # Filter by object type if specified
+                if object_types and 'otype' in row.colnames:
+                    obj_type = row['otype']
+                    if obj_type not in object_types:
+                        continue
 
                 # Try different possible column names for RA/Dec
                 ra_col = None

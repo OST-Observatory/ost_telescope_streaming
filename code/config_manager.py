@@ -50,6 +50,8 @@ class ConfigManager:
             'overlay': {
                 'field_of_view': 1.5,
                 'magnitude_limit': 10.0,
+                'include_no_magnitude': True,
+                'object_types': [],
                 'image_size': [800, 800],
                 'font_size': 14,
                 'output_format': 'png',

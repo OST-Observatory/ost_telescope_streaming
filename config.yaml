@@ -18,6 +18,11 @@ overlay:
   field_of_view: 1.5
   # Maximum magnitude of objects to display
   magnitude_limit: 10.0
+  # Include objects without magnitude (galaxies, etc.)
+  include_no_magnitude: true
+  # Object types to include (empty = all types)
+  # Common types: *, G (galaxy), AG? (active galaxy), Le? (lens), etc.
+  object_types: []
   # Image size in pixels (width, height)
   image_size: [800, 800]
   # Font size for object labels
