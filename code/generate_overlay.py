@@ -178,12 +178,23 @@ def main():
                     draw.ellipse((x - marker_size, y - marker_size, x + marker_size, y + marker_size), 
                                outline=object_color, width=2)
                     
-                    # Safe name handling
-                    name = row['MAIN_ID']
-                    if isinstance(name, bytes):
-                        name = name.decode("utf-8", errors='ignore')
-                    else:
-                        name = str(name)
+                    # Safe name handling - try different possible column names
+                    name = None
+                    name_columns = ['MAIN_ID', 'main_id', 'MAINID', 'mainid']
+                    
+                    for name_col in name_columns:
+                        if name_col in row.colnames:
+                            name_value = row[name_col]
+                            if name_value is not None:
+                                if isinstance(name_value, bytes):
+                                    name = name_value.decode("utf-8", errors='ignore')
+                                else:
+                                    name = str(name_value)
+                                break
+                    
+                    # Fallback if no name found
+                    if name is None:
+                        name = f"Obj_{objects_drawn}"
                     
                     # Truncate long names
                     if len(name) > max_name_length:
@@ -193,7 +204,14 @@ def main():
                     objects_drawn += 1
                     
             except Exception as e:
-                print(f"Warning: Error processing object: {e}")
+                # More detailed error information for debugging
+                if advanced_config.get('debug_simbad', False):
+                    print(f"Warning: Error processing object: {e}")
+                    print(f"  Available columns: {row.colnames if hasattr(row, 'colnames') else 'No colnames'}")
+                    if hasattr(row, 'colnames') and 'main_id' in row.colnames:
+                        print(f"  main_id value: {row['main_id']}")
+                else:
+                    print(f"Warning: Error processing object: {e}")
                 continue
 
         img.save(output_file)
