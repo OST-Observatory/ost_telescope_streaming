@@ -90,7 +90,7 @@ advanced:
   # Enable coordinate transformation debugging
   debug_coordinates: false
   # Enable SIMBAD query debugging
-  debug_simbad: false
+  debug_simbad: true
   # Save empty overlays when no objects found
   save_empty_overlays: true
   # Enable automatic error recovery

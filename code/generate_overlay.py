@@ -89,10 +89,11 @@ def main():
         
         center = SkyCoord(ra=args.ra * u.deg, dec=args.dec * u.deg, frame='icrs')
 
-        # Configure SIMBAD
+        # Configure SIMBAD with updated field names
         custom_simbad = Simbad()
         custom_simbad.reset_votable_fields()
-        custom_simbad.add_votable_fields('ra(d)', 'dec(d)', 'V', 'otype', 'main_id')
+        # Use new field names to avoid deprecation warnings
+        custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
 
         # Radius is half-diagonal of field of view
         radius = ((fov_deg**2 + fov_deg**2)**0.5) / 2
@@ -108,6 +109,11 @@ def main():
                 img.save(output_file)
                 print(f"Empty overlay saved as {output_file}")
             return
+
+        # Debug: Print available column names
+        if advanced_config.get('debug_simbad', False):
+            print(f"Available columns: {result.colnames}")
+            print(f"Number of objects: {len(result)}")
 
         # Prepare image
         img = Image.new("RGBA", image_size, (0, 0, 0, 0))
@@ -129,7 +135,27 @@ def main():
                 if row['V'] > mag_limit:
                     continue
 
-                obj_coord = SkyCoord(ra=row['RA_d'], dec=row['DEC_d'], unit="deg")
+                # Try different possible column names for RA/Dec
+                ra_col = None
+                dec_col = None
+                
+                # Check for various possible column names
+                for ra_name in ['RA', 'ra', 'RA_d', 'ra_d']:
+                    if ra_name in row.colnames:
+                        ra_col = ra_name
+                        break
+                
+                for dec_name in ['DEC', 'dec', 'DEC_d', 'dec_d']:
+                    if dec_name in row.colnames:
+                        dec_col = dec_name
+                        break
+                
+                if ra_col is None or dec_col is None:
+                    print(f"Warning: Could not find RA/Dec columns. Available: {row.colnames}")
+                    continue
+
+                # Use found column names
+                obj_coord = SkyCoord(ra=row[ra_col], dec=row[dec_col], unit="deg")
                 x, y = skycoord_to_pixel(obj_coord, center, image_size, fov_deg)
 
                 # Check if object is within image bounds
