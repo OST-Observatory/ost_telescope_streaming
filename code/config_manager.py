@@ -6,7 +6,14 @@ from typing import Dict, Any, Optional
 class ConfigManager:
     """Manages configuration settings for the telescope streaming system."""
     
-    def __init__(self, config_path: str = "../config.yaml"):
+    def __init__(self, config_path: str = "config.yaml"):
+        # If relative path, make it relative to the project root
+        if not os.path.isabs(config_path):
+            # Try to find config.yaml in the project root
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)  # Go up one level from code/
+            config_path = os.path.join(project_root, config_path)
+        
         self.config_path = config_path
         self.config = self._load_config()
     

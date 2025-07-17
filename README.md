@@ -46,7 +46,7 @@ The system uses a YAML configuration file (`config.yaml`) for all settings:
 - **Overlay Settings**: Field of view, magnitude limit, image size, font settings
 - **Streaming Settings**: Update interval, retry limits, timestamp options
 - **Display Settings**: Colors, marker size, text positioning
-- **Logging Settings**: Verbosity, emoji display, log file options
+- **Logging Settings**: Verbosity, log file options
 - **Platform Settings**: Font paths for different operating systems
 
 ### Example Configuration:
@@ -90,6 +90,14 @@ python code/ascom_mount.py
 
 Continuously displays current RA/Dec coordinates of the mount.
 
+### Test Configuration
+
+```bash
+python test_config.py
+```
+
+Tests the configuration system to ensure it's working correctly.
+
 ## 🔧 Troubleshooting
 
 ### Common Issues:
@@ -110,9 +118,18 @@ Continuously displays current RA/Dec coordinates of the mount.
    - Check internet connection
    - Query has 30-second timeout
 
+5. **UnicodeEncodeError with charmap codec**
+   - This indicates cached Python files with old Unicode characters
+   - Run the cache cleaning script:
+   ```bash
+   python clean_cache.py
+   ```
+   - Or manually delete `__pycache__` directories and `.pyc` files
+   - Restart your Python environment
+
 ### Logs and Debugging:
 
-- All errors are displayed with emojis and detailed messages
+- All errors are displayed with detailed messages
 - Critical errors automatically stop the system
 - Overlay files are saved with timestamps
 - Configuration can be adjusted without code changes
@@ -128,6 +145,8 @@ ost_telescope_streaming/
 │   └── config_manager.py   # Configuration management
 ├── config.yaml             # Configuration file
 ├── requirements.txt        # Dependencies
+├── test_config.py          # Configuration test script
+├── clean_cache.py          # Cache cleaning utility
 └── README.md              # This file
 ```
 
