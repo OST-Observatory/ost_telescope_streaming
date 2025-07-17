@@ -1,82 +1,105 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Simple video capture test script
+Test script for video capture from telescope stream.
+Tests camera availability and captures a single frame.
 """
 
 import cv2
+import argparse
 import sys
-import os
+import time
+from pathlib import Path
 
 def list_cameras():
-    """List available camera devices"""
-    print("Available camera devices:")
-    available_cameras = []
+    """List all available camera devices."""
+    print("🔍 Scanning for available cameras...")
     
-    for i in range(10):  # Check first 10 indices
+    available_cameras = []
+    # Test first 10 camera indices
+    for i in range(10):
         cap = cv2.VideoCapture(i)
         if cap.isOpened():
-            ret, frame = cap.read()
-            if ret:
-                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                print(f"  Camera {i}: {width}x{height} @ {fps:.1f} fps")
-                available_cameras.append(i)
+            # Get camera info
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            print(f"📹 Camera {i}: {width}x{height} @ {fps:.1f}fps")
+            available_cameras.append(i)
             cap.release()
         else:
-            print(f"  Camera {i}: Not available")
+            print(f"❌ Camera {i}: Not available")
     
+    if not available_cameras:
+        print("⚠️  No cameras found!")
+        return []
+    
+    print(f"\n✅ Found {len(available_cameras)} camera(s): {available_cameras}")
     return available_cameras
 
-def capture_frame(camera_index=0, output_file="captured_frame.jpg"):
-    """Capture a single frame from the specified camera"""
-    print(f"Attempting to capture frame from camera {camera_index}...")
+def test_camera_access(camera_index):
+    """Test if camera is accessible (not blocked by other applications)."""
+    print(f"🔍 Testing access to camera {camera_index}...")
     
-    # Open camera
     cap = cv2.VideoCapture(camera_index)
-    
     if not cap.isOpened():
-        print(f"Error: Could not open camera {camera_index}")
+        print(f"❌ Camera {camera_index} is not accessible")
         return False
     
-    # Get camera properties
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    # Try to read a frame
+    ret, frame = cap.read()
+    if not ret:
+        print(f"❌ Camera {camera_index} is accessible but cannot read frames (possibly in use by another application)")
+        cap.release()
+        return False
     
-    print(f"Camera opened: {width}x{height} @ {fps:.1f} fps")
+    print(f"✅ Camera {camera_index} is accessible and can read frames")
+    cap.release()
+    return True
+
+def capture_frame(camera_index, output_path="test_frame.jpg"):
+    """Capture a single frame from the specified camera."""
+    print(f"📸 Capturing frame from camera {camera_index}...")
+    
+    # Test access first
+    if not test_camera_access(camera_index):
+        return False
+    
+    cap = cv2.VideoCapture(camera_index)
+    if not cap.isOpened():
+        print(f"❌ Failed to open camera {camera_index}")
+        return False
+    
+    # Wait a moment for camera to stabilize
+    print("⏳ Waiting for camera to stabilize...")
+    time.sleep(1)
     
     # Capture frame
     ret, frame = cap.read()
-    
     if not ret:
-        print("Error: Could not capture frame")
+        print(f"❌ Failed to capture frame from camera {camera_index}")
         cap.release()
         return False
     
     # Save frame
-    success = cv2.imwrite(output_file, frame)
+    output_file = Path(output_path)
+    success = cv2.imwrite(str(output_file), frame)
     
     if success:
-        print(f"Frame saved as {output_file}")
-        print(f"Frame size: {frame.shape[1]}x{frame.shape[0]}")
+        print(f"✅ Frame saved to: {output_file.absolute()}")
+        print(f"   Frame size: {frame.shape[1]}x{frame.shape[0]} pixels")
     else:
-        print(f"Error: Could not save frame to {output_file}")
+        print(f"❌ Failed to save frame to {output_file}")
     
-    # Release camera
     cap.release()
-    
     return success
 
 def main():
-    """Main function"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Simple video capture test")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
-    parser.add_argument("--output", type=str, default="captured_frame.jpg", help="Output file (default: captured_frame.jpg)")
-    parser.add_argument("--list", action="store_true", help="List available cameras")
+    parser = argparse.ArgumentParser(description="Test video capture from telescope stream")
+    parser.add_argument("--list", action="store_true", help="List all available cameras")
+    parser.add_argument("--camera", type=int, default=0, help="Camera index to use (default: 0)")
+    parser.add_argument("--output", default="test_frame.jpg", help="Output filename (default: test_frame.jpg)")
+    parser.add_argument("--test-access", action="store_true", help="Test camera access without capturing")
     
     args = parser.parse_args()
     
@@ -84,27 +107,13 @@ def main():
         list_cameras()
         return
     
-    print("Video Capture Test")
-    print("=" * 30)
-    
-    # List cameras first
-    available_cameras = list_cameras()
-    
-    if not available_cameras:
-        print("No cameras found!")
+    if args.test_access:
+        test_camera_access(args.camera)
         return
-    
-    if args.camera not in available_cameras:
-        print(f"Warning: Camera {args.camera} not in available cameras: {available_cameras}")
-        print("Trying anyway...")
     
     # Capture frame
     success = capture_frame(args.camera, args.output)
-    
-    if success:
-        print("Video capture test completed successfully!")
-    else:
-        print("Video capture test failed!")
+    if not success:
         sys.exit(1)
 
 if __name__ == "__main__":
