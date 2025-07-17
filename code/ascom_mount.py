@@ -12,11 +12,11 @@ if platform.system() == "Windows":
         import win32com.client
         WINDOWS_AVAILABLE = True
     except ImportError:
-        print("⚠️  win32com not available. Install with: pip install pywin32")
+        print("Warning: win32com not available. Install with: pip install pywin32")
         WINDOWS_AVAILABLE = False
 else:
     WINDOWS_AVAILABLE = False
-    print("⚠️  ASCOM is only available on Windows.")
+    print("Warning: ASCOM is only available on Windows.")
 
 class ASCOMMount:
     def __init__(self, prog_id=None):
@@ -36,7 +36,7 @@ class ASCOMMount:
         try:
             self.telescope = win32com.client.Dispatch(prog_id)
             if not self.telescope.Connected:
-                print("🔌 Connecting to 10Micron mount...")
+                print("Connecting to 10Micron mount...")
                 self.telescope.Connected = True
                 time.sleep(1)  # Brief pause for connection establishment
                 
@@ -73,9 +73,9 @@ class ASCOMMount:
         try:
             if hasattr(self, 'telescope') and self.telescope.Connected:
                 self.telescope.Connected = False
-                print("🔌 Disconnected from mount.")
+                print("Disconnected from mount.")
         except Exception as e:
-            print(f"⚠️  Error disconnecting: {e}")
+            print(f"Warning: Error disconnecting: {e}")
 
     def __enter__(self):
         return self
@@ -88,10 +88,10 @@ if __name__ == "__main__":
         with ASCOMMount() as mount:
             while True:
                 ra, dec = mount.get_coordinates()
-                print(f"📡 RA: {ra:.4f}°, Dec: {dec:.4f}°")
+                print(f"RA: {ra:.4f}°, Dec: {dec:.4f}°")
                 time.sleep(2)
     except KeyboardInterrupt:
-        print("\n⛔ Stopped by user.")
+        print("\nStopped by user.")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         sys.exit(1)

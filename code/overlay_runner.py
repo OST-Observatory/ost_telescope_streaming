@@ -14,7 +14,7 @@ try:
     from ascom_mount import ASCOMMount
     MOUNT_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️  ASCOM mount not available: {e}")
+    print(f"Warning: ASCOM mount not available: {e}")
     MOUNT_AVAILABLE = False
 
 class OverlayRunner:
@@ -32,15 +32,11 @@ class OverlayRunner:
         self.retry_delay = streaming_config.get('retry_delay', 5)
         self.use_timestamps = streaming_config.get('use_timestamps', True)
         self.timestamp_format = streaming_config.get('timestamp_format', '%Y%m%d_%H%M%S')
-        self.show_emojis = logging_config.get('show_emojis', True)
         
     def setup_signal_handlers(self):
         """Sets up signal handlers for clean shutdown."""
         def signal_handler(signum, frame):
-            if self.show_emojis:
-                print(f"\n🛑 Signal {signum} received. Shutting down...")
-            else:
-                print(f"\nSignal {signum} received. Shutting down...")
+            print(f"\nSignal {signum} received. Shutting down...")
             self.running = False
             
         signal.signal(signal.SIGINT, signal_handler)
@@ -48,10 +44,7 @@ class OverlayRunner:
     
     def generate_overlay_with_coords(self, ra_deg, dec_deg, output_file=None):
         """Generates an overlay for the given coordinates."""
-        if self.show_emojis:
-            print(f"🖼️  Generating overlay for RA: {ra_deg:.4f}°, Dec: {dec_deg:.4f}° ...")
-        else:
-            print(f"Generating overlay for RA: {ra_deg:.4f}°, Dec: {dec_deg:.4f}° ...")
+        print(f"Generating overlay for RA: {ra_deg:.4f}°, Dec: {dec_deg:.4f}° ...")
         
         cmd = [
             sys.executable,  # Current Python interpreter
@@ -73,31 +66,19 @@ class OverlayRunner:
             )
             
             if result.returncode == 0:
-                if self.show_emojis:
-                    print("✅ Overlay created successfully")
-                else:
-                    print("Overlay created successfully")
+                print("Overlay created successfully")
                 if result.stdout:
                     print(result.stdout.strip())
             else:
-                if self.show_emojis:
-                    print(f"❌ Error creating overlay:")
-                else:
-                    print(f"Error creating overlay:")
+                print(f"Error creating overlay:")
                 print(result.stderr.strip())
                 return False
                 
         except subprocess.TimeoutExpired:
-            if self.show_emojis:
-                print("⏰ Timeout while creating overlay")
-            else:
-                print("Timeout while creating overlay")
+            print("Timeout while creating overlay")
             return False
         except Exception as e:
-            if self.show_emojis:
-                print(f"❌ Unexpected error: {e}")
-            else:
-                print(f"Unexpected error: {e}")
+            print(f"Unexpected error: {e}")
             return False
             
         return True
@@ -105,20 +86,13 @@ class OverlayRunner:
     def run(self):
         """Main loop of the overlay runner."""
         if not MOUNT_AVAILABLE:
-            if self.show_emojis:
-                print("❌ ASCOM mount not available. Exiting.")
-            else:
-                print("ASCOM mount not available. Exiting.")
+            print("ASCOM mount not available. Exiting.")
             return
             
         try:
             self.mount = ASCOMMount()
-            if self.show_emojis:
-                print("🚀 Overlay Runner started")
-                print(f"⏱️  Update interval: {self.update_interval} seconds")
-            else:
-                print("Overlay Runner started")
-                print(f"Update interval: {self.update_interval} seconds")
+            print("Overlay Runner started")
+            print(f"Update interval: {self.update_interval} seconds")
             
             consecutive_failures = 0
             
@@ -139,79 +113,45 @@ class OverlayRunner:
                     
                     if success:
                         consecutive_failures = 0
-                        if self.show_emojis:
-                            print(f"📊 Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
-                        else:
-                            print(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
+                        print(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
                     else:
                         consecutive_failures += 1
-                        if self.show_emojis:
-                            print(f"⚠️  Error #{consecutive_failures}")
-                        else:
-                            print(f"Error #{consecutive_failures}")
+                        print(f"Error #{consecutive_failures}")
                         
                         if consecutive_failures >= self.max_retries:
-                            if self.show_emojis:
-                                print(f"❌ Too many consecutive errors ({consecutive_failures}). Exiting.")
-                            else:
-                                print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                            print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
                             break
                     
                     # Wait until next update
                     if self.running:
-                        if self.show_emojis:
-                            print(f"⏳ Waiting {self.update_interval} seconds...")
-                        else:
-                            print(f"Waiting {self.update_interval} seconds...")
+                        print(f"Waiting {self.update_interval} seconds...")
                         time.sleep(self.update_interval)
                         
                 except KeyboardInterrupt:
-                    if self.show_emojis:
-                        print("\n⛔ Stopped by user.")
-                    else:
-                        print("\nStopped by user.")
+                    print("\nStopped by user.")
                     break
                 except Exception as e:
                     consecutive_failures += 1
-                    if self.show_emojis:
-                        print(f"❌ Error in main loop: {e}")
-                    else:
-                        print(f"Error in main loop: {e}")
+                    print(f"Error in main loop: {e}")
                     
                     if consecutive_failures >= self.max_retries:
-                        if self.show_emojis:
-                            print(f"❌ Too many consecutive errors ({consecutive_failures}). Exiting.")
-                        else:
-                            print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                        print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
                         break
                     
-                    if self.show_emojis:
-                        print(f"⏳ Waiting {self.retry_delay} seconds before retry...")
-                    else:
-                        print(f"Waiting {self.retry_delay} seconds before retry...")
+                    print(f"Waiting {self.retry_delay} seconds before retry...")
                     time.sleep(self.retry_delay)
                     
         except Exception as e:
-            if self.show_emojis:
-                print(f"❌ Critical error: {e}")
-            else:
-                print(f"Critical error: {e}")
+            print(f"Critical error: {e}")
         finally:
             if self.mount:
                 self.mount.disconnect()
-            if self.show_emojis:
-                print("👋 Overlay Runner stopped.")
-            else:
-                print("Overlay Runner stopped.")
+            print("Overlay Runner stopped.")
 
 def main():
     """Main function."""
-    if config.get('logging.show_emojis', True):
-        print("🔭 OST Telescope Streaming - Overlay Runner")
-        print("=" * 50)
-    else:
-        print("OST Telescope Streaming - Overlay Runner")
-        print("=" * 50)
+    print("OST Telescope Streaming - Overlay Runner")
+    print("=" * 50)
     
     runner = OverlayRunner()
     runner.run()

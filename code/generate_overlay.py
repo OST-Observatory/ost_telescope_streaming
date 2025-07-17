@@ -33,7 +33,7 @@ def get_font():
             continue
     
     # Fallback to default font
-    print("⚠️  Could not load TrueType font, using default font.")
+    print("Warning: Could not load TrueType font, using default font.")
     return ImageFont.load_default()
 
 def skycoord_to_pixel(obj_coord, center_coord, size_px, fov_deg):
@@ -97,16 +97,16 @@ def main():
         # Radius is half-diagonal of field of view
         radius = ((fov_deg**2 + fov_deg**2)**0.5) / 2
 
-        print("🔭 SIMBAD query running...")
+        print("SIMBAD query running...")
         result = custom_simbad.query_region(center, radius=radius * u.deg, timeout=simbad_timeout)
 
         if result is None or len(result) == 0:
-            print("❌ No objects found.")
+            print("No objects found.")
             # Create empty overlay if configured
             if advanced_config.get('save_empty_overlays', True):
                 img = Image.new("RGBA", image_size, (0, 0, 0, 0))
                 img.save(output_file)
-                print(f"✅ Empty overlay saved as {output_file}")
+                print(f"Empty overlay saved as {output_file}")
             return
 
         # Prepare image
@@ -152,14 +152,14 @@ def main():
                     objects_drawn += 1
                     
             except Exception as e:
-                print(f"⚠️  Error processing object: {e}")
+                print(f"Warning: Error processing object: {e}")
                 continue
 
         img.save(output_file)
-        print(f"✅ Overlay with {objects_drawn} objects saved as {output_file}")
+        print(f"Overlay with {objects_drawn} objects saved as {output_file}")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

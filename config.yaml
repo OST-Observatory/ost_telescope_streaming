@@ -64,8 +64,6 @@ logging:
   verbose: true
   # Log level: DEBUG, INFO, WARNING, ERROR
   level: "INFO"
-  # Show emojis in console output
-  show_emojis: true
   # Log to file
   log_to_file: false
   # Log file path

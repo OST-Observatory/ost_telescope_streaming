@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 class ConfigManager:
     """Manages configuration settings for the telescope streaming system."""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "../config.yaml"):
         self.config_path = config_path
         self.config = self._load_config()
     
@@ -14,7 +14,7 @@ class ConfigManager:
         """Load configuration from YAML file."""
         try:
             if not os.path.exists(self.config_path):
-                print(f"⚠️  Configuration file {self.config_path} not found. Using defaults.")
+                print(f"Warning: Configuration file {self.config_path} not found. Using defaults.")
                 return self._get_default_config()
             
             with open(self.config_path, 'r', encoding='utf-8') as file:
@@ -24,11 +24,11 @@ class ConfigManager:
             default_config = self._get_default_config()
             merged_config = self._merge_configs(default_config, config)
             
-            print(f"✅ Configuration loaded from {self.config_path}")
+            print(f"Configuration loaded from {self.config_path}")
             return merged_config
             
         except Exception as e:
-            print(f"❌ Error loading configuration: {e}")
+            print(f"Error loading configuration: {e}")
             print("Using default configuration.")
             return self._get_default_config()
     
@@ -66,7 +66,7 @@ class ConfigManager:
             'logging': {
                 'verbose': True,
                 'level': 'INFO',
-                'show_emojis': True,
+                'show_emojis': False,
                 'log_to_file': False,
                 'log_file': 'telescope_streaming.log'
             },
@@ -149,9 +149,9 @@ class ConfigManager:
         try:
             with open(path, 'w', encoding='utf-8') as file:
                 yaml.dump(self._get_default_config(), file, default_flow_style=False, allow_unicode=True)
-            print(f"✅ Default configuration saved to {path}")
+            print(f"Default configuration saved to {path}")
         except Exception as e:
-            print(f"❌ Error saving default configuration: {e}")
+            print(f"Error saving default configuration: {e}")
 
 # Global configuration instance
 config = ConfigManager() 
