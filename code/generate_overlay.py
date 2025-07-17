@@ -80,7 +80,7 @@ def main():
         fov_deg = overlay_config.get('field_of_view', 1.5)
         mag_limit = overlay_config.get('magnitude_limit', 10.0)
         image_size = tuple(overlay_config.get('image_size', [800, 800]))
-        simbad_timeout = overlay_config.get('simbad_timeout', 30)
+        # simbad_timeout = overlay_config.get('simbad_timeout', 30)  # Not used in newer versions
         max_name_length = overlay_config.get('max_name_length', 15)
         default_filename = overlay_config.get('default_filename', 'overlay.png')
         
@@ -99,7 +99,7 @@ def main():
         radius = ((fov_deg**2 + fov_deg**2)**0.5) / 2
 
         print("SIMBAD query running...")
-        result = custom_simbad.query_region(center, radius=radius * u.deg, timeout=simbad_timeout)
+        result = custom_simbad.query_region(center, radius=radius * u.deg)
 
         if result is None or len(result) == 0:
             print("No objects found.")

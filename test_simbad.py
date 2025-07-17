@@ -33,9 +33,9 @@ try:
     # Create center coordinate
     center = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame='icrs')
     
-    # Query SIMBAD
+    # Query SIMBAD (without timeout parameter)
     print("Querying SIMBAD...")
-    result = custom_simbad.query_region(center, radius=1.0 * u.deg, timeout=30)
+    result = custom_simbad.query_region(center, radius=1.0 * u.deg)
     
     if result is None or len(result) == 0:
         print("No objects found in SIMBAD query.")

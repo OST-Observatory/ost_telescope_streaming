@@ -26,8 +26,8 @@ overlay:
   output_format: "png"
   # Default output filename
   default_filename: "overlay.png"
-  # SIMBAD query timeout in seconds
-  simbad_timeout: 30
+  # SIMBAD query timeout (not used in newer versions)
+  # simbad_timeout: 30
   # Maximum length for object names (truncate if longer)
   max_name_length: 15
 

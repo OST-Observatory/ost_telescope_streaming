@@ -116,7 +116,7 @@ Tests the configuration system to ensure it's working correctly.
 
 4. **"SIMBAD query running..." (hangs)**
    - Check internet connection
-   - Query has 30-second timeout
+   - SIMBAD queries may take some time depending on server load
 
 5. **UnicodeEncodeError with charmap codec**
    - This indicates cached Python files with old Unicode characters

@@ -54,7 +54,7 @@ class ConfigManager:
                 'font_size': 14,
                 'output_format': 'png',
                 'default_filename': 'overlay.png',
-                'simbad_timeout': 30,
+                # 'simbad_timeout': 30,  # Not used in newer astroquery versions
                 'max_name_length': 15
             },
             'streaming': {
