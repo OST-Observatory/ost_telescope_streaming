@@ -17,21 +17,34 @@ except ImportError as e:
     print(f"Warning: ASCOM mount not available: {e}")
     MOUNT_AVAILABLE = False
 
+try:
+    from video_processor import VideoProcessor
+    VIDEO_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Video processor not available: {e}")
+    VIDEO_AVAILABLE = False
+
 class OverlayRunner:
     def __init__(self):
         self.running = True
         self.mount = None
+        self.video_processor = None
         self.setup_signal_handlers()
         
         # Load configuration
         streaming_config = config.get_streaming_config()
         logging_config = config.get_logging_config()
+        video_config = config.get_video_config()
         
         self.update_interval = streaming_config.get('update_interval', 30)
         self.max_retries = streaming_config.get('max_retries', 3)
         self.retry_delay = streaming_config.get('retry_delay', 5)
         self.use_timestamps = streaming_config.get('use_timestamps', True)
         self.timestamp_format = streaming_config.get('timestamp_format', '%Y%m%d_%H%M%S')
+        
+        # Video processing settings
+        self.video_enabled = video_config.get('plate_solving_enabled', False)
+        self.last_solve_result = None
         
     def setup_signal_handlers(self):
         """Sets up signal handlers for clean shutdown."""
@@ -83,6 +96,8 @@ class OverlayRunner:
             
         return True
     
+
+    
     def run(self):
         """Main loop of the overlay runner."""
         if not MOUNT_AVAILABLE:
@@ -93,6 +108,35 @@ class OverlayRunner:
             self.mount = ASCOMMount()
             print("Overlay Runner started")
             print(f"Update interval: {self.update_interval} seconds")
+            
+            # Initialize video processor if available and enabled
+            if VIDEO_AVAILABLE and self.video_enabled:
+                try:
+                    self.video_processor = VideoProcessor()
+                    
+                    # Set up callbacks
+                    def on_solve_result(result):
+                        self.last_solve_result = result
+                        print(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
+                    
+                    def on_error(error):
+                        print(f"Video processing error: {error}")
+                    
+                    self.video_processor.set_callbacks(
+                        on_solve_result=on_solve_result,
+                        on_error=on_error
+                    )
+                    
+                    if self.video_processor.start():
+                        print("Video processor started")
+                    else:
+                        print("Failed to start video processor")
+                        self.video_processor = None
+                except Exception as e:
+                    print(f"Error initializing video processor: {e}")
+                    self.video_processor = None
+            else:
+                print("Video processing disabled or not available")
             
             consecutive_failures = 0
             
@@ -110,6 +154,9 @@ class OverlayRunner:
                     
                     # Create overlay
                     success = self.generate_overlay_with_coords(ra_deg, dec_deg, output_file)
+                    
+                    # Video processing is handled automatically by the video processor
+                    # Plate-solving results are available via callbacks
                     
                     if success:
                         consecutive_failures = 0
@@ -146,6 +193,8 @@ class OverlayRunner:
         finally:
             if self.mount:
                 self.mount.disconnect()
+            if self.video_processor:
+                self.video_processor.stop()
             print("Overlay Runner stopped.")
 
 def main():

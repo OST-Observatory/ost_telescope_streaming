@@ -11,6 +11,79 @@ mount:
   # Coordinate validation
   validate_coordinates: true
 
+# Telescope Parameters
+# -------------------
+telescope:
+  # Focal length in millimeters
+  focal_length: 1000
+  # Aperture diameter in millimeters
+  aperture: 200
+  # Telescope type (refractor, reflector, etc.)
+  type: "reflector"
+  # Focal ratio (focal_length / aperture)
+  focal_ratio: 5.0
+
+# Camera Parameters
+# ----------------
+camera:
+  # Sensor width in millimeters
+  sensor_width: 6.17
+  # Sensor height in millimeters
+  sensor_height: 4.55
+  # Pixel size in micrometers
+  pixel_size: 3.75
+  # Camera type (mono, color, etc.)
+  type: "color"
+  # Bit depth
+  bit_depth: 8
+
+# Video Capture Settings
+# ---------------------
+video:
+  # Camera device index
+  camera_index: 0
+  # Frame width in pixels
+  frame_width: 1920
+  # Frame height in pixels
+  frame_height: 1080
+  # Frame rate
+  fps: 30
+  # Auto exposure (true/false)
+  auto_exposure: true
+  # Manual exposure time in milliseconds
+  exposure_time: 100
+  # Gain setting
+  gain: 1.0
+  # Enable plate-solving
+  plate_solving_enabled: false
+  # Plate-solving interval in seconds
+  plate_solving_interval: 60
+  # Save frames for plate-solving
+  save_plate_solve_frames: true
+  # Plate-solving output directory
+  plate_solve_dir: "plate_solve_frames"
+
+# Plate-Solving Settings
+# ----------------------
+plate_solve:
+  # Default solver to use (platesolve2, astrometry)
+  default_solver: "platesolve2"
+  # Enable automatic plate-solving
+  auto_solve: true
+  # Minimum interval between solves in seconds
+  min_solve_interval: 30
+  # PlateSolve 2 specific settings
+  platesolve2_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2"
+  working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
+  timeout: 60
+  verbose: false
+  search_radius: 15  # degrees
+  min_stars: 20
+  max_stars: 200
+  # Astrometry.net specific settings
+  astrometry_api_key: ""
+  astrometry_api_url: "http://nova.astrometry.net/api/"
+
 # Overlay Generation Settings
 # ---------------------------
 overlay:

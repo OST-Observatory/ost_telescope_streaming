@@ -47,6 +47,46 @@ class ConfigManager:
                 'connection_timeout': 10,
                 'validate_coordinates': True
             },
+            'telescope': {
+                'focal_length': 1000,
+                'aperture': 200,
+                'type': 'reflector',
+                'focal_ratio': 5.0
+            },
+            'camera': {
+                'sensor_width': 6.17,
+                'sensor_height': 4.55,
+                'pixel_size': 3.75,
+                'type': 'color',
+                'bit_depth': 8
+            },
+            'video': {
+                'camera_index': 0,
+                'frame_width': 1920,
+                'frame_height': 1080,
+                'fps': 30,
+                'auto_exposure': True,
+                'exposure_time': 100,
+                'gain': 1.0,
+                'plate_solving_enabled': False,
+                'plate_solving_interval': 60,
+                'save_plate_solve_frames': True,
+                'plate_solve_dir': 'plate_solve_frames'
+            },
+            'plate_solve': {
+                'default_solver': 'platesolve2',
+                'auto_solve': True,
+                'min_solve_interval': 30,
+                'platesolve2_path': 'C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2',
+                'working_directory': 'C:/Users/BP34_Admin/AppData/Local/Temp',
+                'timeout': 60,
+                'verbose': False,
+                'search_radius': 15,
+                'min_stars': 20,
+                'max_stars': 200,
+                'astrometry_api_key': '',
+                'astrometry_api_url': 'http://nova.astrometry.net/api/'
+            },
             'overlay': {
                 'field_of_view': 1.5,
                 'magnitude_limit': 10.0,
@@ -121,6 +161,22 @@ class ConfigManager:
     def get_mount_config(self) -> Dict[str, Any]:
         """Get mount configuration section."""
         return self.config.get('mount', {})
+    
+    def get_telescope_config(self) -> Dict[str, Any]:
+        """Get telescope configuration section."""
+        return self.config.get('telescope', {})
+    
+    def get_camera_config(self) -> Dict[str, Any]:
+        """Get camera configuration section."""
+        return self.config.get('camera', {})
+    
+    def get_video_config(self) -> Dict[str, Any]:
+        """Get video configuration section."""
+        return self.config.get('video', {})
+    
+    def get_plate_solve_config(self) -> Dict[str, Any]:
+        """Get plate-solving configuration section."""
+        return self.config.get('plate_solve', {})
     
     def get_overlay_config(self) -> Dict[str, Any]:
         """Get overlay configuration section."""

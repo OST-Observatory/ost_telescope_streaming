@@ -18,7 +18,7 @@ An automated sky overlay system for telescope streaming and astronomical observa
 - 10Micron mount or other ASCOM-compatible mount
 - Internet connection for SIMBAD queries
 
-## 🚀 Installation
+## Installation
 
 1. **Clone repository:**
 ```bash
@@ -36,7 +36,7 @@ pip install -r requirements.txt
 pip install pywin32
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 The system uses a YAML configuration file (`config.yaml`) for all settings:
 
@@ -61,7 +61,7 @@ streaming:
   max_retries: 3           # Maximum retry attempts
 ```
 
-## 🎯 Usage
+## Usage
 
 ### Generate Single Overlay
 
@@ -98,7 +98,7 @@ python test_config.py
 
 Tests the configuration system to ensure it's working correctly.
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Common Issues:
 
