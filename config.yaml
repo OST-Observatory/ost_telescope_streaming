@@ -76,11 +76,12 @@ plate_solve:
   platesolve2_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
   working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
   timeout: 60
-  verbose: false
+  verbose: true
   use_gui_mode: true  # Use GUI mode if CLI doesn't work
   auto_mode: true  # Enable automatic solving
   silent_mode: true  # Enable silent mode
   result_file_pattern: "*.txt"  # Pattern for result files
+  number_of_regions: 999  # Number of regions to test
   search_radius: 15  # degrees
   min_stars: 20
   max_stars: 200
@@ -101,7 +102,7 @@ overlay:
   # Common types: *, G (galaxy), AG? (active galaxy), Le? (lens), etc.
   object_types: []
   # Image size in pixels (width, height)
-  image_size: [800, 800]
+  image_size: [1920, 1080]
   # Font size for object labels
   font_size: 14
   # Output file format

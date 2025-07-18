@@ -84,6 +84,17 @@ class PlateSolve2Solver(PlateSolver):
         
         # GUI mode flag
         self.use_gui_mode = self.plate_solve_config.get('use_gui_mode', True)
+        
+        # Try to use automated solver first
+        try:
+            from plate_solver_automated import PlateSolve2Automated
+            self.automated_solver = PlateSolve2Automated()
+            self.automated_available = True
+            self.logger.info("Automated PlateSolve 2 solver available")
+        except ImportError:
+            self.automated_solver = None
+            self.automated_available = False
+            self.logger.info("Automated PlateSolve 2 solver not available, using manual mode")
     
     def get_name(self) -> str:
         return "PlateSolve 2"
@@ -131,6 +142,30 @@ class PlateSolve2Solver(PlateSolver):
         start_time = time.time()
         
         try:
+            # Try automated solving first if available
+            if self.automated_available and self.automated_solver:
+                self.logger.info("Attempting automated PlateSolve 2 solving")
+                automated_result = self.automated_solver.solve(image_path)
+                
+                if automated_result['success']:
+                    # Convert automated result to PlateSolveResult
+                    result.success = True
+                    result.ra_center = automated_result['ra_center']
+                    result.dec_center = automated_result['dec_center']
+                    result.fov_width = automated_result['fov_width']
+                    result.fov_height = automated_result['fov_height']
+                    result.confidence = automated_result['confidence']
+                    result.stars_detected = automated_result['stars_detected']
+                    result.solving_time = automated_result['solving_time']
+                    result.method_used = automated_result['method_used']
+                    
+                    self.logger.info(f"Automated solving successful: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
+                    return result
+                else:
+                    self.logger.warning(f"Automated solving failed: {automated_result['error_message']}")
+                    self.logger.info("Falling back to manual mode")
+            
+            # Fall back to manual mode
             if self.use_gui_mode:
                 result = self._solve_with_gui(image_path, result)
             else:

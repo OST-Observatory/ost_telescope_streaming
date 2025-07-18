@@ -85,6 +85,7 @@ class ConfigManager:
                 'auto_mode': True,
                 'silent_mode': True,
                 'result_file_pattern': '*.txt',
+                'number_of_regions': 999,
                 'search_radius': 15,
                 'min_stars': 20,
                 'max_stars': 200,
