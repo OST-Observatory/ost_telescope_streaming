@@ -77,6 +77,10 @@ plate_solve:
   working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
   timeout: 60
   verbose: false
+  use_gui_mode: true  # Use GUI mode if CLI doesn't work
+  auto_mode: true  # Enable automatic solving
+  silent_mode: true  # Enable silent mode
+  result_file_pattern: "*.txt"  # Pattern for result files
   search_radius: 15  # degrees
   min_stars: 20
   max_stars: 200

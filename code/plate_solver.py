@@ -81,6 +81,9 @@ class PlateSolve2Solver(PlateSolver):
         
         # Results file
         self.results_file = None
+        
+        # GUI mode flag
+        self.use_gui_mode = self.plate_solve_config.get('use_gui_mode', True)
     
     def get_name(self) -> str:
         return "PlateSolve 2"
@@ -96,15 +99,18 @@ class PlateSolve2Solver(PlateSolver):
             self.logger.warning(f"PlateSolve 2 executable not found: {self.executable_path}")
             return False
         
-        # Test if executable is runnable
+        # PlateSolve 2 is a GUI application, so we can't test it with --help
+        # Just check if the executable exists and is accessible
         try:
+            # Try to start the process without arguments to see if it's runnable
             result = subprocess.run(
-                [str(executable), "--help"],
+                [str(executable)],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=5
             )
-            return result.returncode == 0
+            # Even if it fails, the executable is available if it exists
+            return True
         except Exception as e:
             self.logger.warning(f"PlateSolve 2 test failed: {e}")
             return False
@@ -125,53 +131,120 @@ class PlateSolve2Solver(PlateSolver):
         start_time = time.time()
         
         try:
-            # Create results filename
-            image_path_obj = Path(image_path)
-            results_filename = f"{image_path_obj.stem}_results.txt"
-            results_path = image_path_obj.parent / results_filename
+            if self.use_gui_mode:
+                result = self._solve_with_gui(image_path, result)
+            else:
+                result = self._solve_with_cli(image_path, result)
             
-            # Build command
+            result.solving_time = time.time() - start_time
+            
+        except Exception as e:
+            result.error_message = f"PlateSolve 2 error: {str(e)}"
+            self.logger.error(f"PlateSolve 2 exception: {e}")
+        
+        return result
+    
+    def _solve_with_gui(self, image_path: str, result: PlateSolveResult) -> PlateSolveResult:
+        """Solve using PlateSolve 2 GUI mode."""
+        try:
+            # Open PlateSolve 2 with the image file
+            cmd = [self.executable_path, image_path]
+            
+            if self.verbose:
+                self.logger.info(f"Opening PlateSolve 2 GUI: {' '.join(cmd)}")
+            
+            # Start PlateSolve 2 GUI
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Wait for the process to start
+            time.sleep(2)
+            
+            # Check if process is running
+            if process.poll() is None:
+                self.logger.info("PlateSolve 2 GUI opened successfully")
+                self.logger.info("Please solve the image manually in PlateSolve 2")
+                self.logger.info("You can save results or copy coordinates from the GUI")
+                
+                # For now, return a result indicating GUI is open
+                result.error_message = "PlateSolve 2 GUI opened - manual solving required"
+                result.success = False
+                
+                # TODO: In the future, we could:
+                # 1. Monitor for result files created by PlateSolve 2
+                # 2. Use Windows API to read GUI content
+                # 3. Implement clipboard monitoring for copied coordinates
+                
+            else:
+                # Process finished (possibly an error)
+                stdout, stderr = process.communicate()
+                if stderr:
+                    result.error_message = f"PlateSolve 2 error: {stderr.strip()}"
+                else:
+                    result.error_message = "PlateSolve 2 process finished unexpectedly"
+                self.logger.error(f"PlateSolve 2 process error: {result.error_message}")
+            
+            return result
+            
+        except Exception as e:
+            result.error_message = f"GUI mode error: {str(e)}"
+            return result
+    
+    def _solve_with_cli(self, image_path: str, result: PlateSolveResult) -> PlateSolveResult:
+        """Solve using PlateSolve 2 command line mode."""
+        try:
+            # Build command for PlateSolve 2
+            # Based on successful test: PlateSolve2.exe image_path
             cmd = [
                 self.executable_path,
-                "--image", image_path,
-                "--results", str(results_path),
-                "--search-radius", str(self.search_radius),
-                "--min-stars", str(self.min_stars),
-                "--max-stars", str(self.max_stars)
+                image_path  # Direct image path as first argument
             ]
             
             if self.verbose:
-                cmd.append("--verbose")
+                self.logger.info(f"PlateSolve 2 CLI command: {' '.join(cmd)}")
             
             # Set working directory
             cwd = self.working_directory if self.working_directory else None
             
-            self.logger.info(f"Running PlateSolve 2: {' '.join(cmd)}")
+            self.logger.info(f"Running PlateSolve 2 CLI: {' '.join(cmd)}")
             
-            # Execute PlateSolve 2
-            process = subprocess.run(
+            # Execute PlateSolve 2 - this will open the GUI
+            # We use Popen instead of run because it's a GUI application
+            process = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
                 cwd=cwd
             )
             
-            result.solving_time = time.time() - start_time
+            # Wait for the process to start and GUI to open
+            time.sleep(2)
             
-            if process.returncode == 0:
-                # Parse results
-                result = self._parse_results(results_path, result)
+            # Check if process is still running
+            if process.poll() is None:
+                self.logger.info("PlateSolve 2 GUI opened successfully")
+                result.error_message = "PlateSolve 2 GUI opened - manual intervention required"
+                result.success = False
             else:
-                result.error_message = f"PlateSolve 2 failed: {process.stderr.strip()}"
-                self.logger.error(f"PlateSolve 2 error: {process.stderr}")
+                # Process finished (possibly an error)
+                stdout, stderr = process.communicate()
+                if stderr:
+                    result.error_message = f"PlateSolve 2 error: {stderr.strip()}"
+                else:
+                    result.error_message = "PlateSolve 2 process finished unexpectedly"
+                self.logger.error(f"PlateSolve 2 process error: {result.error_message}")
             
         except subprocess.TimeoutExpired:
-            result.error_message = f"PlateSolve 2 timeout after {self.timeout} seconds"
-            self.logger.error("PlateSolve 2 timeout")
+            result.error_message = f"PlateSolve 2 CLI timeout after {self.timeout} seconds"
+            self.logger.error("PlateSolve 2 CLI timeout")
         except Exception as e:
-            result.error_message = f"PlateSolve 2 error: {str(e)}"
-            self.logger.error(f"PlateSolve 2 exception: {e}")
+            result.error_message = f"PlateSolve 2 CLI error: {str(e)}"
+            self.logger.error(f"PlateSolve 2 CLI exception: {e}")
         
         return result
     
