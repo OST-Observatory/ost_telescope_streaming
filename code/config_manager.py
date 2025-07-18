@@ -77,7 +77,7 @@ class ConfigManager:
                 'default_solver': 'platesolve2',
                 'auto_solve': True,
                 'min_solve_interval': 30,
-                'platesolve2_path': 'C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2',
+                'platesolve2_path': 'C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe',
                 'working_directory': 'C:/Users/BP34_Admin/AppData/Local/Temp',
                 'timeout': 60,
                 'verbose': False,

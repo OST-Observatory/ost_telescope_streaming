@@ -73,7 +73,7 @@ plate_solve:
   # Minimum interval between solves in seconds
   min_solve_interval: 30
   # PlateSolve 2 specific settings
-  platesolve2_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2"
+  platesolve2_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
   working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
   timeout: 60
   verbose: false
