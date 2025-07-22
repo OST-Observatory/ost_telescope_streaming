@@ -347,9 +347,10 @@ class PlateSolve2Automated:
     def _cleanup(self):
         """Clean up resources."""
         try:
-            if self.current_process and self.current_process.poll() is None:
-                self.current_process.terminate()
-                self.current_process.wait(timeout=5)
+            # self.current_process is a CompletedProcess object from subprocess.run()
+            # It doesn't have poll() method since the process is already completed
+            # No cleanup needed for completed processes
+            pass
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
         
