@@ -16,6 +16,7 @@ import logging
 from config_manager import config as default_config
 from exceptions import CameraError, FileError
 from status import CameraStatus, success_status, error_status, warning_status
+from ascom_camera import ASCOMCamera
 
 class VideoCapture:
     """Video capture class for telescope streaming."""
@@ -33,6 +34,8 @@ class VideoCapture:
         self.video_config = self.config.get_video_config()
         self.camera_config = self.config.get_camera_config()
         self.telescope_config = self.config.get_telescope_config()
+        self.camera_type = self.camera_config.get('type', 'video')
+        self.ascom_driver = self.camera_config.get('ascom_driver', None)
         
         # Camera settings
         self.camera_index = self.video_config.get('camera_index', 0)
@@ -58,6 +61,8 @@ class VideoCapture:
         
         # Setup logging
         self.logger = logging.getLogger(__name__)
+        
+        self.ascom_camera = None
         
     def _calculate_field_of_view(self) -> tuple[float, float]:
         """Berechnet das Sichtfeld (FOV) in Grad basierend auf Teleskop- und Kameraparametern.
@@ -95,6 +100,15 @@ class VideoCapture:
     
     def connect(self) -> bool:
         """Connect to video camera."""
+        if self.camera_type == 'ascom' and self.ascom_driver:
+            self.ascom_camera = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
+            status = self.ascom_camera.connect()
+            if status.is_success:
+                self.logger.info("ASCOM camera connected")
+                return True
+            else:
+                self.logger.error(f"ASCOM camera connection failed: {status.message}")
+                return False
         try:
             self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
@@ -192,6 +206,16 @@ class VideoCapture:
         Returns:
             CameraStatus: Status-Objekt mit Frame oder Fehler.
         """
+        if self.camera_type == 'ascom' and self.ascom_camera:
+            # Beispiel: Belichtungszeit und Gain aus config
+            exposure_time = self.camera_config.get('exposure_time', 1000)
+            gain = self.camera_config.get('gain', None)
+            binning = self.camera_config.get('binning', 1)
+            exp_status = self.ascom_camera.expose(exposure_time, gain, binning)
+            if not exp_status.is_success:
+                return exp_status
+            img_status = self.ascom_camera.get_image()
+            return img_status
         if not self.cap or not self.cap.isOpened():
             if not self.connect():
                 return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
@@ -201,6 +225,50 @@ class VideoCapture:
         else:
             self.logger.error("Failed to capture single frame")
             return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
+    
+    def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
+        """Nimmt ein einzelnes Frame mit ASCOM-Kamera auf.
+        Args:
+            exposure_time_s: Belichtungszeit in Sekunden
+            gain: Gain-Wert (optional)
+            binning: Binning-Faktor (default: 1)
+        Returns:
+            CameraStatus: Status-Objekt mit Frame oder Fehler.
+        """
+        if not self.ascom_camera:
+            return error_status("ASCOM camera not connected")
+        
+        try:
+            # Start exposure
+            exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning)
+            if not exp_status.is_success:
+                return exp_status
+            
+            # Get image
+            img_status = self.ascom_camera.get_image()
+            if not img_status.is_success:
+                return img_status
+            
+            # Check if debayering is needed
+            if self.ascom_camera.is_color_camera():
+                debayer_status = self.ascom_camera.debayer(img_status.data)
+                if debayer_status.is_success:
+                    return success_status("Color frame captured and debayered", 
+                                        data=debayer_status.data, 
+                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+                else:
+                    self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
+                    return success_status("Color frame captured (raw)", 
+                                        data=img_status.data, 
+                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+            else:
+                return success_status("Mono frame captured", 
+                                    data=img_status.data, 
+                                    details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+                
+        except Exception as e:
+            self.logger.error(f"Error capturing ASCOM frame: {e}")
+            return error_status(f"Error capturing ASCOM frame: {e}")
     
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         """Speichert ein Frame als Datei.

@@ -42,6 +42,10 @@ camera:
 video:
   # Camera device index
   camera_index: 0
+  # Camera type: 'opencv' for regular video cameras, 'ascom' for astro cameras
+  camera_type: "opencv"
+  # ASCOM driver ID for astro cameras (e.g., "ASCOM.QHYCamera.Camera", "ASCOM.ZWOCamera.Camera")
+  ascom_driver: ""
   # Frame width in pixels
   frame_width: 1920
   # Frame height in pixels
