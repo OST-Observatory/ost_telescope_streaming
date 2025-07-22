@@ -20,7 +20,7 @@ from exceptions import PlateSolveError, FileError
 from status import PlateSolveStatus, success_status, error_status, warning_status
 
 class PlateSolve2Automated:
-    """Automatisierte PlateSolve 2 Integration mit korrektem Kommandozeilenformat."""
+    """Automated PlateSolve 2 integration with correct command line format."""
     def __init__(self, config=None, logger=None):
         from config_manager import config as default_config
         import logging
@@ -44,9 +44,9 @@ class PlateSolve2Automated:
         self.current_process = None
     
     def solve(self, image_path: str, ra_deg: Optional[float] = None, dec_deg: Optional[float] = None, fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None) -> PlateSolveStatus:
-        """Automatisiertes Plate-Solving mit PlateSolve2.
+        """Automated plate-solving with PlateSolve2.
         Returns:
-            PlateSolveStatus: Status-Objekt mit Ergebnis oder Fehler.
+            PlateSolveStatus: Status object with result or error.
         """
         start_time = time.time()
         try:
@@ -92,7 +92,7 @@ class PlateSolve2Automated:
             self._cleanup()
     
     def _is_available(self) -> bool:
-        """Prüft, ob PlateSolve 2 verfügbar ist."""
+        """Checks if PlateSolve 2 is available."""
         if not self.executable_path:
             self.logger.warning("PlateSolve 2 path not configured")
             return False
@@ -105,21 +105,21 @@ class PlateSolve2Automated:
         return True
     
     def _get_apm_path(self, image_path: str) -> str:
-        """Generiert den Pfad zur APM-Datei basierend auf dem Bildpfad.
+        """Generates the path to the APM file based on the image path.
         
         Args:
-            image_path: Pfad zur Eingabebilddatei
+            image_path: Path to the input image file
             
         Returns:
-            str: Pfad zur erwarteten APM-Datei
+            str: Path to the expected APM file
         """
-        # Konvertiere zu Path-Objekt für einfachere Manipulation
+        # Convert to Path object for easier manipulation
         image_path_obj = Path(image_path)
         
-        # Erstelle den APM-Dateinamen: gleicher Name, aber .apm Endung
+        # Create APM filename: same name but .apm extension
         apm_filename = image_path_obj.stem + ".apm"
         
-        # APM-Datei liegt im selben Verzeichnis wie die Eingabedatei
+        # APM file is in the same directory as the input file
         apm_path = image_path_obj.parent / apm_filename
         
         if self.verbose:
@@ -128,7 +128,7 @@ class PlateSolve2Automated:
         return str(apm_path)
     
     def _prepare_parameters(self, ra_deg: Optional[float], dec_deg: Optional[float], fov_width_deg: Optional[float], fov_height_deg: Optional[float]) -> tuple[float, float, float, float]:
-        """Bereitet die Parameter für den PlateSolve 2-Aufruf vor."""
+        """Prepares parameters for the PlateSolve 2 call."""
         
         # Convert RA/Dec to radians (use 0,0 if not provided)
         ra_rad = math.radians(ra_deg) if ra_deg is not None else 0.0
@@ -228,7 +228,7 @@ class PlateSolve2Automated:
             return False
     
     def _parse_apm_file(self, apm_path: str, result: dict[str, Any]) -> dict[str, Any]:
-        """Parst die .apm-Ergebnisdatei von PlateSolve 2."""
+        """Parses the .apm result file from PlateSolve 2."""
         import math
         try:
             with open(apm_path, 'r') as f:
@@ -236,39 +236,112 @@ class PlateSolve2Automated:
             if len(lines) < 3:
                 result['error_message'] = f".apm file has too few lines: {lines}"
                 return result
+            
             # Line 1: RA,Dec,Code_1 (all floats in radians, Code_1 is int)
-            ra_rad, dec_rad, code_1 = lines[0].split(',')
-            ra_rad = float(ra_rad)
-            dec_rad = float(dec_rad)
+            # Format is always: RA_part1,RA_part2,DEC_part1,DEC_part2,Code_1
+            # So we have exactly 5 parts when split by comma
+            
+            line1 = lines[0]
+            if self.verbose:
+                self.logger.info(f"Parsing line 1: {line1}")
+            
+            # Split by comma - we expect exactly 5 parts
+            parts = line1.split(',')
+            if len(parts) != 5:
+                result['error_message'] = f"Line 1 does not have exactly 5 parts: {line1} (found {len(parts)} parts)"
+                return result
+            
+            # Combine parts: RA = parts[0] + "," + parts[1], Dec = parts[2] + "," + parts[3]
+            ra_rad_str = parts[0] + "." + parts[1]
+            dec_rad_str = parts[2] + "." + parts[3]
+            code_1_str = parts[4]
+            
+            # Convert to appropriate types
+            try:
+                ra_rad = float(ra_rad_str)
+                dec_rad = float(dec_rad_str)
+                code_1 = int(code_1_str)
+            except ValueError as e:
+                result['error_message'] = f"Failed to convert values: RA='{ra_rad_str}', Dec='{dec_rad_str}', Code_1='{code_1_str}': {e}"
+                return result
+            
             # Convert to degrees
             ra_deg = ra_rad * 180.0 / math.pi
             dec_deg = dec_rad * 180.0 / math.pi
             result['ra_center'] = ra_deg
             result['dec_center'] = dec_deg
+            
+            if self.verbose:
+                self.logger.info(f"Parsed RA: {ra_rad_str} rad = {ra_deg:.6f}°")
+                self.logger.info(f"Parsed Dec: {dec_rad_str} rad = {dec_deg:.6f}°")
+                self.logger.info(f"Parsed Code_1: {code_1}")
+            
             # Line 2: Pixel_scale,Position_angle,If_Flipped,Code_2,Code_3,N_stars
-            parts2 = lines[1].split(',')
-            pixel_scale = float(parts2[0])
-            position_angle = float(parts2[1])
-            if_flipped = int(parts2[2])
-            n_stars = int(parts2[5])
+            # Format: pixel_scale_part1,pixel_scale_part2,position_angle_part1,position_angle_part2,If_Flipped,Code_2,Code_3_part1,Code_3_part2,N_stars
+            # Example: 0,45138,146,64,-1,0002,0,00004,388
+            # So we have exactly 9 parts when split by comma
+            
+            line2 = lines[1]
+            if self.verbose:
+                self.logger.info(f"Parsing line 2: {line2}")
+            
+            parts2 = line2.split(',')
+            if len(parts2) != 9:
+                result['error_message'] = f"Line 2 does not have exactly 9 parts: {line2} (found {len(parts2)} parts)"
+                return result
+            
+            # Combine parts according to the format
+            pixel_scale_str = parts2[0] + "." + parts2[1]  # 0.45138
+            position_angle_str = parts2[2] + "." + parts2[3]  # 146.64
+            if_flipped = int(parts2[4])  # -1
+            code_2_str = parts2[5]  # 0002
+            code_3_str = parts2[6] + "." + parts2[7]  # 0.00004
+            n_stars_str = parts2[8]  # 388
+            
+            # Convert to appropriate types
+            try:
+                pixel_scale = float(pixel_scale_str)
+                position_angle = float(position_angle_str)
+                code_2 = int(code_2_str)
+                code_3 = float(code_3_str)
+                n_stars = int(n_stars_str)
+            except ValueError as e:
+                result['error_message'] = f"Failed to convert line 2 values: pixel_scale='{pixel_scale_str}', position_angle='{position_angle_str}', code_2='{code_2_str}', code_3='{code_3_str}', n_stars='{n_stars_str}': {e}"
+                return result
+            
             # If flipped, add 180°
             if if_flipped >= 1:
                 position_angle = (position_angle + 180.0) % 360.0
+                
             result['pixel_scale'] = pixel_scale
             result['position_angle'] = position_angle
             result['flipped'] = if_flipped
             result['stars_detected'] = n_stars
+            
+            if self.verbose:
+                self.logger.info(f"Parsed pixel_scale: {pixel_scale_str} = {pixel_scale}")
+                self.logger.info(f"Parsed position_angle: {position_angle_str} = {position_angle}")
+                self.logger.info(f"Parsed if_flipped: {if_flipped}")
+                self.logger.info(f"Parsed code_2: {code_2}")
+                self.logger.info(f"Parsed code_3: {code_3_str} = {code_3}")
+                self.logger.info(f"Parsed n_stars: {n_stars}")
+            
             # Line 3: Valid plate solution?
-            valid_line = lines[2].lower()
-            if 'valid' in valid_line:
+            valid_line = lines[2]
+            if 'Valid' in valid_line:
                 result['success'] = True
                 result['confidence'] = 0.99
             else:
                 result['success'] = False
                 result['error_message'] = f"PlateSolve 2 did not find a valid solution: {lines[2]}"
+                
             return result
+            
         except Exception as e:
             result['error_message'] = f"Error parsing .apm file: {str(e)}"
+            if self.verbose:
+                self.logger.error(f"APM parsing error: {e}")
+                self.logger.error(f"APM file content: {lines if 'lines' in locals() else 'Could not read file'}")
             return result
     
     def _cleanup(self):
