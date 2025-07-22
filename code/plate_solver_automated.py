@@ -104,6 +104,29 @@ class PlateSolve2Automated:
         
         return True
     
+    def _get_apm_path(self, image_path: str) -> str:
+        """Generiert den Pfad zur APM-Datei basierend auf dem Bildpfad.
+        
+        Args:
+            image_path: Pfad zur Eingabebilddatei
+            
+        Returns:
+            str: Pfad zur erwarteten APM-Datei
+        """
+        # Konvertiere zu Path-Objekt für einfachere Manipulation
+        image_path_obj = Path(image_path)
+        
+        # Erstelle den APM-Dateinamen: gleicher Name, aber .apm Endung
+        apm_filename = image_path_obj.stem + ".apm"
+        
+        # APM-Datei liegt im selben Verzeichnis wie die Eingabedatei
+        apm_path = image_path_obj.parent / apm_filename
+        
+        if self.verbose:
+            self.logger.info(f"Expected APM file: {apm_path}")
+        
+        return str(apm_path)
+    
     def _prepare_parameters(self, ra_deg: Optional[float], dec_deg: Optional[float], fov_width_deg: Optional[float], fov_height_deg: Optional[float]) -> tuple[float, float, float, float]:
         """Bereitet die Parameter für den PlateSolve 2-Aufruf vor."""
         
