@@ -1,8 +1,14 @@
 import logging
-from code.config_manager import config
-from code.ascom_mount import ASCOMMount
-import time
 import sys
+from pathlib import Path
+
+# Add the code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent / "code"))
+
+from config_manager import config
+from ascom_mount import ASCOMMount
+import argparse
+import time
 
 def main():
     logger = logging.getLogger("ascom_mount_cli")

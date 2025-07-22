@@ -1,6 +1,13 @@
 import logging
-from code.config_manager import config
-from code.overlay_runner import OverlayRunner
+import sys
+from pathlib import Path
+
+# Add the code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent / "code"))
+
+from config_manager import config
+from overlay_runner import OverlayRunner
+import argparse
 
 if __name__ == "__main__":
     print("OST Telescope Streaming - Overlay Runner")

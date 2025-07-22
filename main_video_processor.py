@@ -1,6 +1,12 @@
 import logging
-from code.config_manager import config
-from code.video_processor import VideoProcessor
+import sys
+from pathlib import Path
+
+# Add the code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent / "code"))
+
+from config_manager import config
+from video_processor import VideoProcessor
 import time
 import argparse
 

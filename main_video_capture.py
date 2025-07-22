@@ -1,6 +1,12 @@
 import logging
-from code.config_manager import config
-from code.video_capture import VideoCapture
+import sys
+from pathlib import Path
+
+# Add the code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent / "code"))
+
+from config_manager import config
+from video_capture import VideoCapture
 import argparse
 import sys
 
@@ -48,7 +54,7 @@ def main():
         if args.action == 'info':
             # Show camera information
             if args.camera_type == 'ascom' and args.ascom_driver:
-                from code.ascom_camera import ASCOMCamera
+                from ascom_camera import ASCOMCamera
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:
@@ -95,7 +101,7 @@ def main():
         
         elif args.action == 'cooling':
             if args.camera_type == 'ascom' and args.ascom_driver and args.cooling_temp is not None:
-                from code.ascom_camera import ASCOMCamera
+                from ascom_camera import ASCOMCamera
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:
@@ -111,7 +117,7 @@ def main():
         
         elif args.action == 'filter':
             if args.camera_type == 'ascom' and args.ascom_driver and args.filter_position is not None:
-                from code.ascom_camera import ASCOMCamera
+                from ascom_camera import ASCOMCamera
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:
@@ -127,7 +133,7 @@ def main():
         
         elif args.action == 'debayer':
             if args.camera_type == 'ascom' and args.ascom_driver:
-                from code.ascom_camera import ASCOMCamera
+                from ascom_camera import ASCOMCamera
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:

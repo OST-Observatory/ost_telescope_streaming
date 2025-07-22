@@ -1,6 +1,12 @@
 import logging
-from code.config_manager import config
-from code.plate_solver import PlateSolverFactory
+import sys
+from pathlib import Path
+
+# Add the code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent / "code"))
+
+from config_manager import config
+from plate_solver import PlateSolve2
 import argparse
 
 def main():
