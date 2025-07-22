@@ -33,15 +33,17 @@ def main():
     )
     print(f"Status: {status.level.value.upper()} - {status.message}")
     if status.details:
-        print(f"Details: {status.details}")
+        print(f"  Solving time: {status.details.get('solving_time', 0):.1f}s")
     if status.is_success and status.data:
         result = status.data
         print(f"  RA: {result.get('ra_center', 'N/A'):.4f}°")
         print(f"  Dec: {result.get('dec_center', 'N/A'):.4f}°")
-        print(f"  FOV: {result.get('fov_width', 0):.3f}° x {result.get('fov_height', 0):.3f}°")
+        print(f"  Pixel scale: {result.get('pixel_scale', 'N/A'):.5f} arcsec/pixel")
+        print(f"  Position angle: {result.get('position_angle', 'N/A'):.1f}°")
         print(f"  Confidence: {result.get('confidence', 0):.2f}")
         print(f"  Stars detected: {result.get('stars_detected', 0)}")
-        print(f"  Solving time: {result.get('solving_time', 0):.1f}s")
+        if result.get('flipped', 0) >= 1:
+            print(f"  Image is flipped")
     else:
         exit(1)
 
