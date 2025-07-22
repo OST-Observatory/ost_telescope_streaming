@@ -13,8 +13,11 @@ import astropy.units as u
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
-def test_configuration():
-    """Test configuration system."""
+def test_configuration() -> bool:
+    """Testet das Konfigurationssystem.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("Testing configuration system...")
     print("=" * 40)
     
@@ -56,8 +59,11 @@ def test_configuration():
         traceback.print_exc()
         return False
 
-def test_simbad():
-    """Test SIMBAD queries."""
+def test_simbad() -> bool:
+    """Testet SIMBAD-Abfragen.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting SIMBAD query...")
     print("=" * 40)
     
@@ -105,12 +111,15 @@ def test_simbad():
         traceback.print_exc()
         return False
 
-def test_coordinates():
-    """Test coordinate conversion."""
+def test_coordinates() -> bool:
+    """Testet die Koordinatenumrechnung.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting coordinate conversion...")
     print("=" * 40)
     
-    def skycoord_to_pixel(obj_coord, center_coord, size_px, fov_deg):
+    def skycoord_to_pixel(obj_coord: SkyCoord, center_coord: SkyCoord, size_px: tuple[int, int], fov_deg: float) -> tuple[int, int]:
         """Converts sky coordinates to pixel coordinates."""
         try:
             delta_ra = (obj_coord.ra.degree - center_coord.ra.degree) * \
@@ -165,8 +174,8 @@ def test_coordinates():
         traceback.print_exc()
         return False
 
-def main():
-    """Main test function."""
+def main() -> None:
+    """Hauptfunktion für den Basistest."""
     print("Basic Functionality Test Suite")
     print("=" * 50)
     

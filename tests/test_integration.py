@@ -12,8 +12,11 @@ from pathlib import Path
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
-def test_plate_solver():
-    """Test plate solver module."""
+def test_plate_solver() -> bool:
+    """Testet das Plate-Solver-Modul.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("Testing plate solver module...")
     
     try:
@@ -44,8 +47,11 @@ def test_plate_solver():
         print(f"Error testing plate solver: {e}")
         return False
 
-def test_video_processor():
-    """Test video processor module."""
+def test_video_processor() -> bool:
+    """Testet den VideoProcessor.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting video processor module...")
     
     try:
@@ -70,8 +76,11 @@ def test_video_processor():
         print(f"Error testing video processor: {e}")
         return False
 
-def test_config_integration():
-    """Test configuration integration."""
+def test_config_integration() -> bool:
+    """Testet die Integration der Konfiguration.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting configuration integration...")
     
     try:
@@ -99,8 +108,11 @@ def test_config_integration():
         print(f"Error testing config integration: {e}")
         return False
 
-def test_overlay_generator():
-    """Test overlay generator class."""
+def test_overlay_generator() -> bool:
+    """Testet die OverlayGenerator-Klasse.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting overlay generator...")
     
     try:
@@ -146,8 +158,11 @@ def test_overlay_generator():
         print(f"Error testing overlay generator: {e}")
         return False
 
-def test_overlay_generation():
-    """Test actual overlay generation."""
+def test_overlay_generation() -> bool:
+    """Testet die Overlay-Generierung.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting overlay generation...")
     
     try:
@@ -178,8 +193,11 @@ def test_overlay_generation():
         print(f"Error during overlay generation: {e}")
         return False
 
-def test_overlay_runner():
-    """Test overlay runner integration."""
+def test_overlay_runner() -> bool:
+    """Testet den OverlayRunner.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting overlay runner...")
     
     try:
@@ -204,8 +222,11 @@ def test_overlay_runner():
         print(f"Error testing overlay runner: {e}")
         return False
 
-def test_modular_architecture():
-    """Test the complete modular architecture."""
+def test_modular_architecture() -> bool:
+    """Testet die modulare Architektur.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting modular architecture...")
     
     try:
@@ -234,8 +255,11 @@ def test_modular_architecture():
         print(f"Error testing modular architecture: {e}")
         return False
 
-def test_automated_platesolve2_integration():
-    """Test automated PlateSolve 2 integration."""
+def test_automated_platesolve2_integration() -> bool:
+    """Testet die Integration des automatisierten PlateSolve2.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting automated PlateSolve 2 integration...")
     
     try:
@@ -259,8 +283,8 @@ def test_automated_platesolve2_integration():
         print(f"Error testing automated PlateSolve 2: {e}")
         return False
 
-def main():
-    """Main test function."""
+def main() -> None:
+    """Hauptfunktion für den Integrationstest."""
     print("System Integration Test Suite")
     print("=" * 50)
     

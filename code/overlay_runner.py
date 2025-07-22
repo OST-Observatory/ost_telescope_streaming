@@ -5,6 +5,8 @@ import sys
 import signal
 import os
 from datetime import datetime
+import logging
+from typing import Optional
 
 # Import configuration
 from config_manager import config
@@ -31,8 +33,15 @@ except ImportError as e:
     print(f"Warning: Overlay generator not available: {e}")
     OVERLAY_AVAILABLE = False
 
+from exceptions import MountError, OverlayError, VideoProcessingError
+from status import MountStatus, OverlayStatus, success_status, error_status, warning_status
+
 class OverlayRunner:
-    def __init__(self):
+    def __init__(self, config=None, logger=None):
+        from config_manager import config as default_config
+        import logging
+        self.logger = logger or logging.getLogger(__name__)
+        self.config = config or default_config
         self.running = True
         self.mount = None
         self.video_processor = None
@@ -40,9 +49,9 @@ class OverlayRunner:
         self.setup_signal_handlers()
         
         # Load configuration
-        streaming_config = config.get_streaming_config()
-        logging_config = config.get_logging_config()
-        video_config = config.get_video_config()
+        streaming_config = self.config.get_streaming_config()
+        logging_config = self.config.get_logging_config()
+        video_config = self.config.get_video_config()
         
         self.update_interval = streaming_config.get('update_interval', 30)
         self.max_retries = streaming_config.get('max_retries', 3)
@@ -58,86 +67,100 @@ class OverlayRunner:
         if OVERLAY_AVAILABLE:
             try:
                 self.overlay_generator = OverlayGenerator()
-                print("Overlay generator initialized")
+                self.logger.info("Overlay generator initialized")
             except Exception as e:
-                print(f"Warning: Failed to initialize overlay generator: {e}")
+                self.logger.warning(f"Failed to initialize overlay generator: {e}")
                 self.overlay_generator = None
         
     def setup_signal_handlers(self):
         """Sets up signal handlers for clean shutdown."""
         def signal_handler(signum, frame):
-            print(f"\nSignal {signum} received. Shutting down...")
+            self.logger.info(f"\nSignal {signum} received. Shutting down...")
             self.running = False
             
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
-    def generate_overlay_with_coords(self, ra_deg, dec_deg, output_file=None):
-        """Generates an overlay for the given coordinates."""
-        print(f"Generating overlay for RA: {ra_deg:.4f}°, Dec: {dec_deg:.4f}° ...")
-        
-        # Use class-based approach if available
-        if self.overlay_generator:
-            try:
-                result_file = self.overlay_generator.generate_overlay(ra_deg, dec_deg, output_file)
-                print(f"Overlay created successfully: {result_file}")
-                return True
-            except Exception as e:
-                print(f"Error creating overlay: {e}")
-                return False
-        
-        # Fallback to subprocess approach
-        else:
-            print("Warning: Using subprocess fallback for overlay generation")
-            cmd = [
-                sys.executable,  # Current Python interpreter
-                "generate_overlay.py",
-                "--ra", str(ra_deg),
-                "--dec", str(dec_deg)
-            ]
+    def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None) -> OverlayStatus:
+        """Generiert ein Overlay für die gegebenen Koordinaten.
+        Args:
+            ra_deg: Rektaszension in Grad
+            dec_deg: Deklination in Grad
+            output_file: Optionaler Ausgabedateiname
+        Returns:
+            OverlayStatus: Status-Objekt mit Ergebnis oder Fehlerinformationen.
+        """
+        try:
+            # Use class-based approach if available
+            if self.overlay_generator:
+                try:
+                    result_file = self.overlay_generator.generate_overlay(ra_deg, dec_deg, output_file)
+                    self.logger.info(f"Overlay created successfully: {result_file}")
+                    return success_status(
+                        f"Overlay created successfully: {result_file}",
+                        data=result_file,
+                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg}
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error creating overlay: {e}")
+                    return error_status(f"Error creating overlay: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
             
-            if output_file:
-                cmd.extend(["--output", output_file])
-            
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,  # Timeout after 60 seconds
-                    cwd=os.path.dirname(os.path.abspath(__file__))  # Working directory
-                )
+            # Fallback to subprocess approach
+            else:
+                self.logger.warning("Using subprocess fallback for overlay generation")
+                cmd = [
+                    sys.executable,  # Current Python interpreter
+                    "generate_overlay.py",
+                    "--ra", str(ra_deg),
+                    "--dec", str(dec_deg)
+                ]
                 
-                if result.returncode == 0:
-                    print("Overlay created successfully")
-                    if result.stdout:
-                        print(result.stdout.strip())
-                else:
-                    print(f"Error creating overlay:")
-                    print(result.stderr.strip())
-                    return False
+                if output_file:
+                    cmd.extend(["--output", output_file])
+                
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=60,  # Timeout after 60 seconds
+                        cwd=os.path.dirname(os.path.abspath(__file__))  # Working directory
+                    )
                     
-            except subprocess.TimeoutExpired:
-                print("Timeout while creating overlay")
-                return False
-            except Exception as e:
-                print(f"Unexpected error: {e}")
-                return False
-                
-            return True
-    
+                    if result.returncode == 0:
+                        self.logger.info("Overlay created successfully")
+                        if result.stdout:
+                            self.logger.info(result.stdout.strip())
+                        return success_status(
+                            "Overlay created successfully via subprocess",
+                            data=output_file,
+                            details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'method': 'subprocess'}
+                        )
+                    else:
+                        error_msg = result.stderr.strip() if result.stderr else "Unknown subprocess error"
+                        self.logger.error(f"Error creating overlay: {error_msg}")
+                        return error_status(f"Subprocess error: {error_msg}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
+                        
+                except subprocess.TimeoutExpired:
+                    self.logger.error("Timeout while creating overlay")
+                    return error_status("Timeout while creating overlay", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
+                except Exception as e:
+                    self.logger.error(f"Unexpected error: {e}")
+                    return error_status(f"Unexpected error: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
+                    
+        except Exception as e:
+            return error_status(f"Overlay generation failed: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
 
-    
-    def run(self):
+    def run(self) -> None:
         """Main loop of the overlay runner."""
         if not MOUNT_AVAILABLE:
-            print("ASCOM mount not available. Exiting.")
+            self.logger.error("ASCOM mount not available. Exiting.")
             return
             
         try:
             self.mount = ASCOMMount()
-            print("Overlay Runner started")
-            print(f"Update interval: {self.update_interval} seconds")
+            self.logger.info("Overlay Runner started")
+            self.logger.info(f"Update interval: {self.update_interval} seconds")
             
             # Initialize video processor if available and enabled
             if VIDEO_AVAILABLE and self.video_enabled:
@@ -147,10 +170,10 @@ class OverlayRunner:
                     # Set up callbacks
                     def on_solve_result(result):
                         self.last_solve_result = result
-                        print(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
+                        self.logger.info(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
                     
                     def on_error(error):
-                        print(f"Video processing error: {error}")
+                        self.logger.error(f"Video processing error: {error}")
                     
                     self.video_processor.set_callbacks(
                         on_solve_result=on_solve_result,
@@ -158,22 +181,37 @@ class OverlayRunner:
                     )
                     
                     if self.video_processor.start():
-                        print("Video processor started")
+                        self.logger.info("Video processor started")
                     else:
-                        print("Failed to start video processor")
+                        self.logger.error("Failed to start video processor")
                         self.video_processor = None
                 except Exception as e:
-                    print(f"Error initializing video processor: {e}")
+                    self.logger.error(f"Error initializing video processor: {e}")
                     self.video_processor = None
             else:
-                print("Video processing disabled or not available")
+                self.logger.info("Video processing disabled or not available")
             
             consecutive_failures = 0
             
             while self.running:
                 try:
                     # Read coordinates
-                    ra_deg, dec_deg = self.mount.get_coordinates()
+                    mount_status = self.mount.get_coordinates()
+                    
+                    if not mount_status.is_success:
+                        consecutive_failures += 1
+                        self.logger.error(f"Failed to get coordinates: {mount_status.message}")
+                        
+                        if consecutive_failures >= self.max_retries:
+                            self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                            break
+                        
+                        self.logger.info(f"Waiting {self.retry_delay} seconds before retry...")
+                        time.sleep(self.retry_delay)
+                        continue
+                    
+                    # Extract coordinates from status
+                    ra_deg, dec_deg = mount_status.data
                     
                     # Generate output filename
                     if self.use_timestamps:
@@ -183,57 +221,48 @@ class OverlayRunner:
                         output_file = None
                     
                     # Create overlay
-                    success = self.generate_overlay_with_coords(ra_deg, dec_deg, output_file)
+                    overlay_status = self.generate_overlay_with_coords(ra_deg, dec_deg, output_file)
                     
                     # Video processing is handled automatically by the video processor
                     # Plate-solving results are available via callbacks
                     
-                    if success:
+                    if overlay_status.is_success:
                         consecutive_failures = 0
-                        print(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
+                        self.logger.info(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
                     else:
                         consecutive_failures += 1
-                        print(f"Error #{consecutive_failures}")
+                        self.logger.error(f"Error #{consecutive_failures}: {overlay_status.message}")
                         
                         if consecutive_failures >= self.max_retries:
-                            print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                            self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
                             break
                     
                     # Wait until next update
                     if self.running:
-                        print(f"Waiting {self.update_interval} seconds...")
+                        self.logger.info(f"Waiting {self.update_interval} seconds...")
                         time.sleep(self.update_interval)
                         
                 except KeyboardInterrupt:
-                    print("\nStopped by user.")
+                    self.logger.info("\nStopped by user.")
                     break
                 except Exception as e:
                     consecutive_failures += 1
-                    print(f"Error in main loop: {e}")
+                    self.logger.error(f"Error in main loop: {e}")
                     
                     if consecutive_failures >= self.max_retries:
-                        print(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                        self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
                         break
                     
-                    print(f"Waiting {self.retry_delay} seconds before retry...")
+                    self.logger.info(f"Waiting {self.retry_delay} seconds before retry...")
                     time.sleep(self.retry_delay)
                     
         except Exception as e:
-            print(f"Critical error: {e}")
+            self.logger.critical(f"Critical error: {e}")
         finally:
             if self.mount:
-                self.mount.disconnect()
+                disconnect_status = self.mount.disconnect()
+                if not disconnect_status.is_success:
+                    self.logger.warning(f"Error during disconnect: {disconnect_status.message}")
             if self.video_processor:
                 self.video_processor.stop()
-            print("Overlay Runner stopped.")
-
-def main():
-    """Main function."""
-    print("OST Telescope Streaming - Overlay Runner")
-    print("=" * 50)
-    
-    runner = OverlayRunner()
-    runner.run()
-
-if __name__ == "__main__":
-    main()
+            self.logger.info("Overlay Runner stopped.")

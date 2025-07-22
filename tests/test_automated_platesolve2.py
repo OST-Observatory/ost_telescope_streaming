@@ -12,8 +12,11 @@ from pathlib import Path
 # Add code directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
 
-def test_automated_platesolve2():
-    """Test the new automated PlateSolve 2 implementation."""
+def test_automated_platesolve2() -> bool:
+    """Testet die neue automatisierte PlateSolve 2 Implementierung.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("Testing automated PlateSolve 2 with correct command line format...")
     
     try:
@@ -92,8 +95,11 @@ def test_automated_platesolve2():
         print(f"✗ Error testing automated PlateSolve 2: {e}")
         return False
 
-def test_command_string_building():
-    """Test the command string building functionality."""
+def test_command_string_building() -> bool:
+    """Testet die Erstellung des Kommandozeilen-Strings.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\n--- Testing command string building ---")
     
     try:
@@ -140,8 +146,11 @@ def test_command_string_building():
         print(f"✗ Error testing command string building: {e}")
         return False
 
-def test_fov_calculation():
-    """Test FOV calculation from telescope and camera parameters."""
+def test_fov_calculation() -> bool:
+    """Testet die FOV-Berechnung.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\n--- Testing FOV calculation ---")
     
     try:
@@ -200,8 +209,8 @@ def test_integration_with_video_processor():
         print(f"✗ Error testing integration: {e}")
         return False
 
-def main():
-    """Main test function."""
+def main() -> None:
+    """Hauptfunktion für den automatisierten PlateSolve2-Test."""
     print("Automated PlateSolve 2 Test")
     print("=" * 50)
     

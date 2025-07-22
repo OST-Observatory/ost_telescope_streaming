@@ -16,109 +16,83 @@ import re
 
 # Import configuration
 from config_manager import config
+from exceptions import PlateSolveError, FileError
+from status import PlateSolveStatus, success_status, error_status, warning_status
 
 class PlateSolve2Automated:
-    """Automated PlateSolve 2 integration with correct command line format."""
-    
-    def __init__(self):
-        self.plate_solve_config = config.get_plate_solve_config()
+    """Automatisierte PlateSolve 2 Integration mit korrektem Kommandozeilenformat."""
+    def __init__(self, config=None, logger=None):
+        from config_manager import config as default_config
+        import logging
+        self.config = config or default_config
+        self.logger = logger or logging.getLogger(__name__)
         
         # PlateSolve 2 settings
-        self.executable_path = self.plate_solve_config.get('platesolve2_path', '')
-        self.working_directory = self.plate_solve_config.get('working_directory', '')
-        self.timeout = self.plate_solve_config.get('timeout', 60)
-        self.verbose = self.plate_solve_config.get('verbose', False)
+        self.executable_path = self.config.get_plate_solve_config().get('platesolve2_path', '')
+        self.working_directory = self.config.get_plate_solve_config().get('working_directory', '')
+        self.timeout = self.config.get_plate_solve_config().get('timeout', 60)
+        self.verbose = self.config.get_plate_solve_config().get('verbose', False)
         
         # Plate-solving parameters
-        self.number_of_regions = self.plate_solve_config.get('number_of_regions', 1)
-        self.search_radius = self.plate_solve_config.get('search_radius', 15)  # degrees
+        self.number_of_regions = self.config.get_plate_solve_config().get('number_of_regions', 1)
+        self.search_radius = self.config.get_plate_solve_config().get('search_radius', 15)  # degrees
         
         # Setup logging
-        self.logger = logging.getLogger(__name__)
+        # self.logger = logging.getLogger(__name__) # This line is now redundant as logger is passed to __init__
         
         # Process tracking
         self.current_process = None
     
-    def solve(self, image_path: str, ra_deg: Optional[float] = None, 
-              dec_deg: Optional[float] = None, fov_width_deg: Optional[float] = None, 
-              fov_height_deg: Optional[float] = None) -> Dict[str, Any]:
+    def solve(self, image_path: str, ra_deg: Optional[float] = None, dec_deg: Optional[float] = None, fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None) -> PlateSolveStatus:
+        """Automatisiertes Plate-Solving mit PlateSolve2.
+        Returns:
+            PlateSolveStatus: Status-Objekt mit Ergebnis oder Fehler.
         """
-        Solve plate using PlateSolve 2 with correct command line format.
-        Now parses the .apm result file for output.
-        """
-        result = {
-            'success': False,
-            'ra_center': None,
-            'dec_center': None,
-            'fov_width': None,
-            'fov_height': None,
-            'confidence': None,
-            'stars_detected': None,
-            'pixel_scale': None,
-            'position_angle': None,
-            'flipped': None,
-            'error_message': None,
-            'solving_time': 0,
-            'method_used': 'platesolve2_automated_apm'
-        }
-        
-        if not self._is_available():
-            result['error_message'] = "PlateSolve 2 not available"
-            return result
-        
-        if not os.path.exists(image_path):
-            result['error_message'] = f"Image file not found: {image_path}"
-            return result
-        
         start_time = time.time()
-        apm_path = os.path.splitext(image_path)[0] + '.apm'
-        
         try:
             # Remove old .apm file if it exists
+            apm_path = self._get_apm_path(image_path)
             if os.path.exists(apm_path):
                 os.remove(apm_path)
-            
             # Calculate or estimate parameters
             ra_rad, dec_rad, fov_width_rad, fov_height_rad = self._prepare_parameters(
                 ra_deg, dec_deg, fov_width_deg, fov_height_deg
             )
-            
             # Build command line string
             cmd_string = self._build_command_string(
                 image_path, ra_rad, dec_rad, fov_width_rad, fov_height_rad
             )
-            
             if self.verbose:
                 self.logger.info(f"PlateSolve 2 command: {cmd_string}")
-            
             # Execute PlateSolve 2
             success = self._execute_platesolve2(cmd_string)
-            
             # Wait for .apm file to appear (max 10s)
             apm_timeout = 10
             waited = 0
             while not os.path.exists(apm_path) and waited < apm_timeout:
                 time.sleep(0.5)
                 waited += 0.5
-            
             if not os.path.exists(apm_path):
-                result['error_message'] = f"No .apm result file found after {apm_timeout}s"
-                return result
-            
+                return error_status(f"No .apm result file found after {apm_timeout}s")
             # Parse .apm file
-            result = self._parse_apm_file(apm_path, result)
-            
+            result_dict = {}
+            result_dict = self._parse_apm_file(apm_path, result_dict)
+            if result_dict.get('success'):
+                return success_status(
+                    "PlateSolve2 automated solving successful",
+                    data=result_dict,
+                    details={'solving_time': time.time() - start_time}
+                )
+            else:
+                return error_status(f"PlateSolve2 did not find a valid solution: {result_dict.get('error_message')}")
         except Exception as e:
-            result['error_message'] = f"Automation error: {str(e)}"
-            self.logger.error(f"PlateSolve 2 automation error: {e}")
+            self.logger.error(f"PlateSolve2 automation error: {e}")
+            return error_status(f"PlateSolve2 automation error: {e}")
         finally:
-            result['solving_time'] = time.time() - start_time
             self._cleanup()
-        
-        return result
     
     def _is_available(self) -> bool:
-        """Check if PlateSolve 2 is available."""
+        """Prüft, ob PlateSolve 2 verfügbar ist."""
         if not self.executable_path:
             self.logger.warning("PlateSolve 2 path not configured")
             return False
@@ -130,9 +104,8 @@ class PlateSolve2Automated:
         
         return True
     
-    def _prepare_parameters(self, ra_deg: Optional[float], dec_deg: Optional[float],
-                           fov_width_deg: Optional[float], fov_height_deg: Optional[float]) -> Tuple[float, float, float, float]:
-        """Prepare parameters for PlateSolve 2 command."""
+    def _prepare_parameters(self, ra_deg: Optional[float], dec_deg: Optional[float], fov_width_deg: Optional[float], fov_height_deg: Optional[float]) -> tuple[float, float, float, float]:
+        """Bereitet die Parameter für den PlateSolve 2-Aufruf vor."""
         
         # Convert RA/Dec to radians (use 0,0 if not provided)
         ra_rad = math.radians(ra_deg) if ra_deg is not None else 0.0
@@ -154,9 +127,9 @@ class PlateSolve2Automated:
     
     def _calculate_fov(self) -> Tuple[float, float]:
         """Calculate field of view from telescope and camera configuration."""
-        telescope_config = config.get_telescope_config()
-        camera_config = config.get_camera_config()
-        video_config = config.get_video_config()
+        telescope_config = self.config.get_telescope_config()
+        camera_config = self.config.get_camera_config()
+        video_config = self.config.get_video_config()
         
         # Get focal length (mm)
         focal_length = telescope_config.get('focal_length', 1000)
@@ -231,8 +204,8 @@ class PlateSolve2Automated:
             self.logger.error(f"Error executing PlateSolve 2: {e}")
             return False
     
-    def _parse_apm_file(self, apm_path: str, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse the .apm result file from PlateSolve 2."""
+    def _parse_apm_file(self, apm_path: str, result: dict[str, Any]) -> dict[str, Any]:
+        """Parst die .apm-Ergebnisdatei von PlateSolve 2."""
         import math
         try:
             with open(apm_path, 'r') as f:
@@ -284,36 +257,4 @@ class PlateSolve2Automated:
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
         
-        self.current_process = None
-
-def main():
-    """Test function for automated PlateSolve 2."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Test automated PlateSolve 2")
-    parser.add_argument("image", help="Image file to solve")
-    parser.add_argument("--ra", type=float, help="Right Ascension in degrees")
-    parser.add_argument("--dec", type=float, help="Declination in degrees")
-    parser.add_argument("--fov-width", type=float, help="Field of view width in degrees")
-    parser.add_argument("--fov-height", type=float, help="Field of view height in degrees")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output")
-    
-    args = parser.parse_args()
-    
-    solver = PlateSolve2Automated()
-    if args.verbose:
-        solver.verbose = True
-    
-    print(f"Testing automated PlateSolve 2 with: {args.image}")
-    result = solver.solve(
-        args.image, 
-        ra_deg=args.ra, 
-        dec_deg=args.dec,
-        fov_width_deg=args.fov_width,
-        fov_height_deg=args.fov_height
-    )
-    
-    print(f"Result: {result}")
-
-if __name__ == "__main__":
-    main() 
+        self.current_process = None 

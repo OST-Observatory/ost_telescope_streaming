@@ -14,8 +14,11 @@ from pathlib import Path
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
-def list_cameras():
-    """List all available camera devices."""
+def list_cameras() -> list[int]:
+    """Listet alle verfügbaren Kamerageräte auf.
+    Returns:
+        list[int]: Liste der verfügbaren Kamera-Indizes.
+    """
     print("Scanning for available cameras...")
     
     available_cameras = []
@@ -41,8 +44,13 @@ def list_cameras():
     print(f"\nFound {len(available_cameras)} camera(s): {available_cameras}")
     return available_cameras
 
-def test_camera_access(camera_index):
-    """Test if camera is accessible (not blocked by other applications)."""
+def test_camera_access(camera_index: int) -> bool:
+    """Test if camera is accessible (not blocked by other applications).
+    Args:
+        camera_index: Index der Kamera.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print(f"Testing access to camera {camera_index}...")
     
     cap = cv2.VideoCapture(camera_index)
@@ -61,8 +69,14 @@ def test_camera_access(camera_index):
     cap.release()
     return True
 
-def capture_frame(camera_index, output_path="test_frame.jpg"):
-    """Capture a single frame from the specified camera."""
+def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> bool:
+    """Nimmt ein einzelnes Frame von der angegebenen Kamera auf.
+    Args:
+        camera_index: Index der Kamera
+        output_path: Dateiname für das gespeicherte Bild
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print(f"Capturing frame from camera {camera_index}...")
     
     # Test access first
@@ -98,8 +112,11 @@ def capture_frame(camera_index, output_path="test_frame.jpg"):
     cap.release()
     return success
 
-def test_config_manager():
-    """Test configuration manager with video settings."""
+def test_config_manager() -> bool:
+    """Testet den ConfigManager mit Videoeinstellungen.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting configuration manager...")
     
     try:
@@ -134,8 +151,11 @@ def test_config_manager():
         print(f"Error testing config manager: {e}")
         return False
 
-def test_video_capture_module():
-    """Test video capture module."""
+def test_video_capture_module() -> bool:
+    """Testet das VideoCapture-Modul.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting video capture module...")
     
     try:
@@ -207,8 +227,11 @@ def test_overlay_runner_integration():
         print(f"Error testing overlay runner integration: {e}")
         return False
 
-def test_actual_camera_connection():
-    """Test actual camera connection (optional)."""
+def test_actual_camera_connection() -> bool:
+    """Testet die tatsächliche Kameraverbindung (optional).
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\nTesting actual camera connection...")
     
     try:
@@ -240,8 +263,8 @@ def test_actual_camera_connection():
         print(f"Error testing camera connection: {e}")
         return False
 
-def main():
-    """Main test function."""
+def main() -> None:
+    """Hauptfunktion für den Video-System-Test."""
     parser = argparse.ArgumentParser(description="Test video system")
     parser.add_argument("--list", action="store_true", help="List all available cameras")
     parser.add_argument("--camera", type=int, default=0, help="Camera index to use (default: 0)")

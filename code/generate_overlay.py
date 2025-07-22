@@ -8,19 +8,26 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, Tuple, List, Dict, Any
+import logging
 
 # Import configuration
 from config_manager import config
+from exceptions import OverlayError, FileError
+from status import OverlayStatus, success_status, error_status, warning_status
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
     
-    def __init__(self):
+    def __init__(self, config=None, logger=None):
         """Initialize the overlay generator with configuration."""
-        self.overlay_config = config.get_overlay_config()
-        self.display_config = config.get_display_config()
-        self.advanced_config = config.get_advanced_config()
-        self.platform_config = config.get_platform_config()
+        from config_manager import config as default_config
+        import logging
+        self.config = config or default_config
+        self.logger = logger or logging.getLogger(__name__)
+        self.overlay_config = self.config.get_overlay_config()
+        self.display_config = self.config.get_display_config()
+        self.advanced_config = self.config.get_advanced_config()
+        self.platform_config = self.config.get_platform_config()
         
         # Initialize settings
         self.fov_deg = self.overlay_config.get('field_of_view', 1.5)
@@ -58,7 +65,7 @@ class OverlayGenerator:
                 continue
         
         # Fallback to default font
-        print("Warning: Could not load TrueType font, using default font.")
+        self.logger.warning("Could not load TrueType font, using default font.")
         return ImageFont.load_default()
     
     def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
@@ -84,26 +91,10 @@ class OverlayGenerator:
         if not (-90 <= dec <= 90):
             raise ValueError(f"Dec must be between -90 and 90 degrees, not {dec}")
     
-    def generate_overlay(self, ra_deg: float, dec_deg: float, 
-                        output_file: Optional[str] = None,
-                        fov_deg: Optional[float] = None,
-                        mag_limit: Optional[float] = None) -> str:
-        """
-        Generate an overlay for the given coordinates.
-        
-        Args:
-            ra_deg: Right Ascension in degrees
-            dec_deg: Declination in degrees
-            output_file: Output file path (optional, uses default if not provided)
-            fov_deg: Field of view in degrees (optional, uses config default)
-            mag_limit: Magnitude limit (optional, uses config default)
-            
+    def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None, fov_deg: Optional[float] = None, mag_limit: Optional[float] = None) -> OverlayStatus:
+        """Generiert ein Overlay-Bild für die gegebenen Koordinaten.
         Returns:
-            str: Path to the generated overlay file
-            
-        Raises:
-            ValueError: If coordinates are invalid
-            Exception: If overlay generation fails
+            OverlayStatus: Status-Objekt mit Ergebnis oder Fehler.
         """
         try:
             # Validate input values
@@ -125,22 +116,26 @@ class OverlayGenerator:
             # Radius is half-diagonal of field of view
             radius = ((fov**2 + fov**2)**0.5) / 2
 
-            print("SIMBAD query running...")
+            self.logger.info("SIMBAD query running...")
             result = custom_simbad.query_region(center, radius=radius * u.deg)
 
             if result is None or len(result) == 0:
-                print("No objects found.")
+                self.logger.warning("No objects found.")
                 # Create empty overlay if configured
                 if self.advanced_config.get('save_empty_overlays', True):
                     img = Image.new("RGBA", self.image_size, (0, 0, 0, 0))
                     img.save(output_file)
-                    print(f"Empty overlay saved as {output_file}")
-                return output_file
+                    self.logger.info(f"Empty overlay saved as {output_file}")
+                return success_status(
+                    f"Empty overlay saved as {output_file}",
+                    data=output_file,
+                    details={'fov_deg': fov_deg, 'magnitude_limit': mag_limit}
+                )
 
             # Debug: Print available column names
             if self.advanced_config.get('debug_simbad', False):
-                print(f"Available columns: {result.colnames}")
-                print(f"Number of objects: {len(result)}")
+                self.logger.debug(f"Available columns: {result.colnames}")
+                self.logger.debug(f"Number of objects: {len(result)}")
 
             # Prepare image
             img = Image.new("RGBA", self.image_size, (0, 0, 0, 0))
@@ -184,7 +179,7 @@ class OverlayGenerator:
                             break
                     
                     if ra_col is None or dec_col is None:
-                        print(f"Warning: Could not find RA/Dec columns. Available: {row.colnames}")
+                        self.logger.warning(f"Could not find RA/Dec columns. Available: {row.colnames}")
                         continue
 
                     # Use found column names
@@ -226,37 +221,22 @@ class OverlayGenerator:
                 except Exception as e:
                     # More detailed error information for debugging
                     if self.advanced_config.get('debug_simbad', False):
-                        print(f"Warning: Error processing object: {e}")
-                        print(f"  Available columns: {row.colnames if hasattr(row, 'colnames') else 'No colnames'}")
+                        self.logger.warning(f"Error processing object: {e}")
+                        self.logger.debug(f"  Available columns: {row.colnames if hasattr(row, 'colnames') else 'No colnames'}")
                         if hasattr(row, 'colnames') and 'main_id' in row.colnames:
-                            print(f"  main_id value: {row['main_id']}")
+                            self.logger.debug(f"  main_id value: {row['main_id']}")
                     else:
-                        print(f"Warning: Error processing object: {e}")
+                        self.logger.warning(f"Error processing object: {e}")
                     continue
 
             img.save(output_file)
-            print(f"Overlay with {objects_drawn} objects saved as {output_file}")
-            return output_file
+            self.logger.info(f"Overlay with {objects_drawn} objects saved as {output_file}")
+            return success_status(
+                f"Overlay with {objects_drawn} objects saved as {output_file}",
+                data=output_file,
+                details={'objects_drawn': objects_drawn, 'fov_deg': fov_deg, 'magnitude_limit': mag_limit}
+            )
 
         except Exception as e:
-            print(f"Error: {e}")
-            raise
-
-def main():
-    """Command-line interface for backward compatibility."""
-    # Parse arguments
-    parser = argparse.ArgumentParser(description="Generates an overlay based on RA/Dec.")
-    parser.add_argument("--ra", type=float, required=True, help="Right Ascension in degrees")
-    parser.add_argument("--dec", type=float, required=True, help="Declination in degrees")
-    parser.add_argument("--output", type=str, help="Output file (default: from config)")
-    args = parser.parse_args()
-
-    try:
-        generator = OverlayGenerator()
-        generator.generate_overlay(args.ra, args.dec, args.output)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+            self.logger.error(f"Error: {e}")
+            return error_status(f"Error generating overlay: {e}")

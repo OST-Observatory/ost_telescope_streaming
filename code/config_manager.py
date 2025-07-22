@@ -4,9 +4,13 @@ import os
 from typing import Dict, Any, Optional
 
 class ConfigManager:
-    """Manages configuration settings for the telescope streaming system."""
+    """Verwaltet Konfigurationseinstellungen für das Teleskop-Streaming-System."""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml") -> None:
+        """Initialisiert den ConfigManager.
+        Args:
+            config_path: Pfad zur Konfigurationsdatei.
+        """
         # If relative path, make it relative to the project root
         if not os.path.isabs(config_path):
             # Try to find config.yaml in the project root
@@ -17,8 +21,11 @@ class ConfigManager:
         self.config_path = config_path
         self.config = self._load_config()
     
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from YAML file."""
+    def _load_config(self) -> dict[str, Any]:
+        """Lädt die Konfiguration aus der YAML-Datei.
+        Returns:
+            dict: Die geladene Konfiguration.
+        """
         try:
             if not os.path.exists(self.config_path):
                 print(f"Warning: Configuration file {self.config_path} not found. Using defaults.")
@@ -39,8 +46,8 @@ class ConfigManager:
             print("Using default configuration.")
             return self._get_default_config()
     
-    def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration values."""
+    def _get_default_config(self) -> dict[str, Any]:
+        """Gibt die Standardkonfiguration zurück."""
         return {
             'mount': {
                 'driver_id': 'ASCOM.tenmicron_mount.Telescope',
@@ -139,8 +146,8 @@ class ConfigManager:
             }
         }
     
-    def _merge_configs(self, default: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively merge user configuration with defaults."""
+    def _merge_configs(self, default: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+        """Führt die Benutzerkonfiguration rekursiv mit den Defaults zusammen."""
         result = default.copy()
         
         for key, value in user.items():
@@ -152,7 +159,7 @@ class ConfigManager:
         return result
     
     def get(self, key_path: str, default: Any = None) -> Any:
-        """Get configuration value using dot notation (e.g., 'mount.driver_id')."""
+        """Liest einen Konfigurationswert per Dot-Notation aus."""
         keys = key_path.split('.')
         value = self.config
         
@@ -163,56 +170,56 @@ class ConfigManager:
         except (KeyError, TypeError):
             return default
     
-    def get_mount_config(self) -> Dict[str, Any]:
-        """Get mount configuration section."""
+    def get_mount_config(self) -> dict[str, Any]:
+        """Gibt die Montierungs-Konfiguration zurück."""
         return self.config.get('mount', {})
     
-    def get_telescope_config(self) -> Dict[str, Any]:
-        """Get telescope configuration section."""
+    def get_telescope_config(self) -> dict[str, Any]:
+        """Gibt die Teleskop-Konfiguration zurück."""
         return self.config.get('telescope', {})
     
-    def get_camera_config(self) -> Dict[str, Any]:
-        """Get camera configuration section."""
+    def get_camera_config(self) -> dict[str, Any]:
+        """Gibt die Kamera-Konfiguration zurück."""
         return self.config.get('camera', {})
     
-    def get_video_config(self) -> Dict[str, Any]:
-        """Get video configuration section."""
+    def get_video_config(self) -> dict[str, Any]:
+        """Gibt die Video-Konfiguration zurück."""
         return self.config.get('video', {})
     
-    def get_plate_solve_config(self) -> Dict[str, Any]:
-        """Get plate-solving configuration section."""
+    def get_plate_solve_config(self) -> dict[str, Any]:
+        """Gibt die Plate-Solving-Konfiguration zurück."""
         return self.config.get('plate_solve', {})
     
-    def get_overlay_config(self) -> Dict[str, Any]:
-        """Get overlay configuration section."""
+    def get_overlay_config(self) -> dict[str, Any]:
+        """Gibt die Overlay-Konfiguration zurück."""
         return self.config.get('overlay', {})
     
-    def get_streaming_config(self) -> Dict[str, Any]:
-        """Get streaming configuration section."""
+    def get_streaming_config(self) -> dict[str, Any]:
+        """Gibt die Streaming-Konfiguration zurück."""
         return self.config.get('streaming', {})
     
-    def get_display_config(self) -> Dict[str, Any]:
-        """Get display configuration section."""
+    def get_display_config(self) -> dict[str, Any]:
+        """Gibt die Anzeige-Konfiguration zurück."""
         return self.config.get('display', {})
     
-    def get_logging_config(self) -> Dict[str, Any]:
-        """Get logging configuration section."""
+    def get_logging_config(self) -> dict[str, Any]:
+        """Gibt die Logging-Konfiguration zurück."""
         return self.config.get('logging', {})
     
-    def get_platform_config(self) -> Dict[str, Any]:
-        """Get platform configuration section."""
+    def get_platform_config(self) -> dict[str, Any]:
+        """Gibt die Plattform-Konfiguration zurück."""
         return self.config.get('platform', {})
     
-    def get_advanced_config(self) -> Dict[str, Any]:
-        """Get advanced configuration section."""
+    def get_advanced_config(self) -> dict[str, Any]:
+        """Gibt die erweiterten Konfigurationseinstellungen zurück."""
         return self.config.get('advanced', {})
     
     def reload(self) -> None:
-        """Reload configuration from file."""
+        """Lädt die Konfiguration neu."""
         self.config = self._load_config()
     
     def save_default_config(self, path: Optional[str] = None) -> None:
-        """Save default configuration to file."""
+        """Speichert die Standardkonfiguration in eine Datei."""
         if path is None:
             path = f"{self.config_path}.default"
         

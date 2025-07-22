@@ -13,22 +13,26 @@ from typing import Optional, Tuple, Dict, Any
 import logging
 
 # Import configuration
-from config_manager import config
+from config_manager import config as default_config
+from exceptions import CameraError, FileError
+from status import CameraStatus, success_status, error_status, warning_status
 
 class VideoCapture:
     """Video capture class for telescope streaming."""
     
-    def __init__(self):
-        """Initialize video capture system."""
+    def __init__(self, config=None, logger=None):
+        """Initialisiert das Video-Capture-System."""
         self.cap = None
         self.is_capturing = False
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
         # Load configuration
-        self.video_config = config.get_video_config()
-        self.camera_config = config.get_camera_config()
-        self.telescope_config = config.get_telescope_config()
+        self.config = config or default_config
+        self.logger = logger or logging.getLogger(__name__)
+        self.video_config = self.config.get_video_config()
+        self.camera_config = self.config.get_camera_config()
+        self.telescope_config = self.config.get_telescope_config()
         
         # Camera settings
         self.camera_index = self.video_config.get('camera_index', 0)
@@ -55,8 +59,11 @@ class VideoCapture:
         # Setup logging
         self.logger = logging.getLogger(__name__)
         
-    def _calculate_field_of_view(self) -> Tuple[float, float]:
-        """Calculate field of view in degrees based on telescope and camera parameters."""
+    def _calculate_field_of_view(self) -> tuple[float, float]:
+        """Berechnet das Sichtfeld (FOV) in Grad basierend auf Teleskop- und Kameraparametern.
+        Returns:
+            tuple: (FOV-Breite in Grad, FOV-Höhe in Grad)
+        """
         # Convert sensor dimensions to degrees
         # FOV = 2 * arctan(sensor_size / (2 * focal_length))
         fov_width_rad = 2 * np.arctan(self.sensor_width / (2 * self.focal_length))
@@ -69,12 +76,12 @@ class VideoCapture:
         self.logger.info(f"Calculated FOV: {fov_width_deg:.3f}° x {fov_height_deg:.3f}°")
         return fov_width_deg, fov_height_deg
     
-    def get_field_of_view(self) -> Tuple[float, float]:
-        """Get current field of view in degrees."""
+    def get_field_of_view(self) -> tuple[float, float]:
+        """Gibt das aktuelle Sichtfeld (FOV) in Grad zurück."""
         return self.fov_width, self.fov_height
     
     def get_sampling_arcsec_per_pixel(self) -> float:
-        """Calculate sampling in arcseconds per pixel."""
+        """Berechnet das Sampling in Bogensekunden pro Pixel."""
         # arcsec/pixel = (206265 * pixel_size) / focal_length
         # pixel_size = sensor_size / pixel_count
         pixel_size_width = self.sensor_width / self.frame_width
@@ -130,27 +137,33 @@ class VideoCapture:
         self.is_capturing = False
         self.logger.info("Camera disconnected")
     
-    def start_capture(self):
-        """Start continuous frame capture in background thread."""
+    def start_capture(self) -> CameraStatus:
+        """Startet die kontinuierliche Frame-Aufnahme im Hintergrund-Thread.
+        Returns:
+            CameraStatus: Status-Objekt mit Startinformation oder Fehler.
+        """
         if not self.cap or not self.cap.isOpened():
             if not self.connect():
-                return False
-        
+                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         self.is_capturing = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
         self.logger.info("Video capture started")
-        return True
+        return success_status("Video capture started", details={'camera_index': self.camera_index, 'is_capturing': True})
     
-    def stop_capture(self):
-        """Stop continuous frame capture."""
+    def stop_capture(self) -> CameraStatus:
+        """Stoppt die kontinuierliche Frame-Aufnahme.
+        Returns:
+            CameraStatus: Status-Objekt mit Stopinformation oder Fehler.
+        """
         self.is_capturing = False
         if hasattr(self, 'capture_thread'):
             self.capture_thread.join(timeout=2.0)
         self.logger.info("Video capture stopped")
+        return success_status("Video capture stopped", details={'camera_index': self.camera_index, 'is_capturing': False})
     
-    def _capture_loop(self):
-        """Background thread for continuous frame capture."""
+    def _capture_loop(self) -> None:
+        """Hintergrund-Thread für kontinuierliche Frame-Aufnahme."""
         while self.is_capturing and self.cap and self.cap.isOpened():
             try:
                 ret, frame = self.cap.read()
@@ -170,39 +183,48 @@ class VideoCapture:
                 time.sleep(0.1)
     
     def get_current_frame(self) -> Optional[np.ndarray]:
-        """Get the most recent captured frame."""
+        """Gibt das zuletzt aufgenommene Frame zurück."""
         with self.frame_lock:
             return self.current_frame.copy() if self.current_frame is not None else None
     
-    def capture_single_frame(self) -> Optional[np.ndarray]:
-        """Capture a single frame."""
+    def capture_single_frame(self) -> CameraStatus:
+        """Nimmt ein einzelnes Frame auf und gibt Status zurück.
+        Returns:
+            CameraStatus: Status-Objekt mit Frame oder Fehler.
+        """
         if not self.cap or not self.cap.isOpened():
             if not self.connect():
-                return None
-        
+                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         ret, frame = self.cap.read()
         if ret:
-            return frame
+            return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
         else:
             self.logger.error("Failed to capture single frame")
-            return None
+            return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
     
-    def save_frame(self, frame: np.ndarray, filename: str) -> bool:
-        """Save frame to file."""
+    def save_frame(self, frame: Any, filename: str) -> CameraStatus:
+        """Speichert ein Frame als Datei.
+        Args:
+            frame: Das zu speichernde Bild (np.ndarray)
+            filename: Dateiname
+        Returns:
+            CameraStatus: Status-Objekt mit Dateipfad oder Fehler.
+        """
         try:
             output_path = Path(filename)
             success = cv2.imwrite(str(output_path), frame)
             if success:
                 self.logger.info(f"Frame saved: {output_path.absolute()}")
+                return success_status("Frame saved", data=str(output_path.absolute()), details={'camera_index': self.camera_index})
             else:
                 self.logger.error(f"Failed to save frame: {output_path}")
-            return success
+                return error_status("Failed to save frame", details={'camera_index': self.camera_index})
         except Exception as e:
             self.logger.error(f"Error saving frame: {e}")
-            return False
+            return error_status(f"Error saving frame: {e}", details={'camera_index': self.camera_index})
     
-    def get_camera_info(self) -> Dict[str, Any]:
-        """Get camera information and settings."""
+    def get_camera_info(self) -> dict[str, Any]:
+        """Gibt Kamera-Informationen und Einstellungen zurück."""
         if not self.cap or not self.cap.isOpened():
             return {"error": "Camera not connected"}
         
@@ -218,53 +240,4 @@ class VideoCapture:
             "capture_enabled": self.capture_enabled
         }
         
-        return info
-
-def main():
-    """Test function for video capture module."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Test video capture module")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index")
-    parser.add_argument("--capture", action="store_true", help="Capture single frame")
-    parser.add_argument("--stream", action="store_true", help="Start continuous capture")
-    parser.add_argument("--info", action="store_true", help="Show camera info")
-    parser.add_argument("--output", default="test_frame.jpg", help="Output filename")
-    
-    args = parser.parse_args()
-    
-    # Update camera index in config for testing
-    config.update_video_config({"camera_index": args.camera})
-    
-    video_capture = VideoCapture()
-    
-    if args.info:
-        info = video_capture.get_camera_info()
-        print("Camera Information:")
-        for key, value in info.items():
-            print(f"  {key}: {value}")
-    
-    if args.capture:
-        if video_capture.connect():
-            frame = video_capture.capture_single_frame()
-            if frame is not None:
-                video_capture.save_frame(frame, args.output)
-            video_capture.disconnect()
-    
-    if args.stream:
-        if video_capture.start_capture():
-            try:
-                print("Press Ctrl+C to stop streaming...")
-                while True:
-                    frame = video_capture.get_current_frame()
-                    if frame is not None:
-                        print(f"Frame captured: {frame.shape}")
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\nStopping stream...")
-            finally:
-                video_capture.stop_capture()
-                video_capture.disconnect()
-
-if __name__ == "__main__":
-    main() 
+        return info 

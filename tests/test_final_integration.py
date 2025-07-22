@@ -12,8 +12,11 @@ from pathlib import Path
 # Add code directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
 
-def test_automated_platesolve2_integration():
-    """Test the automated PlateSolve 2 integration."""
+def test_automated_platesolve2_integration() -> bool:
+    """Testet die automatisierte PlateSolve 2 Integration.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("Testing automated PlateSolve 2 integration...")
     
     try:
@@ -114,8 +117,11 @@ def test_overlay_runner_integration():
         print(f"✗ Error testing overlay runner integration: {e}")
         return False
 
-def test_configuration():
-    """Test configuration for automated solving."""
+def test_configuration() -> bool:
+    """Testet die Konfiguration für automatisiertes Plate-Solving.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\n--- Testing configuration ---")
     
     try:
@@ -217,8 +223,11 @@ def test_command_line_format():
         print(f"✗ Error testing command line format: {e}")
         return False
 
-def test_complete_workflow():
-    """Test the complete workflow from image to overlay."""
+def test_complete_workflow() -> bool:
+    """Testet den kompletten Workflow von Bild zu Overlay.
+    Returns:
+        bool: True bei Erfolg, sonst False.
+    """
     print("\n--- Testing complete workflow ---")
     
     try:
@@ -253,8 +262,8 @@ def test_complete_workflow():
         print(f"✗ Error testing complete workflow: {e}")
         return False
 
-def main():
-    """Main test function."""
+def main() -> None:
+    """Hauptfunktion für den Final-Integrationstest."""
     print("Final Integration Test")
     print("=" * 50)
     print("Testing complete system with automated PlateSolve 2")
