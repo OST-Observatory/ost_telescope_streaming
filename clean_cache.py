@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Clean Python cache files to remove any cached Unicode issues
+Clean Python cache files
 """
 
 import os

@@ -79,10 +79,7 @@ class PlateSolve2Solver(PlateSolver):
         self.min_stars = self.plate_solve_config.get('min_stars', 20)
         self.max_stars = self.plate_solve_config.get('max_stars', 200)
         
-        # Results file
-        self.results_file = None
-        
-        # GUI mode flag
+        # GUI mode flag (fallback only)
         self.use_gui_mode = self.plate_solve_config.get('use_gui_mode', True)
         
         # Try to use automated solver first
@@ -209,10 +206,7 @@ class PlateSolve2Solver(PlateSolver):
                 result.error_message = "PlateSolve 2 GUI opened - manual solving required"
                 result.success = False
                 
-                # TODO: In the future, we could:
-                # 1. Monitor for result files created by PlateSolve 2
-                # 2. Use Windows API to read GUI content
-                # 3. Implement clipboard monitoring for copied coordinates
+                # Note: Automated solving via .apm files is now the primary method
                 
             else:
                 # Process finished (possibly an error)
@@ -247,7 +241,7 @@ class PlateSolve2Solver(PlateSolver):
             
             self.logger.info(f"Running PlateSolve 2 CLI: {' '.join(cmd)}")
             
-            # Execute PlateSolve 2 - this will open the GUI
+            # Execute PlateSolve 2 - this will open the GUI (fallback only)
             # We use Popen instead of run because it's a GUI application
             process = subprocess.Popen(
                 cmd,
@@ -283,66 +277,7 @@ class PlateSolve2Solver(PlateSolver):
         
         return result
     
-    def _parse_results(self, results_path: Path, result: PlateSolveResult) -> PlateSolveResult:
-        """Parse PlateSolve 2 results file."""
-        try:
-            if not results_path.exists():
-                result.error_message = f"Results file not found: {results_path}"
-                return result
-            
-            with open(results_path, 'r') as f:
-                content = f.read()
-            
-            # Parse the results (format depends on PlateSolve 2 version)
-            # This is a basic parser - may need adjustment for specific versions
-            
-            lines = content.strip().split('\n')
-            
-            for line in lines:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                
-                # Try to parse key-value pairs
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    key = key.strip().lower()
-                    value = value.strip()
-                    
-                    try:
-                        if key in ['ra', 'right_ascension']:
-                            result.ra_center = float(value)
-                        elif key in ['dec', 'declination']:
-                            result.dec_center = float(value)
-                        elif key in ['fov_width', 'width']:
-                            result.fov_width = float(value)
-                        elif key in ['fov_height', 'height']:
-                            result.fov_height = float(value)
-                        elif key in ['confidence', 'conf']:
-                            result.confidence = float(value)
-                        elif key in ['stars', 'stars_detected']:
-                            result.stars_detected = int(value)
-                    except (ValueError, TypeError):
-                        continue
-            
-            # Check if we got the essential data
-            if (result.ra_center is not None and 
-                result.dec_center is not None and
-                result.fov_width is not None and
-                result.fov_height is not None):
-                
-                result.success = True
-                self.logger.info(f"Plate-solving successful: RA={result.ra_center:.4f}°, "
-                               f"Dec={result.dec_center:.4f}°, FOV={result.fov_width:.3f}°x{result.fov_height:.3f}°")
-            else:
-                result.error_message = "Incomplete results from PlateSolve 2"
-                self.logger.warning("Incomplete PlateSolve 2 results")
-            
-        except Exception as e:
-            result.error_message = f"Error parsing results: {str(e)}"
-            self.logger.error(f"Results parsing error: {e}")
-        
-        return result
+
 
 class AstrometryNetSolver(PlateSolver):
     """Astrometry.net API integration (placeholder for future implementation)."""

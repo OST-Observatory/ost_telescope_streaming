@@ -24,11 +24,19 @@ except ImportError as e:
     print(f"Warning: Video processor not available: {e}")
     VIDEO_AVAILABLE = False
 
+try:
+    from generate_overlay import OverlayGenerator
+    OVERLAY_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Overlay generator not available: {e}")
+    OVERLAY_AVAILABLE = False
+
 class OverlayRunner:
     def __init__(self):
         self.running = True
         self.mount = None
         self.video_processor = None
+        self.overlay_generator = None
         self.setup_signal_handlers()
         
         # Load configuration
@@ -46,6 +54,15 @@ class OverlayRunner:
         self.video_enabled = video_config.get('plate_solving_enabled', False)
         self.last_solve_result = None
         
+        # Initialize overlay generator if available
+        if OVERLAY_AVAILABLE:
+            try:
+                self.overlay_generator = OverlayGenerator()
+                print("Overlay generator initialized")
+            except Exception as e:
+                print(f"Warning: Failed to initialize overlay generator: {e}")
+                self.overlay_generator = None
+        
     def setup_signal_handlers(self):
         """Sets up signal handlers for clean shutdown."""
         def signal_handler(signum, frame):
@@ -59,42 +76,55 @@ class OverlayRunner:
         """Generates an overlay for the given coordinates."""
         print(f"Generating overlay for RA: {ra_deg:.4f}°, Dec: {dec_deg:.4f}° ...")
         
-        cmd = [
-            sys.executable,  # Current Python interpreter
-            "generate_overlay.py",
-            "--ra", str(ra_deg),
-            "--dec", str(dec_deg)
-        ]
+        # Use class-based approach if available
+        if self.overlay_generator:
+            try:
+                result_file = self.overlay_generator.generate_overlay(ra_deg, dec_deg, output_file)
+                print(f"Overlay created successfully: {result_file}")
+                return True
+            except Exception as e:
+                print(f"Error creating overlay: {e}")
+                return False
         
-        if output_file:
-            cmd.extend(["--output", output_file])
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,  # Timeout after 60 seconds
-                cwd=os.path.dirname(os.path.abspath(__file__))  # Working directory
-            )
+        # Fallback to subprocess approach
+        else:
+            print("Warning: Using subprocess fallback for overlay generation")
+            cmd = [
+                sys.executable,  # Current Python interpreter
+                "generate_overlay.py",
+                "--ra", str(ra_deg),
+                "--dec", str(dec_deg)
+            ]
             
-            if result.returncode == 0:
-                print("Overlay created successfully")
-                if result.stdout:
-                    print(result.stdout.strip())
-            else:
-                print(f"Error creating overlay:")
-                print(result.stderr.strip())
+            if output_file:
+                cmd.extend(["--output", output_file])
+            
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,  # Timeout after 60 seconds
+                    cwd=os.path.dirname(os.path.abspath(__file__))  # Working directory
+                )
+                
+                if result.returncode == 0:
+                    print("Overlay created successfully")
+                    if result.stdout:
+                        print(result.stdout.strip())
+                else:
+                    print(f"Error creating overlay:")
+                    print(result.stderr.strip())
+                    return False
+                    
+            except subprocess.TimeoutExpired:
+                print("Timeout while creating overlay")
+                return False
+            except Exception as e:
+                print(f"Unexpected error: {e}")
                 return False
                 
-        except subprocess.TimeoutExpired:
-            print("Timeout while creating overlay")
-            return False
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            return False
-            
-        return True
+            return True
     
 
     

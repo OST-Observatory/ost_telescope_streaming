@@ -44,13 +44,7 @@ class PlateSolve2Automated:
               fov_height_deg: Optional[float] = None) -> Dict[str, Any]:
         """
         Solve plate using PlateSolve 2 with correct command line format.
-        
-        Args:
-            image_path: Path to the image file
-            ra_deg: Right Ascension in degrees (optional, will be estimated if not provided)
-            dec_deg: Declination in degrees (optional, will be estimated if not provided)
-            fov_width_deg: Field of view width in degrees (optional, will be calculated from config)
-            fov_height_deg: Field of view height in degrees (optional, will be calculated from config)
+        Now parses the .apm result file for output.
         """
         result = {
             'success': False,
@@ -60,9 +54,12 @@ class PlateSolve2Automated:
             'fov_height': None,
             'confidence': None,
             'stars_detected': None,
+            'pixel_scale': None,
+            'position_angle': None,
+            'flipped': None,
             'error_message': None,
             'solving_time': 0,
-            'method_used': 'platesolve2_automated'
+            'method_used': 'platesolve2_automated_apm'
         }
         
         if not self._is_available():
@@ -74,8 +71,13 @@ class PlateSolve2Automated:
             return result
         
         start_time = time.time()
+        apm_path = os.path.splitext(image_path)[0] + '.apm'
         
         try:
+            # Remove old .apm file if it exists
+            if os.path.exists(apm_path):
+                os.remove(apm_path)
+            
             # Calculate or estimate parameters
             ra_rad, dec_rad, fov_width_rad, fov_height_rad = self._prepare_parameters(
                 ra_deg, dec_deg, fov_width_deg, fov_height_deg
@@ -92,11 +94,19 @@ class PlateSolve2Automated:
             # Execute PlateSolve 2
             success = self._execute_platesolve2(cmd_string)
             
-            if success:
-                # Parse results
-                result = self._parse_results(result)
-            else:
-                result['error_message'] = "PlateSolve 2 execution failed"
+            # Wait for .apm file to appear (max 10s)
+            apm_timeout = 10
+            waited = 0
+            while not os.path.exists(apm_path) and waited < apm_timeout:
+                time.sleep(0.5)
+                waited += 0.5
+            
+            if not os.path.exists(apm_path):
+                result['error_message'] = f"No .apm result file found after {apm_timeout}s"
+                return result
+            
+            # Parse .apm file
+            result = self._parse_apm_file(apm_path, result)
             
         except Exception as e:
             result['error_message'] = f"Automation error: {str(e)}"
@@ -221,114 +231,49 @@ class PlateSolve2Automated:
             self.logger.error(f"Error executing PlateSolve 2: {e}")
             return False
     
-    def _parse_results(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse results from PlateSolve 2 output."""
+    def _parse_apm_file(self, apm_path: str, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse the .apm result file from PlateSolve 2."""
+        import math
         try:
-            if not self.current_process or not self.current_process.stdout:
-                result['error_message'] = "No output to parse"
+            with open(apm_path, 'r') as f:
+                lines = [line.strip() for line in f.readlines()]
+            if len(lines) < 3:
+                result['error_message'] = f".apm file has too few lines: {lines}"
                 return result
-            
-            output = self.current_process.stdout
-            
-            # Look for coordinates in output
-            # PlateSolve 2 typically outputs results in a specific format
-            # We need to adapt this based on actual output format
-            
-            # Common patterns for coordinates
-            patterns = [
-                # Pattern 1: RA/Dec with degrees
-                r'RA[:\s]*([0-9]+\.?[0-9]*)\s*degrees?',
-                r'Dec[:\s]*([+-]?[0-9]+\.?[0-9]*)\s*degrees?',
-                
-                # Pattern 2: RA/Dec with hours/degrees
-                r'RA[:\s]*([0-9]+):([0-9]+):([0-9]+\.?[0-9]*)',
-                r'Dec[:\s]*([+-]?[0-9]+):([0-9]+):([0-9]+\.?[0-9]*)',
-                
-                # Pattern 3: Simple numbers (assume RA/Dec)
-                r'([0-9]+\.?[0-9]*)\s*,\s*([+-]?[0-9]+\.?[0-9]*)',
-            ]
-            
-            ra_found = None
-            dec_found = None
-            
-            for pattern in patterns:
-                matches = re.findall(pattern, output, re.IGNORECASE)
-                if matches:
-                    if len(matches[0]) == 2:  # Simple RA,Dec format
-                        ra_found = float(matches[0][0])
-                        dec_found = float(matches[0][1])
-                        break
-                    elif len(matches[0]) == 3:  # HH:MM:SS format
-                        # Convert to decimal degrees
-                        if 'RA' in pattern:
-                            ra_found = self._hms_to_degrees(matches[0])
-                        else:
-                            dec_found = self._dms_to_degrees(matches[0])
-            
-            if ra_found is not None and dec_found is not None:
+            # Line 1: RA,Dec,Code_1 (all floats in radians, Code_1 is int)
+            ra_rad, dec_rad, code_1 = lines[0].split(',')
+            ra_rad = float(ra_rad)
+            dec_rad = float(dec_rad)
+            # Convert to degrees
+            ra_deg = ra_rad * 180.0 / math.pi
+            dec_deg = dec_rad * 180.0 / math.pi
+            result['ra_center'] = ra_deg
+            result['dec_center'] = dec_deg
+            # Line 2: Pixel_scale,Position_angle,If_Flipped,Code_2,Code_3,N_stars
+            parts2 = lines[1].split(',')
+            pixel_scale = float(parts2[0])
+            position_angle = float(parts2[1])
+            if_flipped = int(parts2[2])
+            n_stars = int(parts2[5])
+            # If flipped, add 180°
+            if if_flipped >= 1:
+                position_angle = (position_angle + 180.0) % 360.0
+            result['pixel_scale'] = pixel_scale
+            result['position_angle'] = position_angle
+            result['flipped'] = if_flipped
+            result['stars_detected'] = n_stars
+            # Line 3: Valid plate solution?
+            valid_line = lines[2].lower()
+            if 'valid' in valid_line:
                 result['success'] = True
-                result['ra_center'] = ra_found
-                result['dec_center'] = dec_found
-                result['confidence'] = 0.9  # High confidence for automated solving
-                
-                # Try to extract additional information
-                self._extract_additional_info(output, result)
-                
-                self.logger.info(f"Parsed results: RA={ra_found:.4f}°, Dec={dec_found:.4f}°")
+                result['confidence'] = 0.99
             else:
-                result['error_message'] = "Could not parse coordinates from output"
-                if self.verbose:
-                    self.logger.warning(f"Raw output: {output}")
-            
+                result['success'] = False
+                result['error_message'] = f"PlateSolve 2 did not find a valid solution: {lines[2]}"
+            return result
         except Exception as e:
-            result['error_message'] = f"Error parsing results: {str(e)}"
-            self.logger.error(f"Error parsing PlateSolve 2 results: {e}")
-        
-        return result
-    
-    def _hms_to_degrees(self, hms: Tuple[str, str, str]) -> float:
-        """Convert hours:minutes:seconds to decimal degrees."""
-        hours = float(hms[0])
-        minutes = float(hms[1])
-        seconds = float(hms[2])
-        
-        # Convert to decimal hours, then to degrees
-        decimal_hours = hours + minutes/60 + seconds/3600
-        return decimal_hours * 15  # 15 degrees per hour
-    
-    def _dms_to_degrees(self, dms: Tuple[str, str, str]) -> float:
-        """Convert degrees:minutes:seconds to decimal degrees."""
-        degrees = float(dms[0])
-        minutes = float(dms[1])
-        seconds = float(dms[2])
-        
-        # Convert to decimal degrees
-        decimal_degrees = abs(degrees) + minutes/60 + seconds/3600
-        
-        # Preserve sign
-        if degrees < 0:
-            decimal_degrees = -decimal_degrees
-        
-        return decimal_degrees
-    
-    def _extract_additional_info(self, output: str, result: Dict[str, Any]):
-        """Extract additional information from output."""
-        try:
-            # Look for FOV information
-            fov_pattern = r'FOV[:\s]*([0-9]+\.?[0-9]*)'
-            fov_match = re.search(fov_pattern, output, re.IGNORECASE)
-            if fov_match:
-                result['fov_width'] = float(fov_match.group(1))
-                result['fov_height'] = float(fov_match.group(1))
-            
-            # Look for star count
-            stars_pattern = r'stars?[:\s]*([0-9]+)'
-            stars_match = re.search(stars_pattern, output, re.IGNORECASE)
-            if stars_match:
-                result['stars_detected'] = int(stars_match.group(1))
-            
-        except Exception as e:
-            self.logger.warning(f"Error extracting additional info: {e}")
+            result['error_message'] = f"Error parsing .apm file: {str(e)}"
+            return result
     
     def _cleanup(self):
         """Clean up resources."""
