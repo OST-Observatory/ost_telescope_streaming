@@ -23,13 +23,13 @@ def main():
                        help="Camera type: opencv for regular cameras, ascom for astro cameras")
     parser.add_argument("--ascom-driver", default=video_config['ascom']['ascom_driver'],
                        help="ASCOM driver ID (astro cameras)")
-    parser.add_argument("--width", type=int, default=video_config['frame_width'],
+    parser.add_argument("--width", type=int, default=video_config['opencv']['frame_width'],
                        help="Frame width")
-    parser.add_argument("--height", type=int, default=video_config['frame_height'],
+    parser.add_argument("--height", type=int, default=video_config['opencv']['frame_height'],
                        help="Frame height")
-    parser.add_argument("--fps", type=int, default=video_config['fps'],
+    parser.add_argument("--fps", type=int, default=video_config['opencv']['fps'],
                        help="Frame rate")
-    parser.add_argument("--exposure", type=float, default=video_config['exposure_time'],
+    parser.add_argument("--exposure", type=float, default=video_config['opencv']['exposure_time'],
                        help="Exposure time in seconds")
     parser.add_argument("--gain", type=float, default=video_config['ascom']['gain'],
                        help="Gain setting (ASCOM cameras)")
