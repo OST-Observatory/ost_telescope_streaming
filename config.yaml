@@ -20,7 +20,7 @@ telescope:
   aperture: 200
   # Telescope type (refractor, reflector, etc.)
   type: "reflector"
-  # Focal ratio (focal_length / aperture)
+  # Focal ratio (focal_length / aperture)   TODO: Replace with calculation
   focal_ratio: 5.0
 
 # Camera Parameters
@@ -55,15 +55,12 @@ video:
 
   # Settings only for ASCOM cameras
   ascom:
-    ascom_driver: ""  # ASCOM driver ID for astro cameras
-    auto_exposure: true  # Enable auto exposure
+    ascom_driver: "ASCOM.MyCamera.Camera"  # ASCOM driver ID for astro cameras
     exposure_time: 0.1  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
     binning: 1  # Binning factor (1x1, 2x2, etc.)
 
   # Frame saving settings
-  save_plate_solve_frames: true  # Save frames for plate-solving
-  plate_solve_dir: "plate_solve_frames"  # Directory for saved frames
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames

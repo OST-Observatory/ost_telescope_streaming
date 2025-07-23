@@ -80,14 +80,11 @@ class ConfigManager:
                     'gain': 1.0  # Gain setting
                 },
                 'ascom': {
-                    'ascom_driver': '',  # ASCOM driver ID for astro cameras
-                    'auto_exposure': True,  # Enable auto exposure
+                    'ascom_driver': 'ASCOM.MyCamera.Camera',  # ASCOM driver ID for astro cameras
                     'exposure_time': 0.1,  # Manual exposure time in seconds
                     'gain': 1.0,  # Gain setting
                     'binning': 1  # Binning factor (1x1, 2x2, etc.)
                 },
-                'save_plate_solve_frames': True,  # Save frames for plate-solving
-                'plate_solve_dir': 'plate_solve_frames',  # Directory for saved frames
                 'use_timestamps': False,  # Enable timestamps in frame filenames
                 'timestamp_format': '%Y%m%d_%H%M%S',  # Timestamp format for filenames
                 'use_capture_count': False,  # Enable capture count in frame filenames

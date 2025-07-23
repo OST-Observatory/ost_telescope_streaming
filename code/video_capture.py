@@ -47,7 +47,6 @@ class VideoCapture:
         elif self.camera_type == 'ascom':
             cam_cfg = self.video_config.get('ascom', {})
             self.ascom_driver = cam_cfg.get('ascom_driver', None)
-            self.auto_exposure = cam_cfg.get('auto_exposure', True)
             self.exposure_time = cam_cfg.get('exposure_time', 0.1)
             self.gain = cam_cfg.get('gain', 1.0)
         # Remove any remaining German comments and ensure all are in English
