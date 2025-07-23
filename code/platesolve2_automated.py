@@ -27,15 +27,13 @@ class PlateSolve2Automated:
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
         
-        # PlateSolve 2 settings
-        self.executable_path = self.config.get_plate_solve_config().get('platesolve2_path', '')
-        self.working_directory = self.config.get_plate_solve_config().get('working_directory', '')
-        self.timeout = self.config.get_plate_solve_config().get('timeout', 60)
-        self.verbose = self.config.get_plate_solve_config().get('verbose', False)
-        
-        # Plate-solving parameters
-        self.number_of_regions = self.config.get_plate_solve_config().get('number_of_regions', 1)
-        self.search_radius = self.config.get_plate_solve_config().get('search_radius', 15)  # degrees
+        ps2_cfg = self.config.get_plate_solve_config().get('platesolve2', {})
+        self.executable_path = ps2_cfg.get('executable_path', '')
+        self.working_directory = ps2_cfg.get('working_directory', '')
+        self.timeout = ps2_cfg.get('timeout', 60)
+        self.verbose = ps2_cfg.get('verbose', False)
+        self.number_of_regions = ps2_cfg.get('number_of_regions', 1)
+        # Remove any old direct plate_solve_config accesses for these keys.
         
         # Setup logging
         # self.logger = logging.getLogger(__name__) # This line is now redundant as logger is passed to __init__
@@ -76,7 +74,7 @@ class PlateSolve2Automated:
                 return error_status(f"No .apm result file found after {apm_timeout}s")
             # Parse .apm file
             result_dict = {}
-            result_dict = self._parse_apm_file(apm_path, result_dict)
+            result_dict = self._parse_apm_file(apm_path, result_dict, image_path)
             if result_dict.get('success'):
                 return success_status(
                     "PlateSolve2 automated solving successful",
@@ -227,7 +225,7 @@ class PlateSolve2Automated:
             self.logger.error(f"Error executing PlateSolve 2: {e}")
             return False
     
-    def _parse_apm_file(self, apm_path: str, result: dict[str, Any]) -> dict[str, Any]:
+    def _parse_apm_file(self, apm_path: str, result: dict[str, Any], image_path: str) -> dict[str, Any]:
         """Parses the .apm result file from PlateSolve 2."""
         import math
         try:
@@ -270,6 +268,32 @@ class PlateSolve2Automated:
             dec_deg = dec_rad * 180.0 / math.pi
             result['ra_center'] = ra_deg
             result['dec_center'] = dec_deg
+            
+            # Calculate FOV from pixel scale and image dimensions
+            # Get image dimensions from the input image
+            try:
+                from PIL import Image
+                with Image.open(image_path) as img:
+                    image_width, image_height = img.size
+                    result['image_size'] = (image_width, image_height)
+                    
+                    # Calculate FOV from pixel scale
+                    # pixel_scale is in arcseconds per pixel
+                    # FOV = pixel_scale * image_size / 3600 (convert arcsec to degrees)
+                    fov_width_deg = (pixel_scale * image_width) / 3600.0
+                    fov_height_deg = (pixel_scale * image_height) / 3600.0
+                    result['fov_width'] = fov_width_deg
+                    result['fov_height'] = fov_height_deg
+                    
+                    if self.verbose:
+                        self.logger.info(f"Image size: {image_width}x{image_height} pixels")
+                        self.logger.info(f"Calculated FOV: {fov_width_deg:.4f}° x {fov_height_deg:.4f}°")
+            except Exception as e:
+                self.logger.warning(f"Could not determine image size: {e}")
+                # Use default values or calculated FOV if available
+                result['image_size'] = None
+                result['fov_width'] = None
+                result['fov_height'] = None
             
             if self.verbose:
                 self.logger.info(f"Parsed RA: {ra_rad_str} rad = {ra_deg:.6f}°")

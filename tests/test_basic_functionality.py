@@ -47,7 +47,8 @@ def test_configuration() -> bool:
         
         print(f"Telescope focal length: {telescope_config.get('focal_length', 'N/A')}mm")
         print(f"Camera sensor: {camera_config.get('sensor_width', 'N/A')}mm x {camera_config.get('sensor_height', 'N/A')}mm")
-        print(f"Video enabled: {video_config.get('plate_solving_enabled', False)}")
+        print(f"Video enabled: {video_config.get('video_enabled', True)}")
+        print(f"Plate solving enabled: {plate_solve_config.get('auto_solve', False)}")
         print(f"PlateSolve 2 path: {plate_solve_config.get('platesolve2_path', 'Not set')}")
         
         print("✓ Configuration test completed successfully!")

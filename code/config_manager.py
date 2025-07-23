@@ -68,61 +68,76 @@ class ConfigManager:
                 'bit_depth': 8
             },
             'video': {
-                'camera_index': 0,
-                'frame_width': 1920,
-                'frame_height': 1080,
-                'fps': 30,
-                'auto_exposure': True,
-                'exposure_time': 100,
-                'gain': 1.0,
-                'plate_solving_enabled': False,
-                'plate_solving_interval': 60,
-                'save_plate_solve_frames': True,
-                'plate_solve_dir': 'plate_solve_frames'
+                'video_enabled': True,
+                'camera_type': 'opencv',
+                'opencv': {
+                    'camera_index': 0,
+                    'frame_width': 1920,  # Frame width in pixels
+                    'frame_height': 1080,  # Frame height in pixels
+                    'fps': 30,  # Frames per second
+                    'auto_exposure': True,  # Enable auto exposure
+                    'exposure_time': 0.1,  # Manual exposure time in seconds
+                    'gain': 1.0  # Gain setting
+                },
+                'ascom': {
+                    'ascom_driver': '',  # ASCOM driver ID for astro cameras
+                    'auto_exposure': True,  # Enable auto exposure
+                    'exposure_time': 0.1,  # Manual exposure time in seconds
+                    'gain': 1.0,  # Gain setting
+                    'binning': 1  # Binning factor (1x1, 2x2, etc.)
+                },
+                'save_plate_solve_frames': True,  # Save frames for plate-solving
+                'plate_solve_dir': 'plate_solve_frames',  # Directory for saved frames
+                'use_timestamps': False,  # Enable timestamps in frame filenames
+                'timestamp_format': '%Y%m%d_%H%M%S',  # Timestamp format for filenames
+                'use_capture_count': False,  # Enable capture count in frame filenames
+                'file_format': 'png'  # File format for saved frames (jpg, png, tiff, etc.)
             },
             'plate_solve': {
-                'default_solver': 'platesolve2',
                 'auto_solve': True,
                 'min_solve_interval': 30,
-                'platesolve2_path': 'C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe',
-                'working_directory': 'C:/Users/BP34_Admin/AppData/Local/Temp',
-                'timeout': 60,
-                'verbose': False,
-                'use_gui_mode': True,
-                'auto_mode': True,
-                'silent_mode': True,
-                'result_file_pattern': '*.txt',
-                'number_of_regions': 999,
-                'search_radius': 15,
-                'min_stars': 20,
-                'max_stars': 200,
-                'astrometry_api_key': '',
-                'astrometry_api_url': 'http://nova.astrometry.net/api/'
+                'save_plate_solve_frames': True,
+                'plate_solve_dir': 'plate_solve_frames',
+                'default_solver': 'platesolve2',
+                'platesolve2': {
+                    'executable_path': 'C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe',
+                    'working_directory': 'C:/Users/BP34_Admin/AppData/Local/Temp',
+                    'timeout': 60,
+                    'verbose': True,
+                    'auto_mode': True,
+                    'number_of_regions': 999,
+                    'min_stars': 20,
+                    'max_stars': 200
+                },
+                'astrometry': {
+                    'api_key': '',
+                    'api_url': 'http://nova.astrometry.net/api/'
+                }
             },
             'overlay': {
+                'wait_for_plate_solve': True,
                 'field_of_view': 1.5,
-                'magnitude_limit': 10.0,
-                'include_no_magnitude': True,
+                'magnitude_limit': 9.0,
+                'include_no_magnitude': False,
                 'object_types': [],
-                'image_size': [800, 800],
+                'image_size': [1920, 1080],
                 'font_size': 14,
                 'output_format': 'png',
                 'default_filename': 'overlay.png',
-                # 'simbad_timeout': 30,  # Not used in newer astroquery versions
-                'max_name_length': 15
-            },
-            'streaming': {
-                'update_interval': 30,
-                'max_retries': 3,
-                'retry_delay': 5,
-                'use_timestamps': True,
-                'timestamp_format': '%Y%m%d_%H%M%S'
-            },
-            'display': {
-                'object_color': [255, 0, 0],
-                'text_color': [255, 255, 255],
-                'marker_size': 5,
-                'text_offset': [8, -8]
+                'max_name_length': 15,
+                'use_timestamps': False,
+                'timestamp_format': '%Y%m%d_%H%M%S',
+                'update': {
+                    'update_interval': 30,
+                    'max_retries': 3,
+                    'retry_delay': 5
+                },
+                'display': {
+                    'object_color': [255, 0, 0],
+                    'text_color': [255, 255, 255],
+                    'marker_size': 5,
+                    'text_offset': [8, -8]
+                }
             },
             'logging': {
                 'verbose': True,
@@ -196,11 +211,11 @@ class ConfigManager:
     
     def get_streaming_config(self) -> dict[str, Any]:
         """Gibt die Streaming-Konfiguration zurück."""
-        return self.config.get('streaming', {})
+        return self.config.get('overlay', {}).get('update', {})
     
     def get_display_config(self) -> dict[str, Any]:
         """Gibt die Anzeige-Konfiguration zurück."""
-        return self.config.get('display', {})
+        return self.config.get('overlay', {}).get('display', {})
     
     def get_logging_config(self) -> dict[str, Any]:
         """Gibt die Logging-Konfiguration zurück."""

@@ -13,7 +13,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Test video processor")
     parser.add_argument("--duration", type=int, default=60, help="Test duration in seconds")
-    parser.add_argument("--interval", type=int, default=10, help="Capture interval in seconds")
+    parser.add_argument("--interval", type=int, default=10, help="Plate-solving interval in seconds")
     parser.add_argument("--solve", action="store_true", help="Enable plate-solving")
     args = parser.parse_args()
 
@@ -26,15 +26,10 @@ def main():
     def on_error(error):
         print(f"Error: {error}")
 
-    config.update_video_config({
-        'plate_solving_interval': args.interval,
-        'plate_solving_enabled': True
-    })
-    if args.solve:
-        config.update_plate_solve_config({
-            'auto_solve': True,
-            'min_solve_interval': 5
-        })
+    # Override config for testing
+    config['video']['video_enabled'] = True
+    config['plate_solve']['auto_solve'] = True
+    config['plate_solve']['min_solve_interval'] = args.interval
 
     logger = logging.getLogger("video_processor_cli")
     processor = VideoProcessor(config=config, logger=logger)

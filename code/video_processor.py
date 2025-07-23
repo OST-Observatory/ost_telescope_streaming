@@ -35,11 +35,17 @@ class VideoProcessor:
         self.video_config: dict[str, Any] = self.config.get_video_config()
         self.plate_solve_config: dict[str, Any] = self.config.get_plate_solve_config()
         
-        # Video capture settings
-        self.video_enabled: bool = self.video_config.get('plate_solving_enabled', False)
-        self.capture_interval: int = self.video_config.get('plate_solving_interval', 60)
+        # Video processing settings
+        self.video_enabled: bool = self.video_config.get('video_enabled', True)
+        self.capture_interval: int = self.config.get_plate_solve_config().get('min_solve_interval', 60)
         self.save_frames: bool = self.video_config.get('save_plate_solve_frames', True)
         self.frame_dir: Path = Path(self.video_config.get('plate_solve_dir', 'plate_solve_frames'))
+        
+        # Timestamp settings for frame filenames
+        self.use_timestamps: bool = self.video_config.get('use_timestamps', False)
+        self.timestamp_format: str = self.video_config.get('timestamp_format', '%Y%m%d_%H%M%S')
+        self.use_capture_count: bool = self.video_config.get('use_capture_count', True)
+        self.file_format: str = self.video_config.get('file_format', 'png')
         
         # Plate-solving settings
         self.solver_type: str = self.plate_solve_config.get('default_solver', 'platesolve2')
@@ -172,8 +178,17 @@ class VideoProcessor:
             # Save frame if enabled
             frame_filename = None
             if self.save_frames:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                frame_filename = self.frame_dir / f"capture_{timestamp}_{self.capture_count:04d}.jpg"
+                # Generate filename with configurable timestamp and capture count
+                filename_parts = ["capture"]
+                
+                if self.use_timestamps:
+                    timestamp = datetime.now().strftime(self.timestamp_format)
+                    filename_parts.append(timestamp)
+                
+                if self.use_capture_count:
+                    filename_parts.append(f"{self.capture_count:04d}")
+                
+                frame_filename = self.frame_dir / f"{'_'.join(filename_parts)}.{self.file_format}"
                 
                 if self.video_capture.save_frame(frame, str(frame_filename)):
                     self.logger.debug(f"Frame saved: {frame_filename}")
@@ -199,6 +214,31 @@ class VideoProcessor:
             if self.on_error:
                 self.on_error(e)
     
+    def _status_to_result(self, status) -> Optional[PlateSolveResult]:
+        """Convert PlateSolveStatus to PlateSolveResult."""
+        if not status or not status.is_success:
+            return None
+        
+        # Create PlateSolveResult from status data
+        result = PlateSolveResult(success=True)
+        
+        # Extract data from status
+        data = status.data if hasattr(status, 'data') else {}
+        
+        # Map status data to result fields
+        result.ra_center = data.get('ra_center')
+        result.dec_center = data.get('dec_center')
+        result.fov_width = data.get('fov_width')
+        result.fov_height = data.get('fov_height')
+        result.position_angle = data.get('position_angle')
+        result.image_size = data.get('image_size')
+        result.confidence = data.get('confidence')
+        result.stars_detected = data.get('stars_detected')
+        result.solving_time = data.get('solving_time')
+        result.solver_used = data.get('solver_used')
+        
+        return result
+
     def _solve_frame(self, frame_path: str) -> Optional[PlateSolveResult]:
         """Führt Plate-Solving für ein bestimmtes Frame durch.
         Args:
@@ -212,10 +252,13 @@ class VideoProcessor:
         try:
             self.logger.info(f"Plate-solving frame: {frame_path}")
             
-            result = self.plate_solver.solve(frame_path)
+            status = self.plate_solver.solve(frame_path)
             self.solve_count += 1
             
-            if result.success:
+            # Convert status to result
+            result = self._status_to_result(status)
+            
+            if result and result.success:
                 self.successful_solves += 1
                 self.last_solve_result = result
                 self.logger.info(f"Plate-solving successful: {result}")
@@ -224,7 +267,8 @@ class VideoProcessor:
                 if self.on_solve_result:
                     self.on_solve_result(result)
             else:
-                self.logger.warning(f"Plate-solving failed: {result.error_message}")
+                error_msg = status.error_message if hasattr(status, 'error_message') else 'Unknown error'
+                self.logger.warning(f"Plate-solving failed: {error_msg}")
             
             self.last_solve_time = time.time()
             return result

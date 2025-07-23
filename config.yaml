@@ -40,107 +40,108 @@ camera:
 # Video Capture Settings
 # ---------------------
 video:
-  # Camera device index
-  camera_index: 0
-  # Camera type: 'opencv' for regular video cameras, 'ascom' for astro cameras
-  camera_type: "opencv"
-  # ASCOM driver ID for astro cameras (e.g., "ASCOM.QHYCamera.Camera", "ASCOM.ZWOCamera.Camera")
-  ascom_driver: ""
-  # Frame width in pixels
-  frame_width: 1920
-  # Frame height in pixels
-  frame_height: 1080
-  # Frame rate
-  fps: 30
-  # Auto exposure (true/false)
-  auto_exposure: true
-  # Manual exposure time in milliseconds
-  exposure_time: 100
-  # Gain setting
-  gain: 1.0
-  # Enable plate-solving
-  plate_solving_enabled: false
-  # Plate-solving interval in seconds
-  plate_solving_interval: 60
-  # Save frames for plate-solving
-  save_plate_solve_frames: true
-  # Plate-solving output directory
-  plate_solve_dir: "plate_solve_frames"
+  video_enabled: true
+  camera_type: "opencv"  # or "ascom"
+
+  # Settings only for OpenCV cameras
+  opencv:
+    camera_index: 0
+    frame_width: 1920  # Frame width in pixels
+    frame_height: 1080  # Frame height in pixels
+    fps: 30  # Frames per second
+    auto_exposure: true  # Enable auto exposure
+    exposure_time: 0.1  # Manual exposure time in seconds
+    gain: 1.0  # Gain setting
+
+  # Settings only for ASCOM cameras
+  ascom:
+    ascom_driver: ""  # ASCOM driver ID for astro cameras
+    auto_exposure: true  # Enable auto exposure
+    exposure_time: 0.1  # Manual exposure time in seconds
+    gain: 1.0  # Gain setting
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
+
+  # Frame saving settings
+  save_plate_solve_frames: true  # Save frames for plate-solving
+  plate_solve_dir: "plate_solve_frames"  # Directory for saved frames
+  use_timestamps: false  # Enable timestamps in frame filenames
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
+  use_capture_count: false  # Enable capture count in frame filenames
+  file_format: "png"  # File format for saved frames (jpg, png, tiff, etc.)
 
 # Plate-Solving Settings
 # ----------------------
 plate_solve:
-  # Default solver to use (platesolve2, astrometry)
-  default_solver: "platesolve2"
-  # Enable automatic plate-solving
+  # General plate-solving settings
   auto_solve: true
-  # Minimum interval between solves in seconds
   min_solve_interval: 30
-  # PlateSolve 2 specific settings
-  platesolve2_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
-  working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
-  timeout: 60
-  verbose: true
-  use_gui_mode: true  # Use GUI mode if CLI doesn't work
-  auto_mode: true  # Enable automatic solving
-  silent_mode: true  # Enable silent mode
-  result_file_pattern: "*.txt"  # Pattern for result files
-  number_of_regions: 999  # Number of regions to test
-  search_radius: 15  # degrees
-  min_stars: 20
-  max_stars: 200
-  # Astrometry.net specific settings
-  astrometry_api_key: ""
-  astrometry_api_url: "http://nova.astrometry.net/api/"
+  save_plate_solve_frames: true
+  plate_solve_dir: "plate_solve_frames"
+  default_solver: "platesolve2"
+
+  # Settings for PlateSolve2
+  platesolve2:
+    executable_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
+    working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
+    timeout: 60
+    verbose: true
+    auto_mode: true
+    number_of_regions: 999
+    min_stars: 20
+    max_stars: 200
+
+  # Settings for Astrometry.net
+  astrometry:
+    api_key: ""
+    api_url: "http://nova.astrometry.net/api/"
 
 # Overlay Generation Settings
 # ---------------------------
 overlay:
-  # Field of view in degrees
+  # Wait indefinitely for plate-solving results before generating overlay
+  wait_for_plate_solve: true
+  # Field of view in degrees (default if not provided by plate-solving)
   field_of_view: 1.5
   # Maximum magnitude of objects to display
   magnitude_limit: 9.0
-  # Include objects without magnitude (galaxies, etc.)
+  # Include objects without magnitude (e.g. galaxies)
   include_no_magnitude: false
   # Object types to include (empty = all types)
-  # Common types: *, G (galaxy), AG? (active galaxy), Le? (lens), etc.
   object_types: []
   # Image size in pixels (width, height)
   image_size: [1920, 1080]
   # Font size for object labels
   font_size: 14
-  # Output file format
+  # Output file format (e.g. png, jpg)
   output_format: "png"
   # Default output filename
   default_filename: "overlay.png"
   # Maximum length for object names (truncate if longer)
   max_name_length: 15
-
-# Streaming Settings
-# ------------------
-streaming:
-  # Update interval in seconds
-  update_interval: 30
-  # Maximum consecutive failures before stopping
-  max_retries: 3
-  # Delay between retry attempts in seconds
-  retry_delay: 5
-  # Enable timestamped filenames
-  use_timestamps: true
+  # Enable timestamped filenames for overlays
+  use_timestamps: false
   # Timestamp format for filenames
   timestamp_format: "%Y%m%d_%H%M%S"
 
-# Display Settings
-# ----------------
-display:
-  # Object marker color (RGB)
-  object_color: [255, 0, 0]  # Red
-  # Text color (RGB)
-  text_color: [255, 255, 255]  # White
-  # Object marker size in pixels
-  marker_size: 5
-  # Text offset from marker in pixels
-  text_offset: [8, -8]
+  # Update settings (controls overlay update logic)
+  update:
+    # Interval between overlay updates in seconds
+    update_interval: 30
+    # Maximum consecutive failures before stopping
+    max_retries: 3
+    # Delay between retry attempts in seconds
+    retry_delay: 5
+
+  # Display settings (controls overlay appearance)
+  display:
+    # Object marker color (RGB)
+    object_color: [255, 0, 0]  # Red
+    # Text color (RGB)
+    text_color: [255, 255, 255]  # White
+    # Object marker size in pixels
+    marker_size: 5
+    # Text offset from marker in pixels
+    text_offset: [8, -8]
 
 # Logging Settings
 # ----------------

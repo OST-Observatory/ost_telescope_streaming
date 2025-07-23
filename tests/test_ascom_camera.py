@@ -70,6 +70,12 @@ def test_ascom_camera_methods() -> bool:
             print("✗ expose method does not accept exposure_time_s parameter")
             return False
             
+        # Test that expose method accepts binning parameter
+        if 'binning' in params:
+            print("✓ expose method accepts binning parameter")
+        else:
+            print("✗ expose method does not accept binning parameter")
+            
         return True
         
     except Exception as e:

@@ -68,21 +68,50 @@ class OverlayGenerator:
         self.logger.warning("Could not load TrueType font, using default font.")
         return ImageFont.load_default()
     
-    def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
-        """Converts sky coordinates to pixel coordinates."""
+    def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0):
+        """Converts sky coordinates to pixel coordinates with rotation support.
+        Args:
+            obj_coord: SkyCoord of the object
+            center_coord: SkyCoord of the image center
+            size_px: Image size as (width, height) in pixels
+            fov_width_deg: Field of view width in degrees
+            fov_height_deg: Field of view height in degrees
+            position_angle_deg: Position angle in degrees (rotation of the image)
+        Returns:
+            tuple: (x, y) pixel coordinates
+        """
         try:
+            # Calculate angular separation in arcminutes
             delta_ra = (obj_coord.ra.degree - center_coord.ra.degree) * \
                 u.deg.to(u.arcmin) * np.cos(center_coord.dec.radian)
             delta_dec = (obj_coord.dec.degree - center_coord.dec.degree) * u.deg.to(u.arcmin)
 
-            scale = size_px[0] / (fov_deg * 60)  # arcmin -> pixels
+            # Convert to radians for rotation
+            pa_rad = np.radians(position_angle_deg)
+            
+            # Apply rotation matrix
+            cos_pa = np.cos(pa_rad)
+            sin_pa = np.sin(pa_rad)
+            
+            # Rotate the coordinates
+            delta_ra_rot = delta_ra * cos_pa + delta_dec * sin_pa
+            delta_dec_rot = -delta_ra * sin_pa + delta_dec * cos_pa
 
-            x = size_px[0] / 2 + delta_ra * scale
-            y = size_px[1] / 2 - delta_dec * scale  # Invert Y-axis (Dec up)
+            # Calculate pixel scales (arcmin per pixel)
+            scale_x = (fov_width_deg * 60) / size_px[0]   # arcmin per pixel in X
+            scale_y = (fov_height_deg * 60) / size_px[1]  # arcmin per pixel in Y
+
+            # Convert to pixel coordinates
+            x = size_px[0] / 2 + delta_ra_rot / scale_x
+            y = size_px[1] / 2 - delta_dec_rot / scale_y  # Invert Y-axis (Dec up)
 
             return int(x), int(y)
         except Exception as e:
-            raise ValueError(f"Error in coordinate conversion: {e}")
+            raise ValueError(f"Error in coordinate conversion with rotation: {e}")
+
+    def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
+        """Converts sky coordinates to pixel coordinates (legacy method for backward compatibility)."""
+        return self.skycoord_to_pixel_with_rotation(obj_coord, center_coord, size_px, fov_deg, fov_deg, 0.0)
     
     def validate_coordinates(self, ra: float, dec: float):
         """Validates RA/Dec values."""
@@ -91,8 +120,20 @@ class OverlayGenerator:
         if not (-90 <= dec <= 90):
             raise ValueError(f"Dec must be between -90 and 90 degrees, not {dec}")
     
-    def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None, fov_deg: Optional[float] = None, mag_limit: Optional[float] = None) -> OverlayStatus:
+    def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None, 
+                        fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
+                        position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
+                        mag_limit: Optional[float] = None) -> OverlayStatus:
         """Generiert ein Overlay-Bild für die gegebenen Koordinaten.
+        Args:
+            ra_deg: Rektaszension in Grad
+            dec_deg: Deklination in Grad
+            output_file: Optionaler Ausgabedateiname
+            fov_width_deg: Field of view width in degrees (from plate-solving)
+            fov_height_deg: Field of view height in degrees (from plate-solving)
+            position_angle_deg: Position angle in degrees (from plate-solving)
+            image_size: Image size as (width, height) in pixels (from camera)
+            mag_limit: Magnitude limit for objects
         Returns:
             OverlayStatus: Status-Objekt mit Ergebnis oder Fehler.
         """
@@ -101,7 +142,10 @@ class OverlayGenerator:
             self.validate_coordinates(ra_deg, dec_deg)
             
             # Use provided values or defaults
-            fov = fov_deg if fov_deg is not None else self.fov_deg
+            fov_w = fov_width_deg if fov_width_deg is not None else self.fov_deg
+            fov_h = fov_height_deg if fov_height_deg is not None else self.fov_deg
+            pa_deg = position_angle_deg if position_angle_deg is not None else 0.0
+            img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
             output_file = output_file or self.default_filename
             
@@ -114,7 +158,7 @@ class OverlayGenerator:
             custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
 
             # Radius is half-diagonal of field of view
-            radius = ((fov**2 + fov**2)**0.5) / 2
+            radius = ((fov_w**2 + fov_h**2)**0.5) / 2
 
             self.logger.info("SIMBAD query running...")
             result = custom_simbad.query_region(center, radius=radius * u.deg)
@@ -123,13 +167,13 @@ class OverlayGenerator:
                 self.logger.warning("No objects found.")
                 # Create empty overlay if configured
                 if self.advanced_config.get('save_empty_overlays', True):
-                    img = Image.new("RGBA", self.image_size, (0, 0, 0, 0))
+                    img = Image.new("RGBA", img_size, (0, 0, 0, 0))
                     img.save(output_file)
                     self.logger.info(f"Empty overlay saved as {output_file}")
                 return success_status(
                     f"Empty overlay saved as {output_file}",
                     data=output_file,
-                    details={'fov_deg': fov_deg, 'magnitude_limit': mag_limit}
+                    details={'fov_width_deg': fov_w, 'fov_height_deg': fov_h, 'position_angle_deg': pa_deg, 'image_size': img_size, 'magnitude_limit': mag_limit}
                 )
 
             # Debug: Print available column names
@@ -138,7 +182,7 @@ class OverlayGenerator:
                 self.logger.debug(f"Number of objects: {len(result)}")
 
             # Prepare image
-            img = Image.new("RGBA", self.image_size, (0, 0, 0, 0))
+            img = Image.new("RGBA", img_size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
             font = self.get_font()
 
@@ -184,10 +228,10 @@ class OverlayGenerator:
 
                     # Use found column names
                     obj_coord = SkyCoord(ra=row[ra_col], dec=row[dec_col], unit="deg")
-                    x, y = self.skycoord_to_pixel(obj_coord, center, self.image_size, fov)
+                    x, y = self.skycoord_to_pixel_with_rotation(obj_coord, center, img_size, fov_w, fov_h, pa_deg)
 
                     # Check if object is within image bounds
-                    if 0 <= x <= self.image_size[0] and 0 <= y <= self.image_size[1]:
+                    if 0 <= x <= img_size[0] and 0 <= y <= img_size[1]:
                         draw.ellipse((x - self.marker_size, y - self.marker_size, 
                                     x + self.marker_size, y + self.marker_size), 
                                    outline=self.object_color, width=2)
@@ -234,7 +278,7 @@ class OverlayGenerator:
             return success_status(
                 f"Overlay with {objects_drawn} objects saved as {output_file}",
                 data=output_file,
-                details={'objects_drawn': objects_drawn, 'fov_deg': fov_deg, 'magnitude_limit': mag_limit}
+                details={'objects_drawn': objects_drawn, 'fov_width_deg': fov_w, 'fov_height_deg': fov_h, 'position_angle_deg': pa_deg, 'image_size': img_size, 'magnitude_limit': mag_limit}
             )
 
         except Exception as e:

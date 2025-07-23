@@ -12,23 +12,25 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
-    parser.add_argument("--camera-index", type=int, default=config['video']['camera_index'],
-                       help="Camera device index")
+    parser.add_argument("--camera-index", type=int, default=config['video']['opencv']['camera_index'],
+                       help="Camera device index (OpenCV)")
     parser.add_argument("--camera-type", choices=['opencv', 'ascom'], 
                        default=config['video']['camera_type'],
                        help="Camera type: opencv for regular cameras, ascom for astro cameras")
-    parser.add_argument("--ascom-driver", default=config['video']['ascom_driver'],
-                       help="ASCOM driver ID for astro cameras")
+    parser.add_argument("--ascom-driver", default=config['video']['ascom']['ascom_driver'],
+                       help="ASCOM driver ID (astro cameras)")
     parser.add_argument("--width", type=int, default=config['video']['frame_width'],
                        help="Frame width")
     parser.add_argument("--height", type=int, default=config['video']['frame_height'],
                        help="Frame height")
     parser.add_argument("--fps", type=int, default=config['video']['fps'],
                        help="Frame rate")
-    parser.add_argument("--exposure", type=float, default=config['video']['exposure_time']/1000.0,
+    parser.add_argument("--exposure", type=float, default=config['video']['exposure_time'],
                        help="Exposure time in seconds")
-    parser.add_argument("--gain", type=float, default=config['video']['gain'],
-                       help="Gain setting")
+    parser.add_argument("--gain", type=float, default=config['video']['ascom']['gain'],
+                       help="Gain setting (ASCOM cameras)")
+    parser.add_argument("--binning", type=int, default=config['video']['ascom']['binning'],
+                       help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
     parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'filter', 'debayer'],
@@ -46,8 +48,8 @@ def main():
         logger.setLevel(logging.INFO)
         
         # Update config with command line arguments
-        config['video']['camera_type'] = args.camera_type
-        config['video']['ascom_driver'] = args.ascom_driver
+        config['video']['opencv']['camera_index'] = args.camera_index
+        config['video']['ascom']['ascom_driver'] = args.ascom_driver
         
         capture = VideoCapture(config=config, logger=logger)
         
@@ -139,10 +141,16 @@ def main():
                 if connect_status.is_success:
                     if camera.is_color_camera():
                         # Capture and debayer
-                        expose_status = camera.expose(args.exposure, args.gain)
+                        # Get binning from CLI argument or config
+                        binning = args.binning if hasattr(args, 'binning') else config['video']['ascom']['binning']
+                        
+                        # Start exposure
+                        expose_status = camera.expose(args.exposure, args.gain, binning)
                         if expose_status.is_success:
                             image_status = camera.get_image()
                             if image_status.is_success:
+                                print(f"Image captured successfully")
+                                print(f"Image data: {image_status.data}")
                                 debayer_status = camera.debayer(image_status.data, args.bayer_pattern)
                                 if debayer_status.is_success:
                                     import cv2
@@ -151,7 +159,7 @@ def main():
                                 else:
                                     print(f"Debayering failed: {debayer_status.message}")
                             else:
-                                print(f"Image capture failed: {image_status.message}")
+                                print(f"Failed to get image: {image_status.message}")
                         else:
                             print(f"Exposure failed: {expose_status.message}")
                     else:
@@ -172,9 +180,14 @@ def main():
                 
                 # For ASCOM cameras, use exposure time in seconds
                 if args.camera_type == 'ascom':
+                    # Get binning from CLI argument or config
+                    binning = args.binning if hasattr(args, 'binning') else config['video']['ascom']['binning']
+                    
+                    # Capture single frame with ASCOM camera
                     capture_status = capture.capture_single_frame_ascom(
-                        exposure_time_s=args.exposure, 
-                        gain=args.gain
+                        exposure_time_s=args.exposure,
+                        gain=args.gain,
+                        binning=binning
                     )
                 else:
                     capture_status = capture.capture_single_frame()

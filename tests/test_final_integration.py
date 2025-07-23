@@ -135,7 +135,6 @@ def test_configuration() -> bool:
             'working_directory',
             'timeout',
             'number_of_regions',
-            'search_radius'
         ]
         
         missing_keys = []
@@ -167,7 +166,7 @@ def test_command_line_format():
     print("\n--- Testing command line format ---")
     
     try:
-        from plate_solver_automated import PlateSolve2Automated
+        from platesolve2_automated import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         

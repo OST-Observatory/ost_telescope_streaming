@@ -20,7 +20,7 @@ def test_automated_platesolve2() -> bool:
     print("Testing automated PlateSolve 2 with correct command line format...")
     
     try:
-        from plate_solver_automated import PlateSolve2Automated
+        from platesolve2_automated import PlateSolve2Automated
         
         # Create solver
         solver = PlateSolve2Automated()
@@ -103,7 +103,7 @@ def test_command_string_building() -> bool:
     print("\n--- Testing command string building ---")
     
     try:
-        from plate_solver_automated import PlateSolve2Automated
+        from platesolve2_automated import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         
@@ -154,7 +154,7 @@ def test_fov_calculation() -> bool:
     print("\n--- Testing FOV calculation ---")
     
     try:
-        from plate_solver_automated import PlateSolve2Automated
+        from platesolve2_automated import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         
@@ -189,7 +189,7 @@ def test_integration_with_video_processor():
     print("\n--- Testing integration with video processor ---")
     
     try:
-        from plate_solver_automated import PlateSolve2Automated
+        from platesolve2_automated import PlateSolve2Automated
         from video_processor import VideoProcessor
         
         # Create automated solver

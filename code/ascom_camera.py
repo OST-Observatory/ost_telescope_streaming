@@ -108,15 +108,78 @@ class ASCOMCamera:
         # Heuristik: SensorType oder BayerPattern vorhanden
         return hasattr(self.camera, 'SensorType') and 'color' in str(self.camera.SensorType).lower()
 
-    def debayer(self, img_array: Any, pattern: str = 'RGGB') -> CameraStatus:
+    def debayer(self, img_array: Any, pattern: Optional[str] = None) -> CameraStatus:
+        """Debayer an image with automatic pattern detection.
+        Args:
+            img_array: Raw image array
+            pattern: Optional manual pattern override ('RGGB', 'GRBG', 'GBRG', 'BGGR')
+        Returns:
+            CameraStatus: Status with debayered image data
+        """
         try:
-            import cv2
-            import numpy as np
+            # Use provided pattern or auto-detect from sensor_type
+            if pattern is None:
+                pattern = self.sensor_type
+            
+            if pattern is None:
+                return error_status("No Bayer pattern available and none provided")
+            
+            # Apply debayering based on detected pattern
             if pattern == 'RGGB':
-                rgb = cv2.cvtColor(np.array(img_array, dtype=np.uint16), cv2.COLOR_BAYER_RG2RGB)
-            # Weitere Patterns nach Bedarf
+                bayer_pattern = cv2.COLOR_BayerRG2BGR
+            elif pattern == 'GRBG':
+                bayer_pattern = cv2.COLOR_BayerGR2BGR
+            elif pattern == 'GBRG':
+                bayer_pattern = cv2.COLOR_BayerGB2BGR
+            elif pattern == 'BGGR':
+                bayer_pattern = cv2.COLOR_BayerBG2BGR
             else:
                 return error_status(f"Unsupported Bayer pattern: {pattern}")
-            return success_status("Debayering successful", data=rgb)
+            
+            # Convert to numpy array and apply debayering
+            image_array = np.array(img_array)
+            debayered_image = cv2.cvtColor(image_array, bayer_pattern)
+            
+            return success_status(f"Image debayered with {pattern} pattern", data=debayered_image)
+            
         except Exception as e:
-            return error_status(f"Debayering failed: {e}") 
+            return error_status(f"Debayering failed: {e}")
+
+    @property
+    def sensor_type(self) -> Optional[str]:
+        """Get the sensor type (Bayer pattern) for color cameras.
+        Returns:
+            str: Bayer pattern ('RGGB', 'GRBG', 'GBRG', 'BGGR') or None for monochrome
+        """
+        try:
+            if not self.camera or not self.camera.Connected:
+                return None
+
+            # Try to get Bayer pattern from ASCOM camera
+            if hasattr(self.camera, 'SensorType'):
+                sensor_type = self.camera.SensorType
+                # ASCOM SensorType enum values: 0=Monochrome, 1=Color, 2=RgGg, 3=RGGB, etc.
+                if sensor_type == 0:  # Monochrome
+                    return None
+                elif sensor_type == 1:  # Color (generic)
+                    return 'RGGB'  # Default assumption
+                elif sensor_type == 2:  # RgGg
+                    return 'RGGB'
+                elif sensor_type == 3:  # RGGB
+                    return 'RGGB'
+                elif sensor_type == 4:  # GRBG
+                    return 'GRBG'
+                elif sensor_type == 5:  # GBRG
+                    return 'GBRG'
+                elif sensor_type == 6:  # BGGR
+                    return 'BGGR'
+
+            # Fallback: check if camera is color
+            if hasattr(self.camera, 'IsColor') and self.camera.IsColor:
+                return 'RGGB'  # Default assumption for color cameras
+
+            return None  # Assume monochrome
+
+        except Exception as e:
+            self.logger.warning(f"Could not determine sensor type: {e}")
+            return None 

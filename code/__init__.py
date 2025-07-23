@@ -12,7 +12,7 @@ Modules:
 - video_capture: Video capture and ASCOM camera integration
 - video_processor: Video processing pipeline
 - plate_solver: Plate-solving functionality
-- plate_solver_automated: Automated plate-solving
+- platesolve2_automated: Automated plate-solving
 - overlay_runner: Overlay generation and management
 - generate_overlay: Overlay creation utilities
 - ascom_mount: ASCOM mount control
@@ -30,7 +30,7 @@ try:
     from .video_capture import VideoCapture
     from .video_processor import VideoProcessor
     from .plate_solver import PlateSolve2
-    from .plate_solver_automated import PlateSolve2Automated
+    from .platesolve2_automated import PlateSolve2Automated
     from .overlay_runner import OverlayRunner
     from .generate_overlay import OverlayGenerator
     from .ascom_mount import ASCOMMount

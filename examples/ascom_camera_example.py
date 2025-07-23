@@ -132,8 +132,11 @@ def main():
         exposure_time = 5.0  # seconds
         gain = 20
         
-        print(f"Capturing image with {exposure_time}s exposure, gain={gain}...")
-        expose_status = camera.expose(exposure_time, gain)
+        # Get binning from config
+        binning = config['video']['ascom']['binning']
+        
+        print(f"Capturing image with {exposure_time}s exposure, gain={gain}, binning={binning}...")
+        expose_status = camera.expose(exposure_time, gain, binning)
         if not expose_status.is_success:
             print(f"Exposure failed: {expose_status.message}")
             return

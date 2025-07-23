@@ -22,7 +22,7 @@ class VideoCapture:
     """Video capture class for telescope streaming."""
     
     def __init__(self, config=None, logger=None):
-        """Initialisiert das Video-Capture-System."""
+        """Initialises the video capture system."""
         self.cap = None
         self.is_capturing = False
         self.current_frame = None
@@ -34,17 +34,23 @@ class VideoCapture:
         self.video_config = self.config.get_video_config()
         self.camera_config = self.config.get_camera_config()
         self.telescope_config = self.config.get_telescope_config()
-        self.camera_type = self.camera_config.get('type', 'video')
-        self.ascom_driver = self.camera_config.get('ascom_driver', None)
-        
-        # Camera settings
-        self.camera_index = self.video_config.get('camera_index', 0)
-        self.frame_width = self.video_config.get('frame_width', 1920)
-        self.frame_height = self.video_config.get('frame_height', 1080)
-        self.fps = self.video_config.get('fps', 30)
-        self.auto_exposure = self.video_config.get('auto_exposure', True)
-        self.exposure_time = self.video_config.get('exposure_time', 100)
-        self.gain = self.video_config.get('gain', 1.0)
+        self.camera_type = self.video_config.get('camera_type', 'opencv')
+        if self.camera_type == 'opencv':
+            cam_cfg = self.video_config.get('opencv', {})
+            self.camera_index = cam_cfg.get('camera_index', 0)
+            self.frame_width = cam_cfg.get('frame_width', 1920)
+            self.frame_height = cam_cfg.get('frame_height', 1080)
+            self.fps = cam_cfg.get('fps', 30)
+            self.auto_exposure = cam_cfg.get('auto_exposure', True)
+            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
+            self.gain = cam_cfg.get('gain', 1.0)
+        elif self.camera_type == 'ascom':
+            cam_cfg = self.video_config.get('ascom', {})
+            self.ascom_driver = cam_cfg.get('ascom_driver', None)
+            self.auto_exposure = cam_cfg.get('auto_exposure', True)
+            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
+            self.gain = cam_cfg.get('gain', 1.0)
+        # Remove any remaining German comments and ensure all are in English
         
         # Telescope parameters for FOV calculation
         self.focal_length = self.telescope_config.get('focal_length', 1000)  # mm
@@ -56,8 +62,8 @@ class VideoCapture:
         self.fov_width, self.fov_height = self._calculate_field_of_view()
         
         # Video capture settings
-        self.capture_enabled = self.video_config.get('plate_solving_enabled', False)
-        self.capture_interval = self.video_config.get('plate_solving_interval', 60)  # seconds
+        self.capture_enabled = self.config.get_plate_solve_config().get('auto_solve', False)
+        self.capture_interval = self.config.get_plate_solve_config().get('min_solve_interval', 60)  # seconds
         
         # Setup logging
         self.logger = logging.getLogger(__name__)
@@ -65,9 +71,9 @@ class VideoCapture:
         self.ascom_camera = None
         
     def _calculate_field_of_view(self) -> tuple[float, float]:
-        """Berechnet das Sichtfeld (FOV) in Grad basierend auf Teleskop- und Kameraparametern.
+        """Calculates the field of view (FOV) in degrees based on telescope and camera parameters.
         Returns:
-            tuple: (FOV-Breite in Grad, FOV-Höhe in Grad)
+            tuple: (FOV width in degrees, FOV height in degrees)
         """
         # Convert sensor dimensions to degrees
         # FOV = 2 * arctan(sensor_size / (2 * focal_length))
@@ -82,11 +88,11 @@ class VideoCapture:
         return fov_width_deg, fov_height_deg
     
     def get_field_of_view(self) -> tuple[float, float]:
-        """Gibt das aktuelle Sichtfeld (FOV) in Grad zurück."""
+        """Returns the current field of view (FOV) in degrees."""
         return self.fov_width, self.fov_height
     
     def get_sampling_arcsec_per_pixel(self) -> float:
-        """Berechnet das Sampling in Bogensekunden pro Pixel."""
+        """Calculates the sampling in arcseconds per pixel."""
         # arcsec/pixel = (206265 * pixel_size) / focal_length
         # pixel_size = sensor_size / pixel_count
         pixel_size_width = self.sensor_width / self.frame_width
@@ -99,7 +105,7 @@ class VideoCapture:
         return sampling
     
     def connect(self) -> bool:
-        """Connect to video camera."""
+        """Connects to the video camera."""
         if self.camera_type == 'ascom' and self.ascom_driver:
             self.ascom_camera = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
             status = self.ascom_camera.connect()
@@ -122,7 +128,9 @@ class VideoCapture:
             
             if not self.auto_exposure:
                 self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
-                self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure_time)
+                # Convert seconds to OpenCV exposure units (typically microseconds)
+                exposure_cv = int(self.exposure_time * 1000000)  # Convert seconds to microseconds
+                self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_cv)
             
             # Set gain if supported
             if hasattr(cv2, 'CAP_PROP_GAIN'):
@@ -144,7 +152,7 @@ class VideoCapture:
             return False
     
     def disconnect(self):
-        """Disconnect from video camera."""
+        """Disconnects from the video camera."""
         if self.cap:
             self.cap.release()
             self.cap = None
@@ -152,9 +160,9 @@ class VideoCapture:
         self.logger.info("Camera disconnected")
     
     def start_capture(self) -> CameraStatus:
-        """Startet die kontinuierliche Frame-Aufnahme im Hintergrund-Thread.
+        """Starts continuous frame capture in the background thread.
         Returns:
-            CameraStatus: Status-Objekt mit Startinformation oder Fehler.
+            CameraStatus: Status object with start information or error.
         """
         if not self.cap or not self.cap.isOpened():
             if not self.connect():
@@ -166,9 +174,9 @@ class VideoCapture:
         return success_status("Video capture started", details={'camera_index': self.camera_index, 'is_capturing': True})
     
     def stop_capture(self) -> CameraStatus:
-        """Stoppt die kontinuierliche Frame-Aufnahme.
+        """Stops continuous frame capture.
         Returns:
-            CameraStatus: Status-Objekt mit Stopinformation oder Fehler.
+            CameraStatus: Status object with stop information or error.
         """
         self.is_capturing = False
         if hasattr(self, 'capture_thread'):
@@ -177,38 +185,64 @@ class VideoCapture:
         return success_status("Video capture stopped", details={'camera_index': self.camera_index, 'is_capturing': False})
     
     def _capture_loop(self) -> None:
-        """Hintergrund-Thread für kontinuierliche Frame-Aufnahme."""
-        while self.is_capturing and self.cap and self.cap.isOpened():
+        """Background thread for continuous frame capture."""
+        while self.is_capturing:
             try:
-                ret, frame = self.cap.read()
-                if ret:
-                    with self.frame_lock:
-                        self.current_frame = frame.copy()
-                    
-                    # Frame captured successfully
-                    pass
+                if self.camera_type == 'opencv':
+                    # OpenCV camera logic
+                    if self.cap and self.cap.isOpened():
+                        ret, frame = self.cap.read()
+                        if ret:
+                            with self.frame_lock:
+                                self.current_frame = frame.copy()
+                        else:
+                            self.logger.warning("Failed to read frame from OpenCV camera")
+                            time.sleep(0.1)
+                            
+                elif self.camera_type == 'ascom':
+                    # ASCOM camera logic
+                    if self.ascom_camera:
+                        # Get settings from config
+                        ascom_config = self.video_config.get('ascom', {})
+                        exposure_time = ascom_config.get('exposure_time', 1.0)
+                        gain = ascom_config.get('gain', None)
+                        binning = ascom_config.get('binning', 1)
                         
-                else:
-                    self.logger.warning("Failed to read frame from camera")
-                    time.sleep(0.1)
-                    
+                        # Capture frame with ASCOM camera
+                        status = self.ascom_camera.expose(exposure_time, gain, binning)
+                        if status.is_success:
+                            # Convert ASCOM image to OpenCV format with debayering
+                            frame = self._convert_ascom_to_opencv(status.data)
+                            if frame is not None:
+                                with self.frame_lock:
+                                    self.current_frame = frame.copy()
+                            else:
+                                self.logger.warning("Failed to convert ASCOM image")
+                                time.sleep(0.1)
+                        else:
+                            self.logger.warning(f"Failed to capture frame from ASCOM camera: {status.message}")
+                            time.sleep(0.1)
+                    else:
+                        self.logger.warning("ASCOM camera not available")
+                        time.sleep(0.1)
+                        
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
     
     def get_current_frame(self) -> Optional[np.ndarray]:
-        """Gibt das zuletzt aufgenommene Frame zurück."""
+        """Returns the last captured frame."""
         with self.frame_lock:
             return self.current_frame.copy() if self.current_frame is not None else None
     
     def capture_single_frame(self) -> CameraStatus:
-        """Nimmt ein einzelnes Frame auf und gibt Status zurück.
+        """Captures a single frame and returns status.
         Returns:
-            CameraStatus: Status-Objekt mit Frame oder Fehler.
+            CameraStatus: Status object with frame or error.
         """
         if self.camera_type == 'ascom' and self.ascom_camera:
-            # Beispiel: Belichtungszeit und Gain aus config
-            exposure_time = self.camera_config.get('exposure_time', 1000)
+            # Use exposure time in seconds
+            exposure_time = self.camera_config.get('exposure_time', 1.0)  # seconds
             gain = self.camera_config.get('gain', None)
             binning = self.camera_config.get('binning', 1)
             exp_status = self.ascom_camera.expose(exposure_time, gain, binning)
@@ -227,13 +261,13 @@ class VideoCapture:
             return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
     
     def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
-        """Nimmt ein einzelnes Frame mit ASCOM-Kamera auf.
+        """Captures a single frame with ASCOM camera.
         Args:
-            exposure_time_s: Belichtungszeit in Sekunden
-            gain: Gain-Wert (optional)
-            binning: Binning-Faktor (default: 1)
+            exposure_time_s: Exposure time in seconds
+            gain: Gain value (optional)
+            binning: Binning factor (default: 1)
         Returns:
-            CameraStatus: Status-Objekt mit Frame oder Fehler.
+            CameraStatus: Status object with frame or error.
         """
         if not self.ascom_camera:
             return error_status("ASCOM camera not connected")
@@ -271,12 +305,12 @@ class VideoCapture:
             return error_status(f"Error capturing ASCOM frame: {e}")
     
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
-        """Speichert ein Frame als Datei.
+        """Saves a frame as a file.
         Args:
-            frame: Das zu speichernde Bild (np.ndarray)
-            filename: Dateiname
+            frame: The image to save (np.ndarray)
+            filename: File name
         Returns:
-            CameraStatus: Status-Objekt mit Dateipfad oder Fehler.
+            CameraStatus: Status object with file path or error.
         """
         try:
             output_path = Path(filename)
@@ -292,7 +326,7 @@ class VideoCapture:
             return error_status(f"Error saving frame: {e}", details={'camera_index': self.camera_index})
     
     def get_camera_info(self) -> dict[str, Any]:
-        """Gibt Kamera-Informationen und Einstellungen zurück."""
+        """Returns camera information and settings."""
         if not self.cap or not self.cap.isOpened():
             return {"error": "Camera not connected"}
         
@@ -309,3 +343,47 @@ class VideoCapture:
         }
         
         return info 
+
+    def _convert_ascom_to_opencv(self, ascom_image_data):
+        """Convert ASCOM image data to OpenCV format with debayering.
+        Args:
+            ascom_image_data: Raw image data from ASCOM camera
+        Returns:
+            numpy.ndarray: OpenCV-compatible image array or None if conversion fails
+        """
+        try:
+            # Convert ASCOM image array to numpy array
+            image_array = np.array(ascom_image_data)
+            
+            # Check if camera is color (has Bayer pattern)
+            if hasattr(self.ascom_camera, 'sensor_type'):
+                sensor_type = self.ascom_camera.sensor_type
+                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
+                    # Apply debayering based on Bayer pattern
+                    if sensor_type == 'RGGB':
+                        bayer_pattern = cv2.COLOR_BayerRG2BGR
+                    elif sensor_type == 'GRBG':
+                        bayer_pattern = cv2.COLOR_BayerGR2BGR
+                    elif sensor_type == 'GBRG':
+                        bayer_pattern = cv2.COLOR_BayerGB2BGR
+                    elif sensor_type == 'BGGR':
+                        bayer_pattern = cv2.COLOR_BayerBG2BGR
+                    
+                    # Apply debayering
+                    color_image = cv2.cvtColor(image_array, bayer_pattern)
+                    return color_image
+            
+            # For monochrome cameras, convert to 3-channel grayscale
+            if len(image_array.shape) == 2:
+                return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            
+            # If already 3-channel, return as is
+            if len(image_array.shape) == 3:
+                return image_array
+            
+            # Fallback: assume monochrome and convert
+            return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            
+        except Exception as e:
+            self.logger.error(f"Error converting ASCOM image: {e}")
+            return None 

@@ -26,6 +26,8 @@ class PlateSolveResult:
         self.dec_center: Optional[float] = None
         self.fov_width: Optional[float] = None
         self.fov_height: Optional[float] = None
+        self.position_angle: Optional[float] = None  # Position angle in degrees
+        self.image_size: Optional[Tuple[int, int]] = None  # (width, height) in pixels
         self.confidence: Optional[float] = None
         self.stars_detected: Optional[int] = None
         self.solving_time: Optional[float] = None
@@ -65,16 +67,17 @@ class PlateSolve2Solver(PlateSolver):
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
         self.plate_solve_config = self.config.get_plate_solve_config()
-        self.executable_path: str = self.plate_solve_config.get('platesolve2_path', '')
-        self.working_directory: str = self.plate_solve_config.get('working_directory', '')
-        self.timeout: int = self.plate_solve_config.get('timeout', 60)
-        self.verbose: bool = self.plate_solve_config.get('verbose', False)
-        self.search_radius: int = self.plate_solve_config.get('search_radius', 15)
-        self.min_stars: int = self.plate_solve_config.get('min_stars', 20)
-        self.max_stars: int = self.plate_solve_config.get('max_stars', 200)
-        self.use_gui_mode: bool = self.plate_solve_config.get('use_gui_mode', True)
+        ps2_cfg = self.plate_solve_config.get('platesolve2', {})
+        self.executable_path: str = ps2_cfg.get('executable_path', '')
+        self.working_directory: str = ps2_cfg.get('working_directory', '')
+        self.timeout: int = ps2_cfg.get('timeout', 60)
+        self.verbose: bool = ps2_cfg.get('verbose', False)
+        self.auto_mode: bool = ps2_cfg.get('auto_mode', True)
+        self.number_of_regions: int = ps2_cfg.get('number_of_regions', 1)
+        self.min_stars: int = ps2_cfg.get('min_stars', 20)
+        self.max_stars: int = ps2_cfg.get('max_stars', 200)
         try:
-            from plate_solver_automated import PlateSolve2Automated
+            from platesolve2_automated import PlateSolve2Automated
             self.automated_solver = PlateSolve2Automated()
             self.automated_available: bool = True
             self.logger.info("Automated PlateSolve 2 solver available")
@@ -111,12 +114,11 @@ class PlateSolve2Solver(PlateSolver):
                     )
                 else:
                     self.logger.warning(f"Automated solving failed: {automated_result['error_message']}")
-                    self.logger.info("Falling back to manual mode")
-            # Fall back to manual mode
-            if self.use_gui_mode:
-                return self._solve_with_gui(image_path)
-            else:
-                return self._solve_with_cli(image_path)
+                    self.logger.info("Falling back to GUI mode")
+            
+            # Fall back to GUI mode (CLI mode removed as it doesn't work)
+            return self._solve_with_gui(image_path)
+            
         except Exception as e:
             self.logger.error(f"PlateSolve 2 exception: {e}")
             return error_status(f"PlateSolve 2 error: {str(e)}")
@@ -164,64 +166,13 @@ class PlateSolve2Solver(PlateSolver):
         except Exception as e:
             return error_status(f"GUI mode error: {str(e)}")
     
-    def _solve_with_cli(self, image_path: str) -> PlateSolveStatus:
-        """Solve using PlateSolve 2 command line mode."""
-        try:
-            # Build command for PlateSolve 2
-            # Based on successful test: PlateSolve2.exe image_path
-            cmd = [
-                self.executable_path,
-                image_path  # Direct image path as first argument
-            ]
-            
-            if self.verbose:
-                self.logger.info(f"PlateSolve 2 CLI command: {' '.join(cmd)}")
-            
-            # Set working directory
-            cwd = self.working_directory if self.working_directory else None
-            
-            self.logger.info(f"Running PlateSolve 2 CLI: {' '.join(cmd)}")
-            
-            # Execute PlateSolve 2 - this will open the GUI (fallback only)
-            # We use Popen instead of run because it's a GUI application
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=cwd
-            )
-            
-            # Wait for the process to start and GUI to open
-            time.sleep(2)
-            
-            # Check if process is still running
-            if process.poll() is None:
-                self.logger.info("PlateSolve 2 GUI opened successfully")
-                return warning_status(
-                    "PlateSolve 2 GUI opened - manual intervention required",
-                    details={'method': 'cli'}
-                )
-            else:
-                # Process finished (possibly an error)
-                stdout, stderr = process.communicate()
-                if stderr:
-                    return error_status(f"PlateSolve 2 error: {stderr.strip()}")
-                else:
-                    return error_status("PlateSolve 2 process finished unexpectedly")
-            
-        except subprocess.TimeoutExpired:
-            return error_status(f"PlateSolve 2 CLI timeout after {self.timeout} seconds")
-        except Exception as e:
-            return error_status(f"PlateSolve 2 CLI error: {str(e)}")
-    
 
 
 class AstrometryNetSolver(PlateSolver):
     """Astrometry.net API Integration (Platzhalter)."""
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
-        self.api_key: str = self.config.get_plate_solve_config().get('astrometry_api_key', '')
+        self.api_key: str = self.config.get_plate_solve_config().get('astrometry', {}).get('api_key', '')
         self.api_url: str = "http://nova.astrometry.net/api/"
     def get_name(self) -> str:
         """Gibt den Namen des Solvers zurück."""
