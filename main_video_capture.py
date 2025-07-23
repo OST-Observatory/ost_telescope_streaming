@@ -5,31 +5,35 @@ from pathlib import Path
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
-from config_manager import config
+from config_manager import ConfigManager
 from video_capture import VideoCapture
 import argparse
 import sys
 
 def main():
+    # Load configuration
+    config = ConfigManager()
+    video_config = config.get_video_config()
+    
     parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
-    parser.add_argument("--camera-index", type=int, default=config['video']['opencv']['camera_index'],
+    parser.add_argument("--camera-index", type=int, default=video_config['opencv']['camera_index'],
                        help="Camera device index (OpenCV)")
     parser.add_argument("--camera-type", choices=['opencv', 'ascom'], 
-                       default=config['video']['camera_type'],
+                       default=video_config['camera_type'],
                        help="Camera type: opencv for regular cameras, ascom for astro cameras")
-    parser.add_argument("--ascom-driver", default=config['video']['ascom']['ascom_driver'],
+    parser.add_argument("--ascom-driver", default=video_config['ascom']['ascom_driver'],
                        help="ASCOM driver ID (astro cameras)")
-    parser.add_argument("--width", type=int, default=config['video']['frame_width'],
+    parser.add_argument("--width", type=int, default=video_config['frame_width'],
                        help="Frame width")
-    parser.add_argument("--height", type=int, default=config['video']['frame_height'],
+    parser.add_argument("--height", type=int, default=video_config['frame_height'],
                        help="Frame height")
-    parser.add_argument("--fps", type=int, default=config['video']['fps'],
+    parser.add_argument("--fps", type=int, default=video_config['fps'],
                        help="Frame rate")
-    parser.add_argument("--exposure", type=float, default=config['video']['exposure_time'],
+    parser.add_argument("--exposure", type=float, default=video_config['exposure_time'],
                        help="Exposure time in seconds")
-    parser.add_argument("--gain", type=float, default=config['video']['ascom']['gain'],
+    parser.add_argument("--gain", type=float, default=video_config['ascom']['gain'],
                        help="Gain setting (ASCOM cameras)")
-    parser.add_argument("--binning", type=int, default=config['video']['ascom']['binning'],
+    parser.add_argument("--binning", type=int, default=video_config['ascom']['binning'],
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
@@ -48,8 +52,8 @@ def main():
         logger.setLevel(logging.INFO)
         
         # Update config with command line arguments
-        config['video']['opencv']['camera_index'] = args.camera_index
-        config['video']['ascom']['ascom_driver'] = args.ascom_driver
+        video_config['opencv']['camera_index'] = args.camera_index
+        video_config['ascom']['ascom_driver'] = args.ascom_driver
         
         capture = VideoCapture(config=config, logger=logger)
         
@@ -142,7 +146,7 @@ def main():
                     if camera.is_color_camera():
                         # Capture and debayer
                         # Get binning from CLI argument or config
-                        binning = args.binning if hasattr(args, 'binning') else config['video']['ascom']['binning']
+                        binning = args.binning if hasattr(args, 'binning') else video_config['ascom']['binning']
                         
                         # Start exposure
                         expose_status = camera.expose(args.exposure, args.gain, binning)
@@ -181,7 +185,7 @@ def main():
                 # For ASCOM cameras, use exposure time in seconds
                 if args.camera_type == 'ascom':
                     # Get binning from CLI argument or config
-                    binning = args.binning if hasattr(args, 'binning') else config['video']['ascom']['binning']
+                    binning = args.binning if hasattr(args, 'binning') else video_config['ascom']['binning']
                     
                     # Capture single frame with ASCOM camera
                     capture_status = capture.capture_single_frame_ascom(
