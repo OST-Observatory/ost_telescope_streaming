@@ -337,16 +337,40 @@ class VideoCapture:
         """
         try:
             output_path = Path(filename)
+            
+            # Convert frame to proper OpenCV format if needed
+            if self.camera_type == 'ascom' and self.ascom_camera:
+                # Convert ASCOM image data to OpenCV format
+                frame = self._convert_ascom_to_opencv(frame)
+                if frame is None:
+                    return error_status("Failed to convert ASCOM image to OpenCV format")
+            
+            # Ensure frame is a numpy array
+            if not isinstance(frame, np.ndarray):
+                frame = np.array(frame)
+            
+            # Convert to uint8 if needed
+            if frame.dtype != np.uint8:
+                if frame.dtype == np.float32 or frame.dtype == np.float64:
+                    # Normalize to 0-255 range
+                    frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255).astype(np.uint8)
+                else:
+                    frame = frame.astype(np.uint8)
+            
             success = cv2.imwrite(str(output_path), frame)
             if success:
                 self.logger.info(f"Frame saved: {output_path.absolute()}")
-                return success_status("Frame saved", data=str(output_path.absolute()), details={'camera_index': self.camera_index})
+                # Use appropriate camera identifier
+                camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
+                return success_status("Frame saved", data=str(output_path.absolute()), details={'camera_id': camera_id})
             else:
                 self.logger.error(f"Failed to save frame: {output_path}")
-                return error_status("Failed to save frame", details={'camera_index': self.camera_index})
+                camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
+                return error_status("Failed to save frame", details={'camera_id': camera_id})
         except Exception as e:
             self.logger.error(f"Error saving frame: {e}")
-            return error_status(f"Error saving frame: {e}", details={'camera_index': self.camera_index})
+            camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
+            return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
     
     def get_camera_info(self) -> dict[str, Any]:
         """Returns camera information and settings."""
