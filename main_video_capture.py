@@ -37,7 +37,7 @@ def main():
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
-    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'filter', 'debayer'],
+    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'cooling-off', 'filter', 'debayer'],
                        default='capture', help="Action to perform")
     parser.add_argument("--cooling-temp", type=float, help="Target cooling temperature in °C")
     parser.add_argument("--filter-position", type=int, help="Filter wheel position")
@@ -73,8 +73,8 @@ def main():
                     
                     # Check cooling
                     if camera.has_cooling():
-                        # Get fresh cooling information (bypasses ASCOM driver cache)
-                        cooling_info_status = camera.get_fresh_cooling_info()
+                        # Get cached cooling information (bypasses ASCOM driver cache)
+                        cooling_info_status = camera.get_cached_cooling_info()
                         if cooling_info_status.is_success:
                             info = cooling_info_status.data
                             print(f"Current temperature: {info['temperature']}°C")
@@ -150,6 +150,33 @@ def main():
                     sys.exit(1)
             else:
                 print("Cooling control requires ASCOM camera and --cooling-temp parameter")
+                sys.exit(1)
+        
+        elif args.action == 'cooling-off':
+            if args.camera_type == 'ascom' and args.ascom_driver:
+                from ascom_camera import ASCOMCamera
+                camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    cooling_off_status = camera.turn_cooling_off()
+                    print(f"Cooling off status: {cooling_off_status.level.value.upper()} - {cooling_off_status.message}")
+                    
+                    # Show detailed cooling off information if available
+                    if cooling_off_status.is_success and hasattr(cooling_off_status, 'details') and cooling_off_status.details:
+                        details = cooling_off_status.details
+                        print(f"  Temperature before: {details.get('current_temp')}°C")
+                        print(f"  Temperature after: {details.get('new_temp')}°C")
+                        print(f"  Cooler power before: {details.get('current_power')}%")
+                        print(f"  Cooler power after: {details.get('new_power')}%")
+                        print(f"  Cooler on before: {details.get('current_cooler_on')}")
+                        print(f"  Cooler on after: {details.get('new_cooler_on')}")
+                    
+                    camera.disconnect()
+                else:
+                    print(f"Connection failed: {connect_status.message}")
+                    sys.exit(1)
+            else:
+                print("Cooling off requires ASCOM camera")
                 sys.exit(1)
         
         elif args.action == 'filter':

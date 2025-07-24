@@ -16,6 +16,14 @@ class ASCOMCamera:
         self.logger = logger or logging.getLogger(__name__)
         self.driver_id = driver_id
         self.camera = None
+        
+        # Store last known cooling values to bypass ASCOM driver cache issues
+        self.last_cooling_info = {
+            'temperature': None,
+            'cooler_power': None,
+            'cooler_on': None,
+            'target_temperature': None
+        }
 
     def connect(self) -> CameraStatus:
         try:
@@ -90,6 +98,14 @@ class ASCOMCamera:
                 'new_cooler_on': new_cooler_on
             }
             
+            # Store the latest cooling values to bypass ASCOM driver cache
+            self.last_cooling_info = {
+                'temperature': new_temp,
+                'cooler_power': new_power,
+                'cooler_on': new_cooler_on,
+                'target_temperature': target_temp
+            }
+            
             return success_status(f"Cooling set to {target_temp}°C", details=details)
         except Exception as e:
             return error_status(f"Failed to set cooling: {e}")
@@ -111,6 +127,54 @@ class ASCOMCamera:
             return success_status(f"Cooler turned {status}")
         except Exception as e:
             return error_status(f"Failed to turn cooler {'on' if on else 'off'}: {e}")
+
+    def turn_cooling_off(self) -> CameraStatus:
+        """Turn off the cooling system.
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        try:
+            # Get current values before turning off
+            current_temp = self.camera.CCDTemperature
+            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Turn off the cooler
+            if hasattr(self.camera, 'CoolerOn'):
+                self.camera.CoolerOn = False
+            
+            # Set target temperature to ambient (or a high value to stop cooling)
+            # Some cameras need this to actually stop cooling
+            if hasattr(self.camera, 'SetCCDTemperature'):
+                self.camera.SetCCDTemperature = 50.0  # High temperature to stop cooling
+            
+            # Get values after turning off
+            new_temp = self.camera.CCDTemperature
+            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Update cache with new values
+            self.last_cooling_info = {
+                'temperature': new_temp,
+                'cooler_power': new_power,
+                'cooler_on': new_cooler_on,
+                'target_temperature': 50.0
+            }
+            
+            details = {
+                'current_temp': current_temp,
+                'new_temp': new_temp,
+                'current_power': current_power,
+                'new_power': new_power,
+                'current_cooler_on': current_cooler_on,
+                'new_cooler_on': new_cooler_on
+            }
+            
+            return success_status("Cooling turned off", details=details)
+        except Exception as e:
+            return error_status(f"Failed to turn off cooling: {e}")
 
     def get_temperature(self) -> CameraStatus:
         try:
@@ -226,6 +290,24 @@ class ASCOMCamera:
             return success_status("Fresh cooling information retrieved", data=info)
         except Exception as e:
             return error_status(f"Failed to get fresh cooling info: {e}")
+
+    def get_cached_cooling_info(self) -> CameraStatus:
+        """Get cooling information from cached values (bypasses ASCOM driver cache).
+        Returns:
+            CameraStatus: Status with cached cooling information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        # Use cached values if available, otherwise try to get from ASCOM
+        if self.last_cooling_info['temperature'] is not None:
+            info = self.last_cooling_info.copy()
+            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
+            print(f"DEBUG: Using cached cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
+            return success_status("Cached cooling information retrieved", data=info)
+        else:
+            # Fallback to ASCOM values if no cache available
+            return self.get_cooling_info()
 
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')
