@@ -274,6 +274,28 @@ class VideoCapture:
             return error_status("ASCOM camera not connected")
         
         try:
+            # Get sensor dimensions from ASCOM camera
+            try:
+                # Get native sensor dimensions
+                native_width = self.ascom_camera.camera.CameraXSize
+                native_height = self.ascom_camera.camera.CameraYSize
+                
+                # Calculate effective dimensions with binning
+                effective_width = native_width // binning
+                effective_height = native_height // binning
+                
+                self.logger.info(f"Native sensor: {native_width}x{native_height}, Binning: {binning}x{binning}, Effective: {effective_width}x{effective_height}")
+                
+                # Set the subframe to use the full sensor with binning
+                self.ascom_camera.camera.NumX = effective_width
+                self.ascom_camera.camera.NumY = effective_height
+                self.ascom_camera.camera.StartX = 0
+                self.ascom_camera.camera.StartY = 0
+                
+            except Exception as e:
+                self.logger.warning(f"Could not get sensor dimensions from ASCOM camera: {e}")
+                self.logger.info("Using default dimensions - this may cause issues with some cameras")
+            
             # Start exposure
             exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning)
             if not exp_status.is_success:
@@ -290,16 +312,16 @@ class VideoCapture:
                 if debayer_status.is_success:
                     return success_status("Color frame captured and debayered", 
                                         data=debayer_status.data, 
-                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
                 else:
                     self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
                     return success_status("Color frame captured (raw)", 
                                         data=img_status.data, 
-                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
             else:
                 return success_status("Mono frame captured", 
                                     data=img_status.data, 
-                                    details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning})
+                                    details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
                 
         except Exception as e:
             self.logger.error(f"Error capturing ASCOM frame: {e}")
