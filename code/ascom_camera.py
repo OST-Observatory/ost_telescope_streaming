@@ -105,6 +105,33 @@ class ASCOMCamera:
         except Exception as e:
             return error_status(f"Failed to read cooler power: {e}")
 
+    def get_cooling_info(self) -> CameraStatus:
+        """Get comprehensive cooling information.
+        Returns:
+            CameraStatus: Status with detailed cooling information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        try:
+            info = {}
+            
+            # Basic cooling properties
+            info['temperature'] = self.camera.CCDTemperature
+            info['cooler_power'] = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            
+            # Check if cooler is on/off
+            info['cooler_on'] = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Check if we can control cooler power directly
+            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
+            
+            # Check target temperature
+            info['target_temperature'] = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
+            
+            return success_status("Cooling information retrieved", data=info)
+        except Exception as e:
+            return error_status(f"Failed to get cooling info: {e}")
+
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')
 

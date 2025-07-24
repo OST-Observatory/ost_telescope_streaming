@@ -69,18 +69,25 @@ def main():
                     
                     # Check cooling
                     if camera.has_cooling():
-                        temp_status = camera.get_temperature()
-                        if temp_status.is_success:
-                            print(f"Current temperature: {temp_status.data}°C")
+                        # Get comprehensive cooling information
+                        cooling_info_status = camera.get_cooling_info()
+                        if cooling_info_status.is_success:
+                            info = cooling_info_status.data
+                            print(f"Current temperature: {info['temperature']}°C")
+                            print(f"Cooler power: {info['cooler_power']}%")
+                            
+                            if info['cooler_on'] is not None:
+                                print(f"Cooler on: {info['cooler_on']}")
+                            
+                            if info['target_temperature'] is not None:
+                                print(f"Target temperature: {info['target_temperature']}°C")
+                            
+                            if info['can_set_cooler_power']:
+                                print("Direct cooler power control: Available")
+                            else:
+                                print("Direct cooler power control: Not available")
                         else:
-                            print(f"Temperature read failed: {temp_status.message}")
-                        
-                        # Get cooler power
-                        power_status = camera.get_cooler_power()
-                        if power_status.is_success:
-                            print(f"Cooler power: {power_status.data}%")
-                        else:
-                            print(f"Cooler power read failed: {power_status.message}")
+                            print(f"Cooling info failed: {cooling_info_status.message}")
                     else:
                         print("Cooling not supported")
                     
