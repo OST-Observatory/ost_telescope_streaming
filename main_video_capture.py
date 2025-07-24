@@ -198,7 +198,9 @@ def main():
                     capture_status = capture.capture_single_frame()
                 
                 if capture_status.is_success:
-                    save_status = capture.save_frame(args.output)
+                    # Extract frame data from capture status
+                    frame_data = capture_status.data
+                    save_status = capture.save_frame(frame_data, args.output)
                     if save_status.is_success:
                         print(f"Frame captured and saved to: {save_status.data}")
                     else:
