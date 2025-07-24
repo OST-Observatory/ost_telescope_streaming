@@ -190,6 +190,43 @@ class ASCOMCamera:
         except Exception as e:
             return error_status(f"Failed to get cooling info: {e}")
 
+    def get_fresh_cooling_info(self) -> CameraStatus:
+        """Get fresh cooling information by simulating a cooling operation.
+        This bypasses the ASCOM driver cache issue.
+        Returns:
+            CameraStatus: Status with fresh cooling information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        try:
+            info = {}
+            
+            # Get current target temperature first
+            current_target = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
+            
+            # Simulate a cooling operation to force driver to update values
+            # This is the same logic as set_cooling() but without changing anything
+            current_temp = self.camera.CCDTemperature
+            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Force a refresh by setting the same target temperature
+            if hasattr(self.camera, 'SetCCDTemperature'):
+                self.camera.SetCCDTemperature = current_target
+            
+            # Read fresh values after the "operation"
+            info['temperature'] = self.camera.CCDTemperature
+            info['cooler_power'] = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            info['cooler_on'] = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            info['target_temperature'] = current_target
+            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
+            
+            print(f"DEBUG: Fresh cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
+            
+            return success_status("Fresh cooling information retrieved", data=info)
+        except Exception as e:
+            return error_status(f"Failed to get fresh cooling info: {e}")
+
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')
 

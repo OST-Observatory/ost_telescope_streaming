@@ -73,8 +73,8 @@ def main():
                     
                     # Check cooling
                     if camera.has_cooling():
-                        # Get comprehensive cooling information
-                        cooling_info_status = camera.get_cooling_info()
+                        # Get fresh cooling information (bypasses ASCOM driver cache)
+                        cooling_info_status = camera.get_fresh_cooling_info()
                         if cooling_info_status.is_success:
                             info = cooling_info_status.data
                             print(f"Current temperature: {info['temperature']}°C")
