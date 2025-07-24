@@ -51,7 +51,8 @@ def main():
         logger = logging.getLogger("video_capture_cli")
         logger.setLevel(logging.INFO)
         
-        # Update config with command line arguments
+        # Update config with command line arguments BEFORE creating VideoCapture
+        video_config['camera_type'] = args.camera_type
         video_config['opencv']['camera_index'] = args.camera_index
         video_config['ascom']['ascom_driver'] = args.ascom_driver
         

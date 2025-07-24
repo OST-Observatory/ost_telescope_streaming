@@ -106,12 +106,14 @@ class VideoCapture:
     def connect(self) -> CameraStatus:
         """Connects to the video camera."""
         if self.camera_type == 'ascom' and self.ascom_driver:
-            self.ascom_camera = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
-            status = self.ascom_camera.connect()
+            cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
+            status = cam.connect()
             if status.is_success:
+                self.ascom_camera = cam
                 self.logger.info("ASCOM camera connected")
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
+                self.ascom_camera = None
                 self.logger.error(f"ASCOM camera connection failed: {status.message}")
                 return error_status(f"ASCOM camera connection failed: {status.message}", details={'driver': self.ascom_driver})
         try:
