@@ -121,6 +121,16 @@ def main():
                 if connect_status.is_success:
                     cooling_status = camera.set_cooling(args.cooling_temp)
                     print(f"Cooling status: {cooling_status.level.value.upper()} - {cooling_status.message}")
+                    
+                    # Show detailed cooling information if available
+                    if cooling_status.is_success and hasattr(cooling_status, 'details') and cooling_status.details:
+                        details = cooling_status.details
+                        print(f"  Target temperature: {details.get('target_temp')}°C")
+                        print(f"  Temperature before: {details.get('current_temp')}°C")
+                        print(f"  Temperature after: {details.get('new_temp')}°C")
+                        print(f"  Cooler power before: {details.get('current_power')}%")
+                        print(f"  Cooler power after: {details.get('new_power')}%")
+                    
                     camera.disconnect()
                 else:
                     print(f"Connection failed: {connect_status.message}")

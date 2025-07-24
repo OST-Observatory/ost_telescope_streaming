@@ -62,8 +62,26 @@ class ASCOMCamera:
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
         try:
+            # Get current temperature before setting
+            current_temp = self.camera.CCDTemperature
+            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            
+            # Set target temperature
             self.camera.SetCCDTemperature = target_temp
-            return success_status(f"Cooling set to {target_temp}°C")
+            
+            # Get values after setting
+            new_temp = self.camera.CCDTemperature
+            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            
+            details = {
+                'target_temp': target_temp,
+                'current_temp': current_temp,
+                'new_temp': new_temp,
+                'current_power': current_power,
+                'new_power': new_power
+            }
+            
+            return success_status(f"Cooling set to {target_temp}°C", details=details)
         except Exception as e:
             return error_status(f"Failed to set cooling: {e}")
 
