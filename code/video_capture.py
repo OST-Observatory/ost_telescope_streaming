@@ -103,22 +103,22 @@ class VideoCapture:
         sampling = (206265 * avg_pixel_size) / self.focal_length
         return sampling
     
-    def connect(self) -> bool:
+    def connect(self) -> CameraStatus:
         """Connects to the video camera."""
         if self.camera_type == 'ascom' and self.ascom_driver:
             self.ascom_camera = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
             status = self.ascom_camera.connect()
             if status.is_success:
                 self.logger.info("ASCOM camera connected")
-                return True
+                return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
                 self.logger.error(f"ASCOM camera connection failed: {status.message}")
-                return False
+                return error_status(f"ASCOM camera connection failed: {status.message}", details={'driver': self.ascom_driver})
         try:
             self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
                 self.logger.error(f"Failed to open camera {self.camera_index}")
-                return False
+                return error_status(f"Failed to open camera {self.camera_index}", details={'camera_index': self.camera_index})
             
             # Set camera properties
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
@@ -144,11 +144,11 @@ class VideoCapture:
             self.logger.info(f"FOV: {self.fov_width:.3f}° x {self.fov_height:.3f}°")
             self.logger.info(f"Sampling: {self.get_sampling_arcsec_per_pixel():.2f} arcsec/pixel")
             
-            return True
+            return success_status("Camera connected", details={'camera_index': self.camera_index, 'resolution': f'{actual_width}x{actual_height}', 'fps': actual_fps})
             
         except Exception as e:
             self.logger.error(f"Error connecting to camera: {e}")
-            return False
+            return error_status(f"Error connecting to camera: {e}", details={'camera_index': self.camera_index})
     
     def disconnect(self):
         """Disconnects from the video camera."""
