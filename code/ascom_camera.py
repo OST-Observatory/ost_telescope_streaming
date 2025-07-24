@@ -180,11 +180,11 @@ class ASCOMCamera:
             info['target_temperature'] = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
             
             # Log the readings for debugging
-            self.logger.debug(f"Temperature readings: {temp_reads}")
+            print(f"DEBUG: Temperature readings: {temp_reads}")
             if hasattr(self.camera, 'CoolerPower'):
-                self.logger.debug(f"Cooler power readings: {power_reads}")
+                print(f"DEBUG: Cooler power readings: {power_reads}")
             if hasattr(self.camera, 'CoolerOn'):
-                self.logger.debug(f"Cooler on readings: {cooler_on_reads}")
+                print(f"DEBUG: Cooler on readings: {cooler_on_reads}")
             
             return success_status("Cooling information retrieved", data=info)
         except Exception as e:
