@@ -137,6 +137,8 @@ def main():
                         print(f"  Temperature after: {details.get('new_temp')}°C")
                         print(f"  Cooler power before: {details.get('current_power')}%")
                         print(f"  Cooler power after: {details.get('new_power')}%")
+                        print(f"  Cooler on before: {details.get('current_cooler_on')}")
+                        print(f"  Cooler on after: {details.get('new_cooler_on')}")
                     
                     camera.disconnect()
                 else:

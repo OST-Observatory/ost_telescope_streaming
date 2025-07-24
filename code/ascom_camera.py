@@ -65,6 +65,12 @@ class ASCOMCamera:
             # Get current temperature before setting
             current_temp = self.camera.CCDTemperature
             current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # First, turn on the cooler if it's not already on
+            if hasattr(self.camera, 'CoolerOn') and not self.camera.CoolerOn:
+                self.camera.CoolerOn = True
+                self.logger.info("Cooler turned on")
             
             # Set target temperature
             self.camera.SetCCDTemperature = target_temp
@@ -72,18 +78,39 @@ class ASCOMCamera:
             # Get values after setting
             new_temp = self.camera.CCDTemperature
             new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
             
             details = {
                 'target_temp': target_temp,
                 'current_temp': current_temp,
                 'new_temp': new_temp,
                 'current_power': current_power,
-                'new_power': new_power
+                'new_power': new_power,
+                'current_cooler_on': current_cooler_on,
+                'new_cooler_on': new_cooler_on
             }
             
             return success_status(f"Cooling set to {target_temp}°C", details=details)
         except Exception as e:
             return error_status(f"Failed to set cooling: {e}")
+
+    def set_cooler_on(self, on: bool = True) -> CameraStatus:
+        """Turn the cooler on or off.
+        Args:
+            on: True to turn on, False to turn off
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        if not hasattr(self.camera, 'CoolerOn'):
+            return error_status("Cooler on/off control not available")
+        try:
+            self.camera.CoolerOn = on
+            status = "on" if on else "off"
+            return success_status(f"Cooler turned {status}")
+        except Exception as e:
+            return error_status(f"Failed to turn cooler {'on' if on else 'off'}: {e}")
 
     def get_temperature(self) -> CameraStatus:
         try:
