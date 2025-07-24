@@ -142,6 +142,19 @@ class ASCOMCamera:
         try:
             info = {}
             
+            # Force a refresh of ASCOM properties by reconnecting briefly
+            try:
+                # Temporarily disconnect and reconnect to refresh values
+                was_connected = self.camera.Connected
+                if was_connected:
+                    self.camera.Connected = False
+                    import time
+                    time.sleep(0.1)
+                    self.camera.Connected = True
+                    time.sleep(0.1)
+            except Exception as e:
+                self.logger.warning(f"Could not refresh ASCOM connection: {e}")
+            
             # Basic cooling properties
             info['temperature'] = self.camera.CCDTemperature
             info['cooler_power'] = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None

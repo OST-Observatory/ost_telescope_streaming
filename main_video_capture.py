@@ -67,6 +67,10 @@ def main():
                 if connect_status.is_success:
                     print(f"Camera connected: {connect_status.message}")
                     
+                    # Add a small delay to ensure ASCOM driver has updated values
+                    import time
+                    time.sleep(0.5)
+                    
                     # Check cooling
                     if camera.has_cooling():
                         # Get comprehensive cooling information
