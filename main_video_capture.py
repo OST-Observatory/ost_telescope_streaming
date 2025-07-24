@@ -74,6 +74,13 @@ def main():
                             print(f"Current temperature: {temp_status.data}°C")
                         else:
                             print(f"Temperature read failed: {temp_status.message}")
+                        
+                        # Get cooler power
+                        power_status = camera.get_cooler_power()
+                        if power_status.is_success:
+                            print(f"Cooler power: {power_status.data}%")
+                        else:
+                            print(f"Cooler power read failed: {power_status.message}")
                     else:
                         print("Cooling not supported")
                     

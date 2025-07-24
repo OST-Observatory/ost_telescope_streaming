@@ -74,6 +74,19 @@ class ASCOMCamera:
         except Exception as e:
             return error_status(f"Failed to read temperature: {e}")
 
+    def get_cooler_power(self) -> CameraStatus:
+        """Get the current cooler power in percentage.
+        Returns:
+            CameraStatus: Status with cooler power percentage (0-100)
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        try:
+            power = self.camera.CoolerPower
+            return success_status("Current cooler power read", data=power)
+        except Exception as e:
+            return error_status(f"Failed to read cooler power: {e}")
+
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')
 
