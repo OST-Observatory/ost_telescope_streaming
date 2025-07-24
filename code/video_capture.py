@@ -402,6 +402,20 @@ class VideoCapture:
             # Convert ASCOM image array to numpy array
             image_array = np.array(ascom_image_data)
             
+            # Log the original data type and shape for debugging
+            self.logger.debug(f"ASCOM image data type: {image_array.dtype}, shape: {image_array.shape}")
+            
+            # Convert data type to uint16 first (most ASCOM cameras use 16-bit)
+            if image_array.dtype == np.int32:
+                # For 32-bit signed integers, convert to uint16
+                image_array = image_array.astype(np.uint16)
+            elif image_array.dtype == np.float32 or image_array.dtype == np.float64:
+                # For floating point, normalize to uint16
+                image_array = ((image_array - image_array.min()) / (image_array.max() - image_array.min()) * 65535).astype(np.uint16)
+            elif image_array.dtype != np.uint8 and image_array.dtype != np.uint16:
+                # For other types, try to convert to uint16
+                image_array = image_array.astype(np.uint16)
+            
             # Check if camera is color (has Bayer pattern)
             if hasattr(self.ascom_camera, 'sensor_type'):
                 sensor_type = self.ascom_camera.sensor_type
