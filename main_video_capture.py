@@ -49,7 +49,7 @@ def main():
 
     try:
         logger = logging.getLogger("video_capture_cli")
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)  # Enable debug logging
         
         # Update config with command line arguments BEFORE creating VideoCapture
         video_config['camera_type'] = args.camera_type
