@@ -142,31 +142,49 @@ class ASCOMCamera:
         try:
             info = {}
             
-            # Force a refresh of ASCOM properties by reconnecting briefly
-            try:
-                # Temporarily disconnect and reconnect to refresh values
-                was_connected = self.camera.Connected
-                if was_connected:
-                    self.camera.Connected = False
-                    import time
-                    time.sleep(0.1)
-                    self.camera.Connected = True
-                    time.sleep(0.1)
-            except Exception as e:
-                self.logger.warning(f"Could not refresh ASCOM connection: {e}")
+            # Try to force a refresh by reading properties multiple times
+            # Some ASCOM drivers cache values and need multiple reads to update
+            import time
             
-            # Basic cooling properties
-            info['temperature'] = self.camera.CCDTemperature
-            info['cooler_power'] = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            # Read temperature multiple times to ensure we get the latest value
+            temp_reads = []
+            for i in range(3):
+                temp_reads.append(self.camera.CCDTemperature)
+                time.sleep(0.1)
+            info['temperature'] = temp_reads[-1]  # Use the last reading
             
-            # Check if cooler is on/off
-            info['cooler_on'] = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            # Read cooler power multiple times
+            if hasattr(self.camera, 'CoolerPower'):
+                power_reads = []
+                for i in range(3):
+                    power_reads.append(self.camera.CoolerPower)
+                    time.sleep(0.1)
+                info['cooler_power'] = power_reads[-1]
+            else:
+                info['cooler_power'] = None
+            
+            # Read cooler on/off status multiple times
+            if hasattr(self.camera, 'CoolerOn'):
+                cooler_on_reads = []
+                for i in range(3):
+                    cooler_on_reads.append(self.camera.CoolerOn)
+                    time.sleep(0.1)
+                info['cooler_on'] = cooler_on_reads[-1]
+            else:
+                info['cooler_on'] = None
             
             # Check if we can control cooler power directly
             info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
             
             # Check target temperature
             info['target_temperature'] = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
+            
+            # Log the readings for debugging
+            self.logger.debug(f"Temperature readings: {temp_reads}")
+            if hasattr(self.camera, 'CoolerPower'):
+                self.logger.debug(f"Cooler power readings: {power_reads}")
+            if hasattr(self.camera, 'CoolerOn'):
+                self.logger.debug(f"Cooler on readings: {cooler_on_reads}")
             
             return success_status("Cooling information retrieved", data=info)
         except Exception as e:
