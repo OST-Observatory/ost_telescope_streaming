@@ -24,6 +24,53 @@ class ASCOMCamera:
             'cooler_on': None,
             'target_temperature': None
         }
+        
+        # Cache file path for persistent storage
+        import os
+        cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        self.cache_file = os.path.join(cache_dir, f'cooling_cache_{driver_id.replace(".", "_").replace(":", "_")}.json')
+        
+        # Load existing cache if available
+        self.load_cooling_cache()
+
+    def load_cooling_cache(self) -> None:
+        """Load cooling cache from persistent storage."""
+        try:
+            import json
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r') as f:
+                    cached_data = json.load(f)
+                    # Check if cache is recent (less than 5 minutes old)
+                    import time
+                    if 'timestamp' in cached_data:
+                        cache_age = time.time() - cached_data['timestamp']
+                        if cache_age < 300:  # 5 minutes
+                            self.last_cooling_info.update(cached_data.get('cooling_info', {}))
+                            self.logger.debug(f"Loaded cooling cache from {self.cache_file}")
+                        else:
+                            self.logger.debug(f"Cache too old ({cache_age:.1f}s), not loading")
+                    else:
+                        # Legacy cache without timestamp
+                        self.last_cooling_info.update(cached_data)
+                        self.logger.debug(f"Loaded legacy cooling cache from {self.cache_file}")
+        except Exception as e:
+            self.logger.debug(f"Failed to load cooling cache: {e}")
+
+    def save_cooling_cache(self) -> None:
+        """Save cooling cache to persistent storage."""
+        try:
+            import json
+            import time
+            cache_data = {
+                'timestamp': time.time(),
+                'cooling_info': self.last_cooling_info.copy()
+            }
+            with open(self.cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            self.logger.debug(f"Saved cooling cache to {self.cache_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to save cooling cache: {e}")
 
     def connect(self) -> CameraStatus:
         try:
@@ -372,6 +419,9 @@ class ASCOMCamera:
                 'target_temperature': info.get('target_temperature')
             })
             self.logger.debug(f"Updated cooling cache: {self.last_cooling_info}")
+            
+            # Save cache to persistent storage
+            self.save_cooling_cache()
 
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')

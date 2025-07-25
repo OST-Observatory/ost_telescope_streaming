@@ -210,3 +210,6 @@ VIDEO_INTEGRATION.md
 .jpg
 .jpeg
 .png
+
+# Cache files
+cache/*.json

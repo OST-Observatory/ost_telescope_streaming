@@ -35,6 +35,8 @@ self.last_cooling_info = {
 }
 ```
 
+**Note**: The cache is now persistent and shared between different camera instances.
+
 ### 4. **Smart Selection (get_smart_cooling_info)**
 ```python
 # Automatically selects the best method based on camera type
@@ -69,17 +71,22 @@ status = camera.get_fresh_cooling_info()  # Force refresh
 
 ## 🧪 Testing
 
-Use the special test for cooling cache issues:
+Use the special tests for cooling cache issues:
 
 ```bash
+# Test basic cooling cache functionality
 python tests/test_cooling_cache.py
+
+# Test persistent cache across instances
+python tests/test_persistent_cache.py
 ```
 
-This test:
-- Compares all 4 methods
-- Tests cooling operations
-- Checks cache consistency
-- Shows debug information
+These tests:
+- Compare all 4 methods
+- Test cooling operations
+- Check cache consistency
+- Verify persistent cache works across instances
+- Show debug information
 
 ## 📋 Known Issues
 
@@ -97,9 +104,15 @@ This test:
 
 ## 🔄 Cache Management
 
+### Persistent Cache Storage:
+The cooling cache is now **persistent** and stored in JSON files:
+- **Location**: `cache/cooling_cache_[DRIVER_ID].json`
+- **Expiration**: 5 minutes (old cache is automatically ignored)
+- **Sharing**: Cache is shared between different camera instances
+
 ### Automatic Cache Updates:
 ```python
-# Cache is automatically updated during:
+# Cache is automatically updated and saved during:
 camera.set_cooling(-10.0)      # After setting cooling
 camera.turn_cooling_off()      # After turning off cooling
 camera.set_cooler_on(True)     # After turning cooler on/off
