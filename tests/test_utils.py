@@ -24,10 +24,24 @@ def setup_logging(level=logging.DEBUG):
     Returns:
         Logger instance
     """
+    # Configure root logger to ensure all loggers use the same configuration
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True  # Force reconfiguration
     )
+    
+    # Set level for all loggers to ensure consistency
+    logging.getLogger().setLevel(level)
+    
+    # Also set level for common module loggers
+    logging.getLogger('ascom_camera').setLevel(level)
+    logging.getLogger('config_manager').setLevel(level)
+    logging.getLogger('video_capture').setLevel(level)
+    logging.getLogger('video_processor').setLevel(level)
+    logging.getLogger('plate_solver').setLevel(level)
+    logging.getLogger('overlay_runner').setLevel(level)
+    
     return logging.getLogger("test_utils")
 
 def get_test_config(config_path=None):

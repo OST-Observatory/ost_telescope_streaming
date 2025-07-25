@@ -13,7 +13,17 @@ class ASCOMCamera:
         from config_manager import config as default_config
         import logging
         self.config = config or default_config
-        self.logger = logger or logging.getLogger(__name__)
+        
+        # Use provided logger or get logger with proper name
+        if logger:
+            self.logger = logger
+        else:
+            # Get logger with module name for better identification
+            self.logger = logging.getLogger(__name__)
+            # Ensure logger has proper level if root logger is configured
+            if logging.getLogger().handlers:
+                self.logger.setLevel(logging.getLogger().level)
+        
         self.driver_id = driver_id
         self.camera = None
         
@@ -499,7 +509,7 @@ class ASCOMCamera:
                     names = list(device.FilterNames)
                 except:
                     # QHY default filter names (common setup)
-                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clearr']
+                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clear']
                     self.logger.info("Using default QHY filter names")
                 
                 self.logger.debug(f"Filter names retrieved from QHY filter wheel: {names}")
