@@ -102,17 +102,21 @@ This test:
 # Cache is automatically updated during:
 camera.set_cooling(-10.0)      # After setting cooling
 camera.turn_cooling_off()      # After turning off cooling
+camera.set_cooler_on(True)     # After turning cooler on/off
 ```
 
 ### Manual Cache Updates:
 ```python
-# Manually update cache
+# Manually update cache (if needed)
 camera.update_cooling_cache({
     'temperature': -15.0,
     'cooler_power': 75.0,
-    'cooler_on': True
+    'cooler_on': True,
+    'target_temperature': -10.0
 })
 ```
+
+**Note**: The cache is automatically updated by all cooling operations, so manual updates are rarely needed.
 
 ## 🚨 Troubleshooting
 

@@ -98,13 +98,13 @@ class ASCOMCamera:
                 'new_cooler_on': new_cooler_on
             }
             
-            # Store the latest cooling values to bypass ASCOM driver cache
-            self.last_cooling_info = {
+            # Update cache with new values
+            self.update_cooling_cache({
                 'temperature': new_temp,
                 'cooler_power': new_power,
                 'cooler_on': new_cooler_on,
                 'target_temperature': target_temp
-            }
+            })
             
             return success_status(f"Cooling set to {target_temp}°C", details=details)
         except Exception as e:
@@ -122,7 +122,27 @@ class ASCOMCamera:
         if not hasattr(self.camera, 'CoolerOn'):
             return error_status("Cooler on/off control not available")
         try:
+            # Get current values before changing
+            current_temp = self.camera.CCDTemperature
+            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Set cooler state
             self.camera.CoolerOn = on
+            
+            # Get values after changing
+            new_temp = self.camera.CCDTemperature
+            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
+            
+            # Update cache with new values
+            self.update_cooling_cache({
+                'temperature': new_temp,
+                'cooler_power': new_power,
+                'cooler_on': new_cooler_on,
+                'target_temperature': self.last_cooling_info.get('target_temperature')
+            })
+            
             status = "on" if on else "off"
             return success_status(f"Cooler turned {status}")
         except Exception as e:
@@ -156,12 +176,12 @@ class ASCOMCamera:
             new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
             
             # Update cache with new values
-            self.last_cooling_info = {
+            self.update_cooling_cache({
                 'temperature': new_temp,
                 'cooler_power': new_power,
                 'cooler_on': new_cooler_on,
                 'target_temperature': 50.0
-            }
+            })
             
             details = {
                 'current_temp': current_temp,

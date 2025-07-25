@@ -115,14 +115,69 @@ def test_cache_consistency(camera, logger):
         status = camera.get_smart_cooling_info()
         if status.is_success:
             info = status.data
-            print(f"   Temperature: {info.get('temperature')}°C")
-            print(f"   Cooler Power: {info.get('cooler_power')}%")
-            print(f"   Cooler On: {info.get('cooler_on')}")
+            print(f"   Temperature: {info['temperature']}°C")
+            print(f"   Cooler Power: {info['cooler_power']}%")
+            print(f"   Cooler On: {info['cooler_on']}")
         else:
             print(f"   ❌ Failed: {status.message}")
         
         if i < 4:  # Don't sleep after the last read
             time.sleep(1)
+
+def test_cache_update_mechanism(camera, logger):
+    """Test that cache is properly updated during cooling operations."""
+    print("\n" + "="*60)
+    print("TESTING CACHE UPDATE MECHANISM")
+    print("="*60)
+    
+    # Test 1: Check initial cache state
+    print("\n1. Initial cache state:")
+    print(f"   Cache before operation: {camera.last_cooling_info}")
+    
+    # Test 2: Set cooling and verify cache update
+    print("\n2. Setting cooling to -5°C...")
+    status = camera.set_cooling(-5.0)
+    if status.is_success:
+        print(f"   ✅ Cooling set successfully")
+        print(f"   Cache after set_cooling: {camera.last_cooling_info}")
+        
+        # Verify cache has been updated
+        if camera.last_cooling_info['temperature'] is not None:
+            print(f"   ✅ Cache temperature updated: {camera.last_cooling_info['temperature']}°C")
+        else:
+            print(f"   ❌ Cache temperature not updated")
+    else:
+        print(f"   ❌ Failed: {status.message}")
+    
+    # Test 3: Turn cooler on/off and verify cache update
+    print("\n3. Turning cooler off...")
+    status = camera.turn_cooling_off()
+    if status.is_success:
+        print(f"   ✅ Cooling turned off successfully")
+        print(f"   Cache after turn_cooling_off: {camera.last_cooling_info}")
+        
+        # Verify cache has been updated
+        if camera.last_cooling_info['cooler_on'] is False:
+            print(f"   ✅ Cache cooler_on updated: {camera.last_cooling_info['cooler_on']}")
+        else:
+            print(f"   ❌ Cache cooler_on not updated correctly")
+    else:
+        print(f"   ❌ Failed: {status.message}")
+    
+    # Test 4: Turn cooler on and verify cache update
+    print("\n4. Turning cooler on...")
+    status = camera.set_cooler_on(True)
+    if status.is_success:
+        print(f"   ✅ Cooler turned on successfully")
+        print(f"   Cache after set_cooler_on: {camera.last_cooling_info}")
+        
+        # Verify cache has been updated
+        if camera.last_cooling_info['cooler_on'] is True:
+            print(f"   ✅ Cache cooler_on updated: {camera.last_cooling_info['cooler_on']}")
+        else:
+            print(f"   ❌ Cache cooler_on not updated correctly")
+    else:
+        print(f"   ❌ Failed: {status.message}")
 
 def main():
     """Main test function."""
@@ -163,6 +218,7 @@ def main():
         test_cooling_methods(camera, logger)
         test_cooling_operation_sequence(camera, logger)
         test_cache_consistency(camera, logger)
+        test_cache_update_mechanism(camera, logger)
         
         # Disconnect
         camera.disconnect()
