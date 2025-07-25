@@ -389,13 +389,24 @@ class ASCOMCamera:
             # Check if this is a QHY camera (known for caching issues)
             is_qhy = 'QHYCCD' in self.driver_id or 'QHY' in self.driver_id
             
+            # Check if we have valid cached data
+            has_valid_cache = (
+                self.last_cooling_info['temperature'] is not None and
+                self.last_cooling_info['cooler_power'] is not None and
+                self.last_cooling_info['cooler_on'] is not None
+            )
+            
+            # Debug output
+            self.logger.debug(f"Smart cooling info - QHY: {is_qhy}, Valid cache: {has_valid_cache}")
+            self.logger.debug(f"Cache state: {self.last_cooling_info}")
+            
             if is_qhy:
                 # For QHY cameras, use cached values if available, otherwise use fresh method
-                if self.last_cooling_info['temperature'] is not None:
+                if has_valid_cache:
                     self.logger.info("QHY camera detected - using cached cooling info")
                     return self.get_cached_cooling_info()
                 else:
-                    self.logger.info("QHY camera detected - using fresh cooling info method")
+                    self.logger.info("QHY camera detected - no valid cache, using fresh cooling info method")
                     return self.get_fresh_cooling_info()
             else:
                 # For other cameras, try normal method first, then fresh if needed
