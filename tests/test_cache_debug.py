@@ -4,54 +4,36 @@ Debug test for cache loading and smart cooling info.
 This script shows exactly what happens with cache loading.
 """
 
-import sys
-import os
-import json
-from pathlib import Path
-
-# Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
-
+from test_utils import (
+    setup_test_environment, 
+    print_test_header, 
+    print_test_result,
+    check_cache_file,
+    get_cache_file_path
+)
 from ascom_camera import ASCOMCamera
-from config_manager import ConfigManager
-import logging
-
-def setup_logging():
-    """Setup logging for the test."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    return logging.getLogger("cache_debug_test")
+import json
 
 def test_cache_debug():
     """Debug test for cache loading."""
-    logger = setup_logging()
-    config = ConfigManager()
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment()
     
-    # Get ASCOM driver from config
-    video_config = config.get_video_config()
-    driver_id = video_config['ascom']['ascom_driver']
+    # Print test header
+    print_test_header("Cache Debug Test", driver_id, config.config_file)
     
-    print("Cache Debug Test")
-    print("="*50)
-    print(f"Driver ID: {driver_id}")
-    
-    # Calculate cache file path
-    cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
-    cache_file = os.path.join(cache_dir, f'cooling_cache_{driver_id.replace(".", "_").replace(":", "_")}.json')
-    
+    # Get cache file path
+    cache_file = get_cache_file_path(driver_id)
     print(f"Cache file: {cache_file}")
     
     # Check if cache file exists
-    if os.path.exists(cache_file):
-        print(f"✅ Cache file exists")
-        with open(cache_file, 'r') as f:
-            cache_data = json.load(f)
-        print(f"Cache file content:")
-        print(json.dumps(cache_data, indent=2))
+    cache_exists, cache_content = check_cache_file(driver_id)
+    if cache_exists:
+        print_test_result(True, "Cache file exists")
+        print("Cache file content:")
+        print(json.dumps(cache_content, indent=2))
     else:
-        print(f"❌ Cache file does not exist")
+        print_test_result(False, "Cache file does not exist")
         return
     
     try:
@@ -75,14 +57,14 @@ def test_cache_debug():
         print("\n3. Connecting to camera...")
         connect_status = camera.connect()
         if connect_status.is_success:
-            print("   ✅ Camera connected")
+            print_test_result(True, "Camera connected")
             
             if camera.has_cooling():
                 print("\n4. Testing get_smart_cooling_info()...")
                 cooling_status = camera.get_smart_cooling_info()
                 if cooling_status.is_success:
                     info = cooling_status.data
-                    print(f"   Result:")
+                    print("   Result:")
                     print(f"     Temperature: {info['temperature']}°C")
                     print(f"     Cooler power: {info['cooler_power']}%")
                     print(f"     Cooler on: {info['cooler_on']}")
@@ -96,22 +78,22 @@ def test_cache_debug():
                     if (info['temperature'] == camera.last_cooling_info['temperature'] and
                         info['cooler_power'] == camera.last_cooling_info['cooler_power'] and
                         info['cooler_on'] == camera.last_cooling_info['cooler_on']):
-                        print("   ✅ Cache and current values match")
+                        print_test_result(True, "Cache and current values match")
                     else:
-                        print("   ❌ Cache and current values differ")
+                        print_test_result(False, "Cache and current values differ")
                 else:
-                    print(f"   ❌ Failed: {cooling_status.message}")
+                    print_test_result(False, f"Failed to get cooling info: {cooling_status.message}")
             else:
-                print("   ❌ Camera does not support cooling")
+                print_test_result(False, "Camera does not support cooling")
             
             camera.disconnect()
         else:
-            print(f"   ❌ Connection failed: {connect_status.message}")
+            print_test_result(False, f"Connection failed: {connect_status.message}")
         
         print("\n✅ Debug test completed")
         
     except Exception as e:
-        print(f"❌ Test failed with exception: {e}")
+        print_test_result(False, f"Test failed with exception: {e}")
         logger.exception("Test failed")
 
 if __name__ == "__main__":

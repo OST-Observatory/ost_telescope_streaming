@@ -4,24 +4,13 @@ Test script for ASCOM camera cooling cache issues.
 This script demonstrates the problem with ASCOM driver caching and tests different solutions.
 """
 
-import sys
 import time
-from pathlib import Path
-
-# Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
-
+from test_utils import (
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 from ascom_camera import ASCOMCamera
-from config_manager import ConfigManager
-import logging
-
-def setup_logging():
-    """Setup logging for the test."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    return logging.getLogger("cooling_test")
 
 def test_cooling_methods(camera, logger):
     """Test different cooling info retrieval methods."""
@@ -181,17 +170,12 @@ def test_cache_update_mechanism(camera, logger):
 
 def main():
     """Main test function."""
-    logger = setup_logging()
-    config = ConfigManager()
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment()
     
-    # Get ASCOM driver from config or use default
-    video_config = config.get_video_config()
-    driver_id = video_config['ascom']['ascom_driver']
-    
-    print("ASCOM Camera Cooling Cache Test")
-    print("="*50)
-    print(f"Driver ID: {driver_id}")
-    print(f"Note: This test requires an ASCOM camera with cooling support")
+    # Print test header
+    print_test_header("ASCOM Camera Cooling Cache Test", driver_id, config.config_file)
+    print("Note: This test requires an ASCOM camera with cooling support")
     
     try:
         # Create camera instance
@@ -201,18 +185,18 @@ def main():
         print("\nConnecting to camera...")
         status = camera.connect()
         if not status.is_success:
-            print(f"❌ Connection failed: {status.message}")
+            print_test_result(False, f"Connection failed: {status.message}")
             return
         
-        print("✅ Camera connected successfully")
+        print_test_result(True, "Camera connected successfully")
         
         # Check if cooling is supported
         if not camera.has_cooling():
-            print("❌ This camera does not support cooling")
+            print_test_result(False, "This camera does not support cooling")
             camera.disconnect()
             return
         
-        print("✅ Cooling is supported")
+        print_test_result(True, "Cooling is supported")
         
         # Run tests
         test_cooling_methods(camera, logger)
@@ -225,7 +209,7 @@ def main():
         print("\n✅ Test completed successfully")
         
     except Exception as e:
-        print(f"❌ Test failed with exception: {e}")
+        print_test_result(False, f"Test failed with exception: {e}")
         logger.exception("Test failed")
 
 if __name__ == "__main__":
