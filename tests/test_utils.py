@@ -43,7 +43,7 @@ def get_test_config(config_path=None):
         # Use custom config file
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file not found: {config_path}")
-        return ConfigManager(config_file=config_path)
+        return ConfigManager(config_path=config_path)
     else:
         # Use default config
         return ConfigManager()
