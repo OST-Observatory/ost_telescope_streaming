@@ -23,9 +23,9 @@ from test_utils import (
 )
 
 def test_automated_platesolve2_integration() -> bool:
-    """Testet die automatisierte PlateSolve 2 Integration.
+    """Tests the automated PlateSolve 2 integration.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("Testing automated PlateSolve 2 integration...")
     
@@ -128,9 +128,9 @@ def test_overlay_runner_integration():
         return False
 
 def test_configuration(config) -> bool:
-    """Testet die Konfiguration für automatisiertes Plate-Solving.
+    """Tests the configuration for automated plate solving.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\n--- Testing configuration ---")
     
@@ -231,9 +231,9 @@ def test_command_line_format():
         return False
 
 def test_complete_workflow() -> bool:
-    """Testet den kompletten Workflow von Bild zu Overlay.
+    """Tests the complete workflow from image to overlay.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\n--- Testing complete workflow ---")
     
@@ -270,7 +270,7 @@ def test_complete_workflow() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Final-Integration-Test."""
+    """Main function for the Final Integration Test."""
     # Parse command line arguments
     args = parse_test_args("Final Integration Test")
     

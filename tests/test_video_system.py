@@ -23,9 +23,9 @@ from test_utils import (
 )
 
 def list_cameras() -> list[int]:
-    """Listet alle verfügbaren Kamerageräte auf.
+    """Lists all available camera devices.
     Returns:
-        list[int]: Liste der verfügbaren Kamera-Indizes.
+        list[int]: List of available camera indices.
     """
     print("Scanning for available cameras...")
     
@@ -55,9 +55,9 @@ def list_cameras() -> list[int]:
 def test_camera_access(camera_index: int) -> bool:
     """Test if camera is accessible (not blocked by other applications).
     Args:
-        camera_index: Index der Kamera.
+        camera_index: Camera index.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print(f"Testing access to camera {camera_index}...")
     
@@ -78,12 +78,12 @@ def test_camera_access(camera_index: int) -> bool:
     return True
 
 def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> bool:
-    """Nimmt ein einzelnes Frame von der angegebenen Kamera auf.
+    """Captures a single frame from the specified camera.
     Args:
-        camera_index: Index der Kamera
-        output_path: Dateiname für das gespeicherte Bild
+        camera_index: Camera index
+        output_path: Filename for the saved image
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print(f"Capturing frame from camera {camera_index}...")
     
@@ -121,9 +121,9 @@ def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> boo
     return success
 
 def test_config_manager(config) -> bool:
-    """Testet den ConfigManager mit Videoeinstellungen.
+    """Tests the ConfigManager with video settings.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting configuration manager...")
     
@@ -158,9 +158,9 @@ def test_config_manager(config) -> bool:
         return False
 
 def test_video_capture_module() -> bool:
-    """Testet das VideoCapture-Modul.
+    """Tests the VideoCapture module.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting video capture module...")
     
@@ -234,9 +234,9 @@ def test_overlay_runner_integration():
         return False
 
 def test_actual_camera_connection() -> bool:
-    """Testet die tatsächliche Kameraverbindung (optional).
+    """Tests the actual camera connection (optional).
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting actual camera connection...")
     
@@ -270,7 +270,7 @@ def test_actual_camera_connection() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Video-System-Test."""
+    """Main function for the Video System Test."""
     # Parse command line arguments
     args = parse_test_args("Video System Test")
     

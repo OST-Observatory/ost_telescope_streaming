@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
 def test_exception_hierarchy() -> bool:
-    """Testet die Exception-Hierarchie."""
+    """Tests the exception hierarchy."""
     print("Testing exception hierarchy...")
     
     try:
@@ -69,7 +69,7 @@ def test_exception_hierarchy() -> bool:
 
 
 def test_status_objects() -> bool:
-    """Testet die Status-Objekte."""
+    """Tests the status objects."""
     print("\nTesting status objects...")
     
     try:
@@ -140,7 +140,7 @@ def test_status_objects() -> bool:
 
 
 def test_mount_integration() -> bool:
-    """Testet die Integration mit dem Mount-Modul."""
+    """Tests the integration with the mount module."""
     print("\nTesting mount integration...")
     
     try:
@@ -184,7 +184,7 @@ def test_mount_integration() -> bool:
 
 
 def test_error_handling_patterns() -> bool:
-    """Testet verschiedene Fehlerbehandlungsmuster."""
+    """Tests various error handling patterns."""
     print("\nTesting error handling patterns...")
     
     try:
@@ -193,7 +193,7 @@ def test_error_handling_patterns() -> bool:
         
         # Pattern 1: Try-catch with status return
         def simulate_mount_operation() -> MountStatus:
-            """Simuliert eine Mount-Operation."""
+            """Simulates a mount operation."""
             try:
                 # Simulate success
                 if True:  # Change to False to test error path
@@ -224,7 +224,7 @@ def test_error_handling_patterns() -> bool:
         
         # Pattern 2: Status checking
         def process_mount_data(mount_status: MountStatus) -> str:
-            """Verarbeitet Mount-Daten basierend auf Status."""
+            """Processes mount data based on status."""
             if mount_status.is_success:
                 ra, dec = mount_status.data
                 return f"Processing coordinates: RA={ra}°, Dec={dec}°"
@@ -245,7 +245,7 @@ def test_error_handling_patterns() -> bool:
 
 
 def main() -> None:
-    """Hauptfunktion für den Status-System-Test."""
+    """Main function for the Status System Test."""
     # Parse command line arguments
     args = parse_test_args("Status System Test")
     

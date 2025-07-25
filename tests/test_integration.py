@@ -23,9 +23,9 @@ from test_utils import (
 )
 
 def test_plate_solver() -> bool:
-    """Testet das Plate-Solver-Modul.
+    """Tests the plate solver module.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("Testing plate solver module...")
     
@@ -58,9 +58,9 @@ def test_plate_solver() -> bool:
         return False
 
 def test_video_processor() -> bool:
-    """Testet den VideoProcessor.
+    """Tests the VideoProcessor.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting video processor module...")
     
@@ -87,9 +87,9 @@ def test_video_processor() -> bool:
         return False
 
 def test_config_integration(config) -> bool:
-    """Testet die Integration der Konfiguration.
+    """Tests the configuration integration.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting configuration integration...")
     
@@ -117,9 +117,9 @@ def test_config_integration(config) -> bool:
         return False
 
 def test_overlay_generator() -> bool:
-    """Testet die OverlayGenerator-Klasse.
+    """Tests the OverlayGenerator class.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting overlay generator...")
     
@@ -167,9 +167,9 @@ def test_overlay_generator() -> bool:
         return False
 
 def test_overlay_generation() -> bool:
-    """Testet die Overlay-Generierung.
+    """Tests overlay generation.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting overlay generation...")
     
@@ -202,9 +202,9 @@ def test_overlay_generation() -> bool:
         return False
 
 def test_overlay_runner() -> bool:
-    """Testet den OverlayRunner.
+    """Tests the OverlayRunner.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting overlay runner...")
     
@@ -231,9 +231,9 @@ def test_overlay_runner() -> bool:
         return False
 
 def test_modular_architecture() -> bool:
-    """Testet die modulare Architektur.
+    """Tests the modular architecture.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting modular architecture...")
     
@@ -264,9 +264,9 @@ def test_modular_architecture() -> bool:
         return False
 
 def test_automated_platesolve2_integration() -> bool:
-    """Testet die Integration des automatisierten PlateSolve2.
+    """Tests the automated PlateSolve2 integration.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting automated PlateSolve 2 integration...")
     
@@ -292,7 +292,7 @@ def test_automated_platesolve2_integration() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Integration-Test."""
+    """Main function for the Integration Test."""
     # Parse command line arguments
     args = parse_test_args("System Integration Test")
     

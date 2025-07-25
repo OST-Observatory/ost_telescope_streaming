@@ -27,9 +27,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
 
 def test_automated_platesolve2() -> bool:
-    """Testet die neue automatisierte PlateSolve 2 Implementierung.
+    """Tests the new automated PlateSolve 2 implementation.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("Testing automated PlateSolve 2 with known coordinates...")
     
@@ -114,9 +114,9 @@ def test_automated_platesolve2() -> bool:
         return False
 
 def test_command_string_building() -> bool:
-    """Testet die Erstellung des Kommandozeilen-Strings.
+    """Tests the command line string building.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\n--- Testing command string building ---")
     
@@ -165,9 +165,9 @@ def test_command_string_building() -> bool:
         return False
 
 def test_fov_calculation() -> bool:
-    """Testet die FOV-Berechnung.
+    """Tests the FOV calculation.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\n--- Testing FOV calculation ---")
     
@@ -228,7 +228,7 @@ def test_integration_with_video_processor():
         return False
 
 def main() -> None:
-    """Hauptfunktion für den automatisierten PlateSolve2-Test."""
+    """Main function for the Automated PlateSolve2 Test."""
     # Parse command line arguments
     args = parse_test_args("Automated PlateSolve 2 Test")
     

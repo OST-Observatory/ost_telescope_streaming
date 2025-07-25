@@ -25,9 +25,9 @@ from test_utils import (
 )
 
 def test_configuration(config) -> bool:
-    """Testet das Konfigurationssystem.
+    """Tests the configuration system.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("Testing configuration system...")
     print("=" * 40)
@@ -70,9 +70,9 @@ def test_configuration(config) -> bool:
         return False
 
 def test_simbad() -> bool:
-    """Testet SIMBAD-Abfragen.
+    """Tests SIMBAD queries.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting SIMBAD query...")
     print("=" * 40)
@@ -122,9 +122,9 @@ def test_simbad() -> bool:
         return False
 
 def test_coordinates() -> bool:
-    """Testet die Koordinatenumrechnung.
+    """Tests coordinate conversion.
     Returns:
-        bool: True bei Erfolg, sonst False.
+        bool: True on success, False otherwise.
     """
     print("\nTesting coordinate conversion...")
     print("=" * 40)
@@ -185,7 +185,7 @@ def test_coordinates() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Basic-Functionality-Test."""
+    """Main function for the Basic Functionality Test."""
     # Parse command line arguments
     args = parse_test_args("Basic Functionality Test")
     

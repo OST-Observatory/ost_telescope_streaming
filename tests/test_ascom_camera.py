@@ -181,7 +181,7 @@ def test_cli_integration() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den ASCOM-Camera-Test."""
+    """Main function for the ASCOM Camera Test."""
     # Parse command line arguments
     args = parse_test_args("ASCOM Camera Test")
     
