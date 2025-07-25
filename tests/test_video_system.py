@@ -5,14 +5,22 @@ Tests video capture, integration, and FOV calculations.
 """
 
 import cv2
-import argparse
 import sys
 import os
 import time
 from pathlib import Path
 
 # Add the code directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 
 def list_cameras() -> list[int]:
     """Listet alle verfügbaren Kamerageräte auf.
@@ -112,7 +120,7 @@ def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> boo
     cap.release()
     return success
 
-def test_config_manager() -> bool:
+def test_config_manager(config) -> bool:
     """Testet den ConfigManager mit Videoeinstellungen.
     Returns:
         bool: True bei Erfolg, sonst False.
@@ -120,8 +128,6 @@ def test_config_manager() -> bool:
     print("\nTesting configuration manager...")
     
     try:
-        from config_manager import config
-        
         # Test new configuration sections
         telescope_config = config.get_telescope_config()
         camera_config = config.get_camera_config()
@@ -265,34 +271,18 @@ def test_actual_camera_connection() -> bool:
 
 def main() -> None:
     """Hauptfunktion für den Video-System-Test."""
-    parser = argparse.ArgumentParser(description="Test video system")
-    parser.add_argument("--list", action="store_true", help="List all available cameras")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index to use (default: 0)")
-    parser.add_argument("--output", default="test_frame.jpg", help="Output filename (default: test_frame.jpg)")
-    parser.add_argument("--test-access", action="store_true", help="Test camera access without capturing")
-    parser.add_argument("--test-camera", action="store_true", help="Test actual camera connection")
-    parser.add_argument("--skip-camera", action="store_true", help="Skip camera hardware tests")
+    # Parse command line arguments
+    args = parse_test_args("Video System Test")
     
-    args = parser.parse_args()
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
     
-    print("Video System Test Suite")
-    print("=" * 50)
-    
-    if args.list:
-        list_cameras()
-        return
-    
-    if args.test_access:
-        test_camera_access(args.camera)
-        return
-    
-    if args.test_camera:
-        test_actual_camera_connection()
-        return
+    # Print test header
+    print_test_header("Video System Test", driver_id, args.config)
     
     # Run comprehensive tests
     tests = [
-        ("Configuration Manager", test_config_manager),
+        ("Configuration Manager", lambda: test_config_manager(config)),
         ("Video Capture Module", test_video_capture_module),
         ("Video Processor", test_video_processor),
         ("Overlay Runner Integration", test_overlay_runner_integration),
@@ -318,8 +308,10 @@ def main() -> None:
     
     if passed == total:
         print("\n🎉 All video system tests passed!")
+        print("\n✅ Video system is working correctly!")
     else:
         print(f"\n❌ {total - passed} test(s) failed.")
+        print("Please check the failed tests and fix any issues.")
 
 if __name__ == "__main__":
     main() 

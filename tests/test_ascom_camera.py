@@ -22,9 +22,8 @@ from test_utils import (
 )
 
 from ascom_camera import ASCOMCamera
-from config_manager import config
 
-def test_ascom_camera_basic() -> bool:
+def test_ascom_camera_basic(config) -> bool:
     """Test basic ASCOM camera functionality."""
     print("Testing basic ASCOM camera functionality...")
     
@@ -38,7 +37,7 @@ def test_ascom_camera_basic() -> bool:
         print(f"✗ Failed to instantiate ASCOMCamera: {e}")
         return False
 
-def test_ascom_camera_methods() -> bool:
+def test_ascom_camera_methods(config) -> bool:
     """Test ASCOM camera method signatures and basic functionality."""
     print("Testing ASCOM camera method signatures...")
     
@@ -91,7 +90,7 @@ def test_ascom_camera_methods() -> bool:
         print(f"✗ Error testing method signatures: {e}")
         return False
 
-def test_status_objects() -> bool:
+def test_status_objects(config) -> bool:
     """Test that ASCOM camera methods return proper status objects."""
     print("Testing status object returns...")
     
@@ -115,21 +114,28 @@ def test_status_objects() -> bool:
         print(f"✗ Error testing status objects: {e}")
         return False
 
-def test_config_integration() -> bool:
+def test_config_integration(config) -> bool:
     """Test that ASCOM camera configuration is properly integrated."""
     print("Testing configuration integration...")
     
     try:
         # Check that config has ASCOM camera settings
-        video_config = config.get('video', {})
+        video_config = config.get_video_config()
         
-        required_keys = ['camera_type', 'ascom_driver']
+        # Check for required ASCOM settings
+        ascom_config = video_config.get('ascom', {})
+        required_keys = ['ascom_driver']
+        
         for key in required_keys:
-            if key in video_config:
-                print(f"✓ Config key '{key}' exists: {video_config[key]}")
+            if key in ascom_config:
+                print(f"✓ ASCOM config key '{key}' exists: {ascom_config[key]}")
             else:
-                print(f"✗ Config key '{key}' missing")
+                print(f"✗ ASCOM config key '{key}' missing")
                 return False
+        
+        # Check camera type
+        camera_type = video_config.get('camera_type', 'opencv')
+        print(f"✓ Camera type: {camera_type}")
         
         return True
         
@@ -186,10 +192,10 @@ def main() -> None:
     print_test_header("ASCOM Camera Test", driver_id, args.config)
     
     tests = [
-        ("Basic ASCOM Camera", test_ascom_camera_basic),
-        ("Method Signatures", test_ascom_camera_methods),
-        ("Status Objects", test_status_objects),
-        ("Configuration Integration", test_config_integration),
+        ("Basic ASCOM Camera", lambda: test_ascom_camera_basic(config)),
+        ("Method Signatures", lambda: test_ascom_camera_methods(config)),
+        ("Status Objects", lambda: test_status_objects(config)),
+        ("Configuration Integration", lambda: test_config_integration(config)),
         ("CLI Integration", test_cli_integration),
     ]
     

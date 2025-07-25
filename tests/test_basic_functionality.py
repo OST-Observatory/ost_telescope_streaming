@@ -24,7 +24,7 @@ from test_utils import (
     print_test_result
 )
 
-def test_configuration() -> bool:
+def test_configuration(config) -> bool:
     """Testet das Konfigurationssystem.
     Returns:
         bool: True bei Erfolg, sonst False.
@@ -33,8 +33,6 @@ def test_configuration() -> bool:
     print("=" * 40)
     
     try:
-        from config_manager import config
-        
         # Test basic configuration loading
         print(f"Config path: {config.config_path}")
         print(f"Config loaded: {config.config is not None}")
@@ -198,7 +196,7 @@ def main() -> None:
     print_test_header("Basic Functionality Test", driver_id, args.config)
     
     tests = [
-        ("Configuration System", test_configuration),
+        ("Configuration System", lambda: test_configuration(config)),
         ("SIMBAD Query", test_simbad),
         ("Coordinate Conversion", test_coordinates),
     ]

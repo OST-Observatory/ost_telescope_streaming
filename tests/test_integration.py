@@ -86,7 +86,7 @@ def test_video_processor() -> bool:
         print(f"Error testing video processor: {e}")
         return False
 
-def test_config_integration() -> bool:
+def test_config_integration(config) -> bool:
     """Testet die Integration der Konfiguration.
     Returns:
         bool: True bei Erfolg, sonst False.
@@ -94,8 +94,6 @@ def test_config_integration() -> bool:
     print("\nTesting configuration integration...")
     
     try:
-        from config_manager import config
-        
         # Test new configuration sections
         plate_solve_config = config.get_plate_solve_config()
         video_config = config.get_video_config()
@@ -307,7 +305,7 @@ def main() -> None:
     tests = [
         ("Plate Solver Module", test_plate_solver),
         ("Video Processor", test_video_processor),
-        ("Configuration Integration", test_config_integration),
+        ("Configuration Integration", lambda: test_config_integration(config)),
         ("Overlay Generator", test_overlay_generator),
         ("Overlay Generation", test_overlay_generation),
         ("Overlay Runner", test_overlay_runner),

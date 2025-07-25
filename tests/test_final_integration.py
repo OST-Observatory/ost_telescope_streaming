@@ -127,7 +127,7 @@ def test_overlay_runner_integration():
         print(f"✗ Error testing overlay runner integration: {e}")
         return False
 
-def test_configuration() -> bool:
+def test_configuration(config) -> bool:
     """Testet die Konfiguration für automatisiertes Plate-Solving.
     Returns:
         bool: True bei Erfolg, sonst False.
@@ -135,8 +135,6 @@ def test_configuration() -> bool:
     print("\n--- Testing configuration ---")
     
     try:
-        from config_manager import config
-        
         # Test plate solve configuration
         plate_solve_config = config.get_plate_solve_config()
         
@@ -283,13 +281,11 @@ def main() -> None:
     print_test_header("Final Integration Test", driver_id, args.config)
     
     tests = [
-        ("Configuration System", test_configuration_system),
-        ("Status System", test_status_system),
-        ("Exception Handling", test_exception_handling),
-        ("Module Integration", test_module_integration),
-        ("Video System", test_video_system),
-        ("Plate Solving", test_plate_solving),
-        ("Overlay System", test_overlay_system),
+        ("Automated PlateSolve2 Integration", test_automated_platesolve2_integration),
+        ("Video Processor Integration", test_video_processor_integration),
+        ("Overlay Runner Integration", test_overlay_runner_integration),
+        ("Configuration", lambda: test_configuration(config)),
+        ("Command Line Format", test_command_line_format),
         ("Complete Workflow", test_complete_workflow),
     ]
     
