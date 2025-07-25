@@ -29,7 +29,13 @@ class VideoCapture:
         self.frame_lock = threading.Lock()
         
         # Load configuration
-        default_config = ConfigManager()
+        # Only create default config if no config is provided
+        # This prevents loading config.yaml when config is passed from tests
+        if config is None:
+            default_config = ConfigManager()
+        else:
+            default_config = None
+        
         self.config = config or default_config
         
         # Use provided logger or get logger with proper name

@@ -30,7 +30,12 @@ class ASCOMMount:
             ConnectionError: Wenn die Verbindung fehlschlägt.
         """
         from config_manager import ConfigManager
-        default_config = ConfigManager()
+        # Only create default config if no config is provided
+        # This prevents loading config.yaml when config is passed from tests
+        if config is None:
+            default_config = ConfigManager()
+        else:
+            default_config = None
         import logging
         self.logger = logger or logging.getLogger(__name__)
         self.config = config or default_config

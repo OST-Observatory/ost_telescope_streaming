@@ -38,7 +38,13 @@ class ConfigManager:
             default_config = self._get_default_config()
             merged_config = self._merge_configs(default_config, config)
             
-            print(f"Configuration loaded from {self.config_path}")
+            # Use logger if available, otherwise print
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Configuration loaded from {self.config_path}")
+            except:
+                print(f"Configuration loaded from {self.config_path}")
             return merged_config
             
         except Exception as e:

@@ -11,8 +11,15 @@ from typing import Optional, Any
 class ASCOMCamera:
     def __init__(self, driver_id: str, config=None, logger=None):
         from config_manager import ConfigManager
-        default_config = ConfigManager()
         import logging
+        
+        # Only create default config if no config is provided
+        # This prevents loading config.yaml when config is passed from tests
+        if config is None:
+            default_config = ConfigManager()
+        else:
+            default_config = None
+        
         self.config = config or default_config
         
         # Use provided logger or get logger with proper name

@@ -45,7 +45,12 @@ class PlateSolver(ABC):
     """Abstrakte Basisklasse für Plate-Solving-Engines."""
     def __init__(self, config=None, logger=None):
         from config_manager import ConfigManager
-        default_config = ConfigManager()
+        # Only create default config if no config is provided
+        # This prevents loading config.yaml when config is passed from tests
+        if config is None:
+            default_config = ConfigManager()
+        else:
+            default_config = None
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(self.__class__.__name__)

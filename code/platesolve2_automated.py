@@ -22,7 +22,12 @@ class PlateSolve2Automated:
     """Automated PlateSolve 2 integration with correct command line format."""
     def __init__(self, config=None, logger=None):
         from config_manager import ConfigManager
-        default_config = ConfigManager()
+        # Only create default config if no config is provided
+        # This prevents loading config.yaml when config is passed from tests
+        if config is None:
+            default_config = ConfigManager()
+        else:
+            default_config = None
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
