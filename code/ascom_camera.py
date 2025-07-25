@@ -33,6 +33,11 @@ class ASCOMCamera:
         
         # Load existing cache if available
         self.load_cooling_cache()
+        
+        # Optional separate filter wheel driver
+        self.filter_wheel = None
+        self.filter_wheel_driver_id = None
+        self._setup_filter_wheel()
 
     def load_cooling_cache(self) -> None:
         """Load cooling cache from persistent storage."""
@@ -78,12 +83,24 @@ class ASCOMCamera:
             import win32com.client
             self.camera = win32com.client.Dispatch(self.driver_id)
             self.camera.Connected = True
+            
+            # Connect to filter wheel if configured
+            if self.filter_wheel_driver_id:
+                filter_wheel_status = self._connect_filter_wheel()
+                if not filter_wheel_status.is_success:
+                    self.logger.warning(f"Filter wheel connection failed: {filter_wheel_status.message}")
+            
             return success_status("ASCOM camera connected")
         except Exception as e:
             return error_status(f"Failed to connect to ASCOM camera: {e}")
 
     def disconnect(self) -> CameraStatus:
         try:
+            # Disconnect filter wheel first
+            if self.filter_wheel_driver_id:
+                self._disconnect_filter_wheel()
+            
+            # Disconnect camera
             if self.camera and self.camera.Connected:
                 self.camera.Connected = False
             return success_status("ASCOM camera disconnected")
@@ -436,34 +453,73 @@ class ASCOMCamera:
             self.save_cooling_cache()
 
     def has_filter_wheel(self) -> bool:
-        return hasattr(self.camera, 'FilterNames')
+        """Check if filter wheel is available (integrated or separate)."""
+        # Check integrated filter wheel
+        if hasattr(self.camera, 'FilterNames'):
+            return True
+        
+        # Check separate filter wheel
+        if self.filter_wheel_driver_id and self.filter_wheel:
+            return True
+        
+        return False
+
+    def _get_filter_wheel_device(self):
+        """Get the appropriate filter wheel device (integrated or separate)."""
+        # Try integrated filter wheel first
+        if hasattr(self.camera, 'FilterNames'):
+            return self.camera, "integrated"
+        
+        # Try separate filter wheel
+        if self.filter_wheel_driver_id and self.filter_wheel:
+            return self.filter_wheel, "separate"
+        
+        return None, None
 
     def get_filter_names(self) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
+        
+        device, device_type = self._get_filter_wheel_device()
+        if not device:
+            return error_status("No filter wheel device available")
+        
         try:
-            names = list(self.camera.FilterNames)
-            return success_status("Filter names retrieved", data=names)
+            names = list(device.FilterNames)
+            self.logger.debug(f"Filter names retrieved from {device_type} filter wheel")
+            return success_status(f"Filter names retrieved from {device_type} filter wheel", data=names)
         except Exception as e:
-            return error_status(f"Failed to get filter names: {e}")
+            return error_status(f"Failed to get filter names from {device_type} filter wheel: {e}")
 
     def set_filter_position(self, position: int) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
+        
+        device, device_type = self._get_filter_wheel_device()
+        if not device:
+            return error_status("No filter wheel device available")
+        
         try:
-            self.camera.Position = position
-            return success_status(f"Filter position set to {position}")
+            device.Position = position
+            self.logger.info(f"Filter position set to {position} on {device_type} filter wheel")
+            return success_status(f"Filter position set to {position} on {device_type} filter wheel")
         except Exception as e:
-            return error_status(f"Failed to set filter position: {e}")
+            return error_status(f"Failed to set filter position on {device_type} filter wheel: {e}")
 
     def get_filter_position(self) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
+        
+        device, device_type = self._get_filter_wheel_device()
+        if not device:
+            return error_status("No filter wheel device available")
+        
         try:
-            pos = self.camera.Position
-            return success_status("Current filter position", data=pos)
+            pos = device.Position
+            self.logger.debug(f"Current filter position from {device_type} filter wheel: {pos}")
+            return success_status(f"Current filter position from {device_type} filter wheel", data=pos)
         except Exception as e:
-            return error_status(f"Failed to get filter position: {e}")
+            return error_status(f"Failed to get filter position from {device_type} filter wheel: {e}")
 
     def is_color_camera(self) -> bool:
         # Heuristik: SensorType oder BayerPattern vorhanden
@@ -544,3 +600,44 @@ class ASCOMCamera:
         except Exception as e:
             self.logger.warning(f"Could not determine sensor type: {e}")
             return None 
+
+    def _setup_filter_wheel(self) -> None:
+        """Setup optional separate filter wheel driver."""
+        try:
+            # Get filter wheel driver from config
+            video_config = self.config.get_video_config()
+            if 'filter_wheel_driver' in video_config.get('ascom', {}):
+                self.filter_wheel_driver_id = video_config['ascom']['filter_wheel_driver']
+                self.logger.info(f"Filter wheel driver configured: {self.filter_wheel_driver_id}")
+            else:
+                self.logger.debug("No separate filter wheel driver configured")
+        except Exception as e:
+            self.logger.debug(f"Failed to setup filter wheel: {e}")
+
+    def _connect_filter_wheel(self) -> CameraStatus:
+        """Connect to separate filter wheel driver if configured."""
+        if not self.filter_wheel_driver_id:
+            return error_status("No filter wheel driver configured")
+        
+        try:
+            if self.filter_wheel is None:
+                import win32com.client
+                self.filter_wheel = win32com.client.Dispatch(self.filter_wheel_driver_id)
+            
+            if not self.filter_wheel.Connected:
+                self.filter_wheel.Connected = True
+                self.logger.info(f"Connected to filter wheel: {self.filter_wheel_driver_id}")
+            
+            return success_status(f"Filter wheel connected: {self.filter_wheel_driver_id}")
+        except Exception as e:
+            return error_status(f"Failed to connect to filter wheel: {e}")
+
+    def _disconnect_filter_wheel(self) -> CameraStatus:
+        """Disconnect from separate filter wheel driver."""
+        try:
+            if self.filter_wheel and self.filter_wheel.Connected:
+                self.filter_wheel.Connected = False
+                self.logger.info("Filter wheel disconnected")
+            return success_status("Filter wheel disconnected")
+        except Exception as e:
+            return error_status(f"Failed to disconnect filter wheel: {e}") 

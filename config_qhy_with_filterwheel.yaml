@@ -1,5 +1,5 @@
-# OST Telescope Streaming Configuration
-# =====================================
+# OST Telescope Streaming Configuration for QHY Camera with Separate Filter Wheel
+# =============================================================================
 
 # Telescope Mount Settings
 # ------------------------
@@ -15,33 +15,33 @@ mount:
 # -------------------
 telescope:
   # Focal length in millimeters
-  focal_length: 1000
+  focal_length: 3454
   # Aperture diameter in millimeters
-  aperture: 200
+  aperture: 508
   # Telescope type (refractor, reflector, etc.)
   type: "reflector"
   # Focal ratio (focal_length / aperture)   TODO: Replace with calculation
-  focal_ratio: 5.0
+  focal_ratio: 6.8
 
 # Camera Parameters
 # ----------------
 camera:
   # Sensor width in millimeters
-  sensor_width: 6.17
+  sensor_width: 36.0
   # Sensor height in millimeters
-  sensor_height: 4.55
+  sensor_height: 24.0
   # Pixel size in micrometers
-  pixel_size: 3.75
+  pixel_size: 3.76
   # Camera type (mono, color, etc.)
-  type: "color"
+  type: "mono"
   # Bit depth
-  bit_depth: 8
+  bit_depth: 16
 
 # Video Capture Settings
 # ---------------------
 video:
   video_enabled: true
-  camera_type: "opencv"  # or "ascom"
+  camera_type: "ascom"  # or "ascom"
 
   # Settings only for OpenCV cameras
   opencv:
@@ -55,12 +55,12 @@ video:
 
   # Settings only for ASCOM cameras
   ascom:
-    ascom_driver: "ASCOM.MyCamera.Camera"  # ASCOM driver ID for astro cameras
+    ascom_driver: "ASCOM.QHYCCD.Camera"  # ASCOM driver ID for astro cameras
     exposure_time: 0.1  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
-    binning: 1  # Binning factor (1x1, 2x2, etc.)
-    # Optional: Separate filter wheel driver (e.g., for QHY cameras)
-    # filter_wheel_driver: "ASCOM.QHYCCD.FilterWheel"  # Uncomment and set if needed
+    binning: 2  # Binning factor (1x1, 2x2, etc.)
+    # Separate filter wheel driver for QHY cameras
+    filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver
 
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames

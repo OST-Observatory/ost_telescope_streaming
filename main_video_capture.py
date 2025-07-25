@@ -112,6 +112,12 @@ def main():
                     else:
                         print("No filter wheel present")
                     
+                    # Show filter wheel driver info if configured
+                    if hasattr(camera, 'filter_wheel_driver_id') and camera.filter_wheel_driver_id:
+                        print(f"Separate filter wheel driver: {camera.filter_wheel_driver_id}")
+                    else:
+                        print("No separate filter wheel driver configured")
+                    
                     # Check if color camera
                     if camera.is_color_camera():
                         print("Color camera detected - debayering available")
