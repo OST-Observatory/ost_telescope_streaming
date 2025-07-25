@@ -6,11 +6,21 @@ Tests modular system, overlay generation, and overall integration.
 
 import sys
 import os
+import argparse
 import time
 from pathlib import Path
 
 # Add the code directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 
 def test_plate_solver() -> bool:
     """Testet das Plate-Solver-Modul.
@@ -284,19 +294,25 @@ def test_automated_platesolve2_integration() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Integrationstest."""
-    print("System Integration Test Suite")
-    print("=" * 50)
+    """Hauptfunktion für den Integration-Test."""
+    # Parse command line arguments
+    args = parse_test_args("System Integration Test")
+    
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("System Integration Test", driver_id, args.config)
     
     tests = [
-        ("Plate Solver", test_plate_solver),
+        ("Plate Solver Module", test_plate_solver),
         ("Video Processor", test_video_processor),
-        ("Config Integration", test_config_integration),
+        ("Configuration Integration", test_config_integration),
         ("Overlay Generator", test_overlay_generator),
         ("Overlay Generation", test_overlay_generation),
         ("Overlay Runner", test_overlay_runner),
         ("Modular Architecture", test_modular_architecture),
-        ("Automated PlateSolve 2", test_automated_platesolve2_integration),
+        ("Automated PlateSolve2 Integration", test_automated_platesolve2_integration),
     ]
     
     passed = 0
@@ -315,10 +331,11 @@ def main() -> None:
     
     if passed == total:
         print("\n🎉 All integration tests passed!")
-        print("\n🚀 System is ready for production use!")
+        print("\n✅ The system is fully integrated and ready!")
     else:
         print(f"\n❌ {total - passed} test(s) failed.")
         print("Please check the failed tests and fix any issues.")
+
 
 if __name__ == "__main__":
     main() 

@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """
-Test script for the new exception and status system.
-Tests the structured error handling and status objects.
+Test script for the status system.
+Tests exception hierarchy, status objects, and error handling patterns.
 """
 
 import sys
 import os
+import argparse
+from pathlib import Path
+
+# Add the code directory to the path
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
+
 import time
 
 # Add the code directory to the path
@@ -231,8 +246,14 @@ def test_error_handling_patterns() -> bool:
 
 def main() -> None:
     """Hauptfunktion für den Status-System-Test."""
-    print("Status System Test Suite")
-    print("=" * 50)
+    # Parse command line arguments
+    args = parse_test_args("Status System Test")
+    
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("Status System Test", driver_id, args.config)
     
     tests = [
         ("Exception Hierarchy", test_exception_hierarchy),

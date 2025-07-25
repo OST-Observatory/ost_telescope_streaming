@@ -6,12 +6,23 @@ Tests configuration, SIMBAD queries, and coordinate conversion.
 
 import sys
 import os
+import argparse
 import numpy as np
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+from pathlib import Path
 
 # Add the code directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 
 def test_configuration() -> bool:
     """Testet das Konfigurationssystem.
@@ -176,14 +187,20 @@ def test_coordinates() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Basistest."""
-    print("Basic Functionality Test Suite")
-    print("=" * 50)
+    """Hauptfunktion für den Basic-Functionality-Test."""
+    # Parse command line arguments
+    args = parse_test_args("Basic Functionality Test")
+    
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("Basic Functionality Test", driver_id, args.config)
     
     tests = [
-        ("Configuration", test_configuration),
-        ("SIMBAD", test_simbad),
-        ("Coordinates", test_coordinates),
+        ("Configuration System", test_configuration),
+        ("SIMBAD Query", test_simbad),
+        ("Coordinate Conversion", test_coordinates),
     ]
     
     passed = 0
@@ -202,8 +219,11 @@ def main() -> None:
     
     if passed == total:
         print("\n🎉 All basic functionality tests passed!")
+        print("\n✅ The system is ready for advanced features!")
     else:
         print(f"\n❌ {total - passed} test(s) failed.")
+        print("Please check the failed tests and fix any issues.")
+
 
 if __name__ == "__main__":
     main() 

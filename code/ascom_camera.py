@@ -499,7 +499,7 @@ class ASCOMCamera:
                     names = list(device.FilterNames)
                 except:
                     # QHY default filter names (common setup)
-                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clear']
+                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clearr']
                     self.logger.info("Using default QHY filter names")
                 
                 self.logger.debug(f"Filter names retrieved from QHY filter wheel: {names}")

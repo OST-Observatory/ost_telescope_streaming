@@ -1,13 +1,27 @@
 #!/usr/bin/env python3
 """
-Test script for automated PlateSolve 2 using the correct command line format.
-Tests the new implementation that uses: ra,dec,width_field_of_view,height_field_of_view,number_of_regions_to_test,path_to_image,"0"
+Test script for automated PlateSolve 2 integration.
+Tests the automated plate solving functionality.
 """
 
 import sys
 import os
-import time
+import argparse
 from pathlib import Path
+
+# Add the code directory to the path
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
+
+import time
 
 # Add code directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
@@ -211,8 +225,14 @@ def test_integration_with_video_processor():
 
 def main() -> None:
     """Hauptfunktion für den automatisierten PlateSolve2-Test."""
-    print("Automated PlateSolve 2 Test")
-    print("=" * 50)
+    # Parse command line arguments
+    args = parse_test_args("Automated PlateSolve 2 Test")
+    
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("Automated PlateSolve 2 Test", driver_id, args.config)
     
     tests = [
         ("Automated PlateSolve 2", test_automated_platesolve2),

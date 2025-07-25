@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 """
-Final integration test for the complete telescope streaming system.
-Tests the new automated PlateSolve 2 implementation integrated with the existing system.
+Final integration test script.
+Tests the complete system integration including all modules.
 """
 
 import sys
 import os
+import argparse
 import time
 from pathlib import Path
 
-# Add code directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'code'))
+# Add the code directory to the path
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 
 def test_automated_platesolve2_integration() -> bool:
     """Testet die automatisierte PlateSolve 2 Integration.
@@ -262,17 +272,24 @@ def test_complete_workflow() -> bool:
         return False
 
 def main() -> None:
-    """Hauptfunktion für den Final-Integrationstest."""
-    print("Final Integration Test")
-    print("=" * 50)
-    print("Testing complete system with automated PlateSolve 2")
+    """Hauptfunktion für den Final-Integration-Test."""
+    # Parse command line arguments
+    args = parse_test_args("Final Integration Test")
+    
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("Final Integration Test", driver_id, args.config)
     
     tests = [
-        ("Automated PlateSolve 2 Integration", test_automated_platesolve2_integration),
-        ("Video Processor Integration", test_video_processor_integration),
-        ("Overlay Runner Integration", test_overlay_runner_integration),
-        ("Configuration", test_configuration),
-        ("Command Line Format", test_command_line_format),
+        ("Configuration System", test_configuration_system),
+        ("Status System", test_status_system),
+        ("Exception Handling", test_exception_handling),
+        ("Module Integration", test_module_integration),
+        ("Video System", test_video_system),
+        ("Plate Solving", test_plate_solving),
+        ("Overlay System", test_overlay_system),
         ("Complete Workflow", test_complete_workflow),
     ]
     
@@ -287,31 +304,17 @@ def main() -> None:
         else:
             print(f"✗ {test_name} failed")
     
-    print(f"\n--- Final Results ---")
+    print(f"\n--- Results ---")
     print(f"Completed: {passed}/{total}")
     
-    if passed >= 5:
-        print("\n🎉 Final integration test completed successfully!")
-        print("\n🎯 Your automated PlateSolve 2 system is ready!")
-        print("\nNext steps:")
-        print("1. Run the system with real telescope data")
-        print("2. Monitor performance and accuracy")
-        print("3. Adjust parameters as needed")
-        print("4. Enjoy automated plate-solving!")
-        
-        print("\n🚀 To start the system:")
-        print("python overlay_runner.py")
-        
-    elif passed >= 3:
-        print("\n⚠️  Most tests passed, but some issues remain.")
-        print("Check the failed tests and fix any configuration issues.")
-        
+    if passed == total:
+        print("\n🎉 All final integration tests passed!")
+        print("\n✅ The complete system is ready for production use!")
+        print("\n🚀 You can now use the system for astrophotography!")
     else:
-        print("\n❌ Multiple tests failed. Please check:")
-        print("1. PlateSolve 2 installation and path")
-        print("2. Configuration settings")
-        print("3. Image file availability")
-        print("4. System dependencies")
+        print(f"\n❌ {total - passed} test(s) failed.")
+        print("Please check the failed tests and fix any issues.")
+
 
 if __name__ == "__main__":
     main() 

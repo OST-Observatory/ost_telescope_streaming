@@ -6,11 +6,20 @@ Tests cooling, filter wheel, and debayering functionality.
 
 import sys
 import os
-import logging
+import argparse
 from pathlib import Path
 
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+from test_utils import (
+    setup_logging,
+    get_test_config,
+    parse_test_args,
+    setup_test_environment,
+    print_test_header,
+    print_test_result
+)
 
 from ascom_camera import ASCOMCamera
 from config_manager import config
@@ -166,41 +175,45 @@ def test_cli_integration() -> bool:
         return False
 
 def main() -> None:
-    """Main test function."""
-    print("ASCOM Camera Feature Tests")
-    print("=" * 40)
+    """Hauptfunktion für den ASCOM-Camera-Test."""
+    # Parse command line arguments
+    args = parse_test_args("ASCOM Camera Test")
     
-    # Set up logging
-    logging.basicConfig(level=logging.INFO)
+    # Setup test environment
+    config, logger, driver_id = setup_test_environment(args)
+    
+    # Print test header
+    print_test_header("ASCOM Camera Test", driver_id, args.config)
     
     tests = [
-        test_ascom_camera_basic,
-        test_ascom_camera_methods,
-        test_status_objects,
-        test_config_integration,
-        test_cli_integration
+        ("Basic ASCOM Camera", test_ascom_camera_basic),
+        ("Method Signatures", test_ascom_camera_methods),
+        ("Status Objects", test_status_objects),
+        ("Configuration Integration", test_config_integration),
+        ("CLI Integration", test_cli_integration),
     ]
     
     passed = 0
     total = len(tests)
     
-    for test in tests:
-        try:
-            if test():
-                passed += 1
-            print()
-        except Exception as e:
-            print(f"✗ Test {test.__name__} failed with exception: {e}")
-            print()
+    for test_name, test_func in tests:
+        print(f"\n--- {test_name} ---")
+        if test_func():
+            print(f"✓ {test_name} completed")
+            passed += 1
+        else:
+            print(f"✗ {test_name} failed")
     
-    print(f"Test Results: {passed}/{total} tests passed")
+    print(f"\n--- Results ---")
+    print(f"Completed: {passed}/{total}")
     
     if passed == total:
-        print("✓ All tests passed!")
-        sys.exit(0)
+        print("\n🎉 All ASCOM camera tests passed!")
+        print("\n✅ ASCOM camera integration is working correctly!")
     else:
-        print("✗ Some tests failed!")
-        sys.exit(1)
+        print(f"\n❌ {total - passed} test(s) failed.")
+        print("Please check the failed tests and fix any issues.")
+
 
 if __name__ == "__main__":
     main() 
