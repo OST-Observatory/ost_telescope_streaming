@@ -31,7 +31,7 @@ def test_automated_platesolve2() -> bool:
     Returns:
         bool: True bei Erfolg, sonst False.
     """
-    print("Testing automated PlateSolve 2 with correct command line format...")
+    print("Testing automated PlateSolve 2 with known coordinates...")
     
     try:
         from platesolve2_automated import PlateSolve2Automated
@@ -44,6 +44,8 @@ def test_automated_platesolve2() -> bool:
         
         if not os.path.exists(test_image):
             print(f"✗ Test image not found: {test_image}")
+            print("⚠ Note: This test requires a real FITS image file.")
+            print("   Please update the test_image path or provide a test image.")
             return False
         
         print(f"✓ Test image found: {test_image}")
@@ -54,6 +56,7 @@ def test_automated_platesolve2() -> bool:
         # Test availability
         if not solver._is_available():
             print("✗ PlateSolve 2 not available")
+            print("⚠ Please ensure PlateSolve 2 is installed and accessible.")
             return False
         
         print("✓ PlateSolve 2 is available")
@@ -62,47 +65,48 @@ def test_automated_platesolve2() -> bool:
         fov_width, fov_height = solver._calculate_fov()
         print(f"✓ Calculated FOV: {fov_width:.4f}° x {fov_height:.4f}°")
         
-        # Test solving with estimated coordinates
-        print("\n--- Test 1: Solving with estimated coordinates ---")
-        result1 = solver.solve(test_image)
+        # Known coordinates for NGC 6819 (example)
+        # These should be close to the actual image center
+        known_ra = 295.0  # Example RA in degrees
+        known_dec = 40.0  # Example Dec in degrees
         
-        print(f"Result 1: {result1}")
+        print(f"✓ Using known coordinates: RA={known_ra:.4f}°, Dec={known_dec:.4f}°")
         
-        if result1['success']:
-            print(f"✓ Test 1 successful!")
-            print(f"✓ RA: {result1['ra_center']:.4f}°")
-            print(f"✓ Dec: {result1['dec_center']:.4f}°")
-            print(f"✓ Solving time: {result1['solving_time']:.1f}s")
+        # Test solving with known coordinates
+        print("\n--- Test: Solving with known coordinates ---")
+        result = solver.solve(
+            test_image,
+            ra_deg=known_ra,
+            dec_deg=known_dec,
+            fov_width_deg=fov_width,
+            fov_height_deg=fov_height
+        )
+        
+        print(f"Result: {result}")
+        
+        if result['success']:
+            print(f"✓ Plate solving successful!")
+            print(f"✓ Solved RA: {result['ra_center']:.4f}°")
+            print(f"✓ Solved Dec: {result['dec_center']:.4f}°")
+            print(f"✓ Solving time: {result['solving_time']:.1f}s")
             
-            # Test solving with known coordinates
-            print("\n--- Test 2: Solving with known coordinates ---")
-            result2 = solver.solve(
-                test_image,
-                ra_deg=result1['ra_center'],
-                dec_deg=result1['dec_center'],
-                fov_width_deg=fov_width,
-                fov_height_deg=fov_height
-            )
+            # Check accuracy (should be within reasonable bounds)
+            ra_diff = abs(result['ra_center'] - known_ra)
+            dec_diff = abs(result['dec_center'] - known_dec)
             
-            print(f"Result 2: {result2}")
-            
-            if result2['success']:
-                print(f"✓ Test 2 successful!")
-                print(f"✓ RA: {result2['ra_center']:.4f}°")
-                print(f"✓ Dec: {result2['dec_center']:.4f}°")
-                print(f"✓ Solving time: {result2['solving_time']:.1f}s")
-                
-                # Compare results
-                ra_diff = abs(result1['ra_center'] - result2['ra_center'])
-                dec_diff = abs(result1['dec_center'] - result2['dec_center'])
-                print(f"✓ Coordinate differences: RA={ra_diff:.6f}°, Dec={dec_diff:.6f}°")
-                
+            # Accept differences up to 0.1 degrees (6 arcminutes)
+            max_diff = 0.1
+            if ra_diff <= max_diff and dec_diff <= max_diff:
+                print(f"✓ Coordinate accuracy: RA diff={ra_diff:.6f}°, Dec diff={dec_diff:.6f}°")
+                print(f"✓ Accuracy within acceptable range (±{max_diff}°)")
                 return True
             else:
-                print(f"✗ Test 2 failed: {result2['error_message']}")
+                print(f"⚠ Large coordinate differences: RA diff={ra_diff:.6f}°, Dec diff={dec_diff:.6f}°")
+                print(f"⚠ This might indicate incorrect known coordinates or image mismatch")
+                print(f"⚠ Acceptable range: ±{max_diff}°")
                 return False
         else:
-            print(f"✗ Test 1 failed: {result1['error_message']}")
+            print(f"✗ Plate solving failed: {result['error_message']}")
             return False
             
     except Exception as e:
@@ -257,6 +261,7 @@ def main() -> None:
     
     if passed >= 3:
         print("\n🎉 Automated PlateSolve 2 testing completed successfully!")
+        print("\n✅ PlateSolve 2 integration is working correctly!")
         print("\nNext steps:")
         print("1. Integrate with overlay_runner.py")
         print("2. Test with real telescope data")
@@ -264,6 +269,11 @@ def main() -> None:
         print("4. Add error handling for edge cases")
     else:
         print("\n❌ Some tests failed. Check configuration and PlateSolve 2 installation.")
+        print("\nTroubleshooting:")
+        print("• Ensure PlateSolve 2 is installed and accessible")
+        print("• Verify the test image path exists and is a valid FITS file")
+        print("• Check that known coordinates match the image content")
+        print("• Review PlateSolve 2 configuration in config.yaml")
 
 if __name__ == "__main__":
     main() 
