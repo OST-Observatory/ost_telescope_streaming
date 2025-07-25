@@ -80,10 +80,8 @@ def main():
                             use_cached_info = True
                             print("Note: Using cached cooling info (QHY ASCOM driver workaround)")
                         
-                        if use_cached_info:
-                            cooling_info_status = camera.get_cached_cooling_info()
-                        else:
-                            cooling_info_status = camera.get_cooling_info()
+                        # Use the smart method that automatically chooses the best approach
+                        cooling_info_status = camera.get_smart_cooling_info()
                             
                         if cooling_info_status.is_success:
                             info = cooling_info_status.data

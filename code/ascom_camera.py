@@ -309,6 +309,50 @@ class ASCOMCamera:
             # Fallback to ASCOM values if no cache available
             return self.get_cooling_info()
 
+    def get_smart_cooling_info(self) -> CameraStatus:
+        """Get cooling information using the best available method for this camera.
+        Automatically detects and uses the most reliable method based on driver type.
+        Returns:
+            CameraStatus: Status with cooling information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        try:
+            # Check if this is a QHY camera (known for caching issues)
+            is_qhy = 'QHYCCD' in self.driver_id or 'QHY' in self.driver_id
+            
+            if is_qhy:
+                # For QHY cameras, use cached values if available, otherwise use fresh method
+                if self.last_cooling_info['temperature'] is not None:
+                    self.logger.info("QHY camera detected - using cached cooling info")
+                    return self.get_cached_cooling_info()
+                else:
+                    self.logger.info("QHY camera detected - using fresh cooling info method")
+                    return self.get_fresh_cooling_info()
+            else:
+                # For other cameras, try normal method first, then fresh if needed
+                self.logger.info("Non-QHY camera - trying normal cooling info method")
+                return self.get_cooling_info()
+                
+        except Exception as e:
+            self.logger.warning(f"Smart cooling info failed: {e}, falling back to normal method")
+            return self.get_cooling_info()
+
+    def update_cooling_cache(self, info: dict) -> None:
+        """Update the internal cooling cache with fresh values.
+        Args:
+            info: Dictionary with cooling information
+        """
+        if info and isinstance(info, dict):
+            self.last_cooling_info.update({
+                'temperature': info.get('temperature'),
+                'cooler_power': info.get('cooler_power'),
+                'cooler_on': info.get('cooler_on'),
+                'target_temperature': info.get('target_temperature')
+            })
+            self.logger.debug(f"Updated cooling cache: {self.last_cooling_info}")
+
     def has_filter_wheel(self) -> bool:
         return hasattr(self.camera, 'FilterNames')
 
