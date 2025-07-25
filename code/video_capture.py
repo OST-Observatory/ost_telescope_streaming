@@ -13,7 +13,7 @@ from typing import Optional, Tuple, Dict, Any
 import logging
 
 # Import configuration
-from config_manager import config as default_config
+from config_manager import ConfigManager
 from exceptions import CameraError, FileError
 from status import CameraStatus, success_status, error_status, warning_status
 from ascom_camera import ASCOMCamera
@@ -29,6 +29,7 @@ class VideoCapture:
         self.frame_lock = threading.Lock()
         
         # Load configuration
+        default_config = ConfigManager()
         self.config = config or default_config
         
         # Use provided logger or get logger with proper name

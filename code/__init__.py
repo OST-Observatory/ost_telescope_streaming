@@ -26,7 +26,6 @@ __author__ = "OST Telescope Streaming Team"
 
 # Import main classes for easy access
 try:
-    from .config_manager import config
     from .video_capture import VideoCapture
     from .video_processor import VideoProcessor
     from .plate_solver import PlateSolve2
@@ -37,6 +36,23 @@ try:
     from .ascom_camera import ASCOMCamera
     from .exceptions import TelescopeStreamingError
     from .status import Status, CameraStatus, MountStatus
+    
+    # Create default config instance only when explicitly requested
+    # This prevents automatic loading of config.yaml during import
+    def get_default_config():
+        """Get the default configuration instance."""
+        from .config_manager import ConfigManager
+        return ConfigManager()
+    
+    # Lazy config instance - only created when accessed
+    _default_config = None
+    def get_config():
+        """Get the default configuration instance (lazy loading)."""
+        global _default_config
+        if _default_config is None:
+            _default_config = get_default_config()
+        return _default_config
+    
 except ImportError:
     # Allow partial imports for development
     pass 

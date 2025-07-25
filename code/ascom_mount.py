@@ -4,9 +4,6 @@ import sys
 import platform
 import logging
 
-# Import configuration
-from config_manager import config
-
 # Import exceptions and status
 from exceptions import MountError, ConnectionError, ValidationError
 from status import MountStatus, success_status, error_status, warning_status
@@ -32,7 +29,8 @@ class ASCOMMount:
             MountError: Wenn ASCOM nicht verfügbar ist.
             ConnectionError: Wenn die Verbindung fehlschlägt.
         """
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.logger = logger or logging.getLogger(__name__)
         self.config = config or default_config

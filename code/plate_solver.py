@@ -13,8 +13,7 @@ from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-# Import configuration
-from config_manager import config
+
 from exceptions import PlateSolveError, FileError
 from status import PlateSolveStatus, success_status, error_status, warning_status
 
@@ -45,7 +44,8 @@ class PlateSolveResult:
 class PlateSolver(ABC):
     """Abstrakte Basisklasse für Plate-Solving-Engines."""
     def __init__(self, config=None, logger=None):
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(self.__class__.__name__)

@@ -14,15 +14,15 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import re
 
-# Import configuration
-from config_manager import config
+
 from exceptions import PlateSolveError, FileError
 from status import PlateSolveStatus, success_status, error_status, warning_status
 
 class PlateSolve2Automated:
     """Automated PlateSolve 2 integration with correct command line format."""
     def __init__(self, config=None, logger=None):
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)

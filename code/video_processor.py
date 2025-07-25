@@ -14,7 +14,7 @@ from datetime import datetime
 # Import local modules
 from video_capture import VideoCapture
 from plate_solver import PlateSolverFactory, PlateSolveResult
-from config_manager import config
+
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
 
@@ -22,7 +22,8 @@ class VideoProcessor:
     """Koordiniert Videoaufnahme und Plate-Solving-Operationen."""
     def __init__(self, config=None, logger=None) -> None:
         """Initialisiert den VideoProcessor."""
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)

@@ -10,7 +10,8 @@ from typing import Optional, Any
 
 class ASCOMCamera:
     def __init__(self, driver_id: str, config=None, logger=None):
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.config = config or default_config
         

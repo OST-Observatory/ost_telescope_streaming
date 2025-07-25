@@ -8,8 +8,6 @@ from datetime import datetime
 import logging
 from typing import Optional, Tuple
 
-# Import configuration
-from config_manager import config
 
 # Import with error handling
 try:
@@ -38,7 +36,8 @@ from status import MountStatus, OverlayStatus, success_status, error_status, war
 
 class OverlayRunner:
     def __init__(self, config=None, logger=None):
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.logger = logger or logging.getLogger(__name__)
         self.config = config or default_config

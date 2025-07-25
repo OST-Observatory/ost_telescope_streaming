@@ -10,8 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, Tuple, List, Dict, Any
 import logging
 
-# Import configuration
-from config_manager import config
+
 from exceptions import OverlayError, FileError
 from status import OverlayStatus, success_status, error_status, warning_status
 
@@ -20,7 +19,8 @@ class OverlayGenerator:
     
     def __init__(self, config=None, logger=None):
         """Initialize the overlay generator with configuration."""
-        from config_manager import config as default_config
+        from config_manager import ConfigManager
+        default_config = ConfigManager()
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
