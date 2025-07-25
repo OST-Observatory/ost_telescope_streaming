@@ -174,7 +174,7 @@ def main():
     config, logger, driver_id = setup_test_environment()
     
     # Print test header
-    print_test_header("ASCOM Camera Cooling Cache Test", driver_id, config.config_file)
+    print_test_header("ASCOM Camera Cooling Cache Test", driver_id, config.config_path)
     print("Note: This test requires an ASCOM camera with cooling support")
     
     try:

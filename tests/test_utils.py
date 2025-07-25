@@ -103,7 +103,7 @@ def setup_test_environment(args=None):
     # Get configuration
     try:
         config = get_test_config(args.config)
-        logger.info(f"Configuration loaded from: {config.config_file}")
+        logger.info(f"Configuration loaded from: {config.config_path}")
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
         raise
@@ -118,21 +118,21 @@ def setup_test_environment(args=None):
     
     return config, logger, driver_id
 
-def print_test_header(test_name, driver_id=None, config_file=None):
+def print_test_header(test_name, driver_id=None, config_path=None):
     """Print a formatted test header.
     
     Args:
         test_name: Name of the test
         driver_id: Optional ASCOM driver ID to display
-        config_file: Optional config file path to display
+        config_path: Optional config file path to display
     """
     print("=" * 60)
     print(f"TEST: {test_name}")
     print("=" * 60)
     if driver_id:
         print(f"ASCOM Driver: {driver_id}")
-    if config_file:
-        print(f"Config File: {config_file}")
+    if config_path:
+        print(f"Config File: {config_path}")
     print()
 
 def print_test_result(success, message):

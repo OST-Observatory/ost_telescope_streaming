@@ -20,7 +20,7 @@ def test_cache_debug():
     config, logger, driver_id = setup_test_environment()
     
     # Print test header
-    print_test_header("Cache Debug Test", driver_id, config.config_file)
+    print_test_header("Cache Debug Test", driver_id, config.config_path)
     
     # Get cache file path
     cache_file = get_cache_file_path(driver_id)
