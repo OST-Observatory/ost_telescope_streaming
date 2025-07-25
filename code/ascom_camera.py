@@ -38,6 +38,7 @@ class ASCOMCamera:
         """Load cooling cache from persistent storage."""
         try:
             import json
+            import os
             if os.path.exists(self.cache_file):
                 with open(self.cache_file, 'r') as f:
                     cached_data = json.load(f)
