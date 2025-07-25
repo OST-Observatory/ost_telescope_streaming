@@ -84,15 +84,19 @@ def test_automated_platesolve2() -> bool:
         
         print(f"Result: {result}")
         
-        if result['success']:
+        if result.is_success:
+            # Extract data from the status object
+            result_data = result.data
+            solving_time = result.details.get('solving_time', 0) if result.details else 0
+            
             print(f"✓ Plate solving successful!")
-            print(f"✓ Solved RA: {result['ra_center']:.4f}°")
-            print(f"✓ Solved Dec: {result['dec_center']:.4f}°")
-            print(f"✓ Solving time: {result['solving_time']:.1f}s")
+            print(f"✓ Solved RA: {result_data.get('ra_center', 0):.4f}°")
+            print(f"✓ Solved Dec: {result_data.get('dec_center', 0):.4f}°")
+            print(f"✓ Solving time: {solving_time:.1f}s")
             
             # Check accuracy (should be within reasonable bounds)
-            ra_diff = abs(result['ra_center'] - known_ra)
-            dec_diff = abs(result['dec_center'] - known_dec)
+            ra_diff = abs(result_data.get('ra_center', 0) - known_ra)
+            dec_diff = abs(result_data.get('dec_center', 0) - known_dec)
             
             # Accept differences up to 0.1 degrees (6 arcminutes)
             max_diff = 0.1
@@ -106,7 +110,7 @@ def test_automated_platesolve2() -> bool:
                 print(f"⚠ Acceptable range: ±{max_diff}°")
                 return False
         else:
-            print(f"✗ Plate solving failed: {result['error_message']}")
+            print(f"✗ Plate solving failed: {result.message}")
             return False
             
     except Exception as e:
