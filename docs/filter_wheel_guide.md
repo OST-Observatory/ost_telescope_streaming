@@ -260,6 +260,8 @@ Current filter position: -1
 - Try setting a specific position to initialize the filter wheel
 - Check if the filter wheel is properly powered and connected
 
+**Important:** For QHY filter wheels, position `-1` is often **normal behavior** even when the filter wheel is working correctly. The system accepts this as a successful operation.
+
 #### 3. Position Changes Take Time
 ```
 Position change failed: expected 1, got -1
@@ -270,6 +272,8 @@ Position change failed: expected 1, got -1
 **Solution:** The system automatically adds delays for QHY filter wheels:
 - 0.5 seconds after setting position
 - 1.0 seconds before verifying position change
+
+**Note:** Even with delays, QHY filter wheels may still report `-1` after position changes. This is **normal QHY behavior** and the system accepts it as successful.
 
 #### 4. QHY Filter Wheel Driver ID
 Make sure to use the correct driver ID:

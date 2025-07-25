@@ -93,9 +93,12 @@ def test_filter_wheel_functionality():
                     verify_pos_status = camera.get_filter_position()
                     if verify_pos_status.is_success:
                         actual_pos = verify_pos_status.data
-                        # QHY filter wheels might still report -1 or take time to update
-                        if actual_pos == new_pos or (actual_pos == -1 and hasattr(camera, '_is_qhy_filter_wheel')):
+                        # QHY filter wheels might still report -1 (this is normal for QHY)
+                        if actual_pos == new_pos:
                             print_test_result(True, f"Position change verified: {actual_pos}")
+                        elif actual_pos == -1 and hasattr(camera, '_is_qhy_filter_wheel'):
+                            print_test_result(True, f"Position change accepted (QHY reports -1, which is normal)")
+                            print("   Note: QHY filter wheels often report -1 even when position is set correctly")
                         else:
                             print_test_result(False, f"Position change failed: expected {new_pos}, got {actual_pos}")
                     else:

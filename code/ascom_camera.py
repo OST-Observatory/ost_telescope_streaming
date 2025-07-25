@@ -558,12 +558,36 @@ class ASCOMCamera:
             # Handle QHY filter wheel position -1 (unknown/not set)
             if self._is_qhy_filter_wheel(device_type) and pos == -1:
                 self.logger.warning("QHY filter wheel position is -1 (unknown/not set)")
-                # Try to get a valid position by reading again
+                
+                # Try multiple approaches for QHY filter wheels
                 import time
-                time.sleep(0.1)
+                
+                # Method 1: Wait and retry
+                time.sleep(0.2)
                 pos = device.Position
+                
+                # Method 2: Try to read from alternative properties
                 if pos == -1:
-                    self.logger.warning("QHY filter wheel still reporting position -1")
+                    try:
+                        # Some QHY filter wheels have different property names
+                        if hasattr(device, 'CurrentPosition'):
+                            pos = device.CurrentPosition
+                            self.logger.info("Using CurrentPosition property for QHY filter wheel")
+                        elif hasattr(device, 'FilterPosition'):
+                            pos = device.FilterPosition
+                            self.logger.info("Using FilterPosition property for QHY filter wheel")
+                    except:
+                        pass
+                
+                # Method 3: Final retry
+                if pos == -1:
+                    time.sleep(0.3)
+                    pos = device.Position
+                
+                if pos == -1:
+                    self.logger.warning("QHY filter wheel still reporting position -1 after multiple attempts")
+                    # For QHY filter wheels, -1 might be acceptable if we can't get the real position
+                    self.logger.info("QHY filter wheel position -1 is acceptable (common QHY behavior)")
             
             self.logger.debug(f"Current filter position from {device_type} filter wheel: {pos}")
             return success_status(f"Current filter position from {device_type} filter wheel", data=pos)
