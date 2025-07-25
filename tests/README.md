@@ -55,24 +55,28 @@ python tests/analyze_objects.py --help
 ```bash
 --config, -c PATH    # Custom configuration file path
 --driver DRIVER_ID   # Override ASCOM driver from config
---verbose, -v        # Enable verbose output
---debug, -d          # Enable debug logging
+--verbose, -v        # Enable verbose output (DEBUG level)
+--debug, -d          # Enable debug logging (same as --verbose)
+--quiet, -q          # Enable quiet logging (WARNING level only)
 ```
 
 ### Examples
 
 ```bash
-# Test with QHY camera config
+# Test with QHY camera config (INFO level - default)
 python tests/test_filter_wheel.py --config ../config_ost_qhy600m.yaml
 
-# Test with debug output
+# Test with debug output (all details)
 python tests/test_cooling_cache.py --config test_config_example.yaml --debug
+
+# Test with verbose output (same as debug)
+python tests/test_cooling_cache.py --config test_config_example.yaml --verbose
 
 # Override driver
 python tests/test_ascom_camera.py --config test_config_example.yaml --driver ASCOM.QHYCCD.Camera
 
-# Test with verbose output
-python tests/test_integration.py --config test_config_example.yaml --verbose
+# Test with quiet output (only warnings/errors)
+python tests/test_integration.py --config test_config_example.yaml --quiet
 ```
 
 ## Test Configuration Files
@@ -159,6 +163,37 @@ Centralized utilities for all tests:
 - `print_test_header()` - Print formatted test header
 - `print_test_result()` - Print test results
 
+### Logger Synchronization
+
+All modules in the `code/` directory now have **synchronized logging**:
+
+- ✅ **Consistent Logging Levels** - All modules use the same logging configuration
+- ✅ **Proper Logger Initialization** - Modules accept logger parameter or create proper fallback
+- ✅ **Root Logger Integration** - All loggers respect the root logger configuration
+- ✅ **Debug Output Support** - Debug messages from all modules are visible in tests
+
+**Fixed Modules:**
+- ✅ `ascom_camera.py` - Improved logger initialization
+- ✅ `video_capture.py` - Fixed duplicate logger setup
+- ✅ `video_processor.py` - Already properly configured
+- ✅ `platesolve2_automated.py` - Already properly configured
+- ✅ `overlay_runner.py` - Already properly configured
+- ✅ `generate_overlay.py` - Already properly configured
+- ✅ `plate_solver.py` - Already properly configured
+- ✅ `ascom_mount.py` - Already properly configured
+- ✅ `config_manager.py` - No logger usage
+
+**Example Output with Debug:**
+```bash
+python tests/test_filter_wheel.py --config ../config_ost_qhy600m.yaml --debug
+```
+
+Shows debug messages from:
+- `test_utils` - Test setup and configuration
+- `ascom_camera` - Camera operations and cache management
+- `config_manager` - Configuration loading
+- All other modules as needed
+
 ### Usage in Tests
 
 ```python
@@ -207,12 +242,22 @@ def main():
    python tests/test_video_system.py --test-camera
    ```
 
-### Debug Mode
+### Logging Levels
 
-Enable debug output for detailed information:
+Different logging levels for different needs:
 
 ```bash
+# Default: INFO level (important information)
+python tests/test_filter_wheel.py --config ../config_ost_qhy600m.yaml
+
+# Debug level (all details)
 python tests/test_cache_debug.py --config test_config_example.yaml --debug
+
+# Verbose level (same as debug)
+python tests/test_cache_debug.py --config test_config_example.yaml --verbose
+
+# Quiet level (only warnings/errors)
+python tests/test_integration.py --config test_config_example.yaml --quiet
 ```
 
 ## Best Practices

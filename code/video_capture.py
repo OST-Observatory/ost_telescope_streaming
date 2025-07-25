@@ -30,7 +30,17 @@ class VideoCapture:
         
         # Load configuration
         self.config = config or default_config
-        self.logger = logger or logging.getLogger(__name__)
+        
+        # Use provided logger or get logger with proper name
+        if logger:
+            self.logger = logger
+        else:
+            # Get logger with module name for better identification
+            self.logger = logging.getLogger(__name__)
+            # Ensure logger has proper level if root logger is configured
+            if logging.getLogger().handlers:
+                self.logger.setLevel(logging.getLogger().level)
+        
         self.video_config = self.config.get_video_config()
         self.camera_config = self.config.get_camera_config()
         self.telescope_config = self.config.get_telescope_config()
@@ -64,8 +74,7 @@ class VideoCapture:
         self.capture_enabled = self.config.get_plate_solve_config().get('auto_solve', False)
         self.capture_interval = self.config.get_plate_solve_config().get('min_solve_interval', 60)  # seconds
         
-        # Setup logging
-        self.logger = logging.getLogger(__name__)
+        # Logger is already set up above
         
         self.ascom_camera = None
         

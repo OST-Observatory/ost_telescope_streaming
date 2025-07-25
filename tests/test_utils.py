@@ -15,11 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from config_manager import ConfigManager
 
-def setup_logging(level=logging.DEBUG):
+def setup_logging(level=logging.INFO):
     """Setup logging for tests.
     
     Args:
-        level: Logging level (default: DEBUG)
+        level: Logging level (default: INFO)
     
     Returns:
         Logger instance
@@ -94,9 +94,11 @@ def parse_test_args(description="Test script"):
     parser.add_argument("--driver", "-d",
                        help="ASCOM driver ID (overrides config)")
     parser.add_argument("--verbose", "-v", action="store_true",
-                       help="Enable verbose logging")
+                       help="Enable verbose logging (DEBUG level)")
     parser.add_argument("--debug", action="store_true",
-                       help="Enable debug logging")
+                       help="Enable debug logging (same as --verbose)")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                       help="Enable quiet logging (WARNING level only)")
     return parser.parse_args()
 
 def setup_test_environment(args=None):
@@ -112,12 +114,12 @@ def setup_test_environment(args=None):
         args = parse_test_args()
     
     # Setup logging
-    if args.debug:
+    if args.debug or args.verbose:
         logger = setup_logging(logging.DEBUG)
-    elif args.verbose:
-        logger = setup_logging(logging.INFO)
-    else:
+    elif args.quiet:
         logger = setup_logging(logging.WARNING)
+    else:
+        logger = setup_logging(logging.INFO)  # Default: INFO level
     
     # Get configuration
     try:

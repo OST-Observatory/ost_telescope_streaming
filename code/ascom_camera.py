@@ -338,13 +338,6 @@ class ASCOMCamera:
             # Check target temperature
             info['target_temperature'] = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
             
-            # Log the readings for debugging
-            print(f"DEBUG: Temperature readings: {temp_reads}")
-            if hasattr(self.camera, 'CoolerPower'):
-                print(f"DEBUG: Cooler power readings: {power_reads}")
-            if hasattr(self.camera, 'CoolerOn'):
-                print(f"DEBUG: Cooler on readings: {cooler_on_reads}")
-            
             return success_status("Cooling information retrieved", data=info)
         except Exception as e:
             return error_status(f"Failed to get cooling info: {e}")
@@ -380,7 +373,7 @@ class ASCOMCamera:
             info['target_temperature'] = current_target
             info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
             
-            print(f"DEBUG: Fresh cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
+            self.logger.debug(f"Fresh cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
             
             return success_status("Fresh cooling information retrieved", data=info)
         except Exception as e:
@@ -398,7 +391,7 @@ class ASCOMCamera:
         if self.last_cooling_info['temperature'] is not None:
             info = self.last_cooling_info.copy()
             info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
-            print(f"DEBUG: Using cached cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
+            self.logger.debug(f"Using cached cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
             return success_status("Cached cooling information retrieved", data=info)
         else:
             # Fallback to ASCOM values if no cache available
