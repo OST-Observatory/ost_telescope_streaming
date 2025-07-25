@@ -236,6 +236,51 @@ Warning: Filter wheel connection failed: ...
 - Verify position is within valid range
 - Check for mechanical issues
 
+### QHY-Specific Issues
+
+#### 1. Filter Names Not Available
+```
+❌ Failed to get filter names: ASCOM.QHYCFW.FilterWheel.FilterNames
+```
+
+**Cause:** QHY filter wheels sometimes don't expose the `FilterNames` property properly.
+
+**Solution:** The system automatically falls back to default QHY filter names:
+- `['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clear']`
+
+#### 2. Filter Position Reports -1
+```
+Current filter position: -1
+```
+
+**Cause:** QHY filter wheels report `-1` when the position is unknown or not properly initialized.
+
+**Solutions:**
+- The system automatically handles this by retrying the position read
+- Try setting a specific position to initialize the filter wheel
+- Check if the filter wheel is properly powered and connected
+
+#### 3. Position Changes Take Time
+```
+Position change failed: expected 1, got -1
+```
+
+**Cause:** QHY filter wheels need time to settle after position changes.
+
+**Solution:** The system automatically adds delays for QHY filter wheels:
+- 0.5 seconds after setting position
+- 1.0 seconds before verifying position change
+
+#### 4. QHY Filter Wheel Driver ID
+Make sure to use the correct driver ID:
+```yaml
+# Correct QHY filter wheel driver
+filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"
+
+# Alternative (older QHY drivers)
+filter_wheel_driver: "ASCOM.QHYCCD.FilterWheel"
+```
+
 ### Debug Mode
 
 Use debug mode for detailed information:

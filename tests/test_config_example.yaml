@@ -59,6 +59,8 @@ video:
     exposure_time: 0.1  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
     binning: 2  # Binning factor (1x1, 2x2, etc.)
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras)
+    # filter_wheel_driver: "ASCOM.QHYCCD.FilterWheel"  # Uncomment and set if needed
 
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames

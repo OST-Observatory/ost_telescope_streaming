@@ -476,6 +476,12 @@ class ASCOMCamera:
         
         return None, None
 
+    def _is_qhy_filter_wheel(self, device_type: str) -> bool:
+        """Check if this is a QHY filter wheel."""
+        return (device_type == "separate" and 
+                self.filter_wheel_driver_id and 
+                ('QHY' in self.filter_wheel_driver_id or 'QHYCFW' in self.filter_wheel_driver_id))
+
     def get_filter_names(self) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
@@ -485,9 +491,24 @@ class ASCOMCamera:
             return error_status("No filter wheel device available")
         
         try:
-            names = list(device.FilterNames)
-            self.logger.debug(f"Filter names retrieved from {device_type} filter wheel")
-            return success_status(f"Filter names retrieved from {device_type} filter wheel", data=names)
+            # Handle QHY filter wheels differently
+            if self._is_qhy_filter_wheel(device_type):
+                # QHY filter wheels might not have FilterNames property
+                # Try alternative properties or return default names
+                try:
+                    names = list(device.FilterNames)
+                except:
+                    # QHY default filter names (common setup)
+                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clear']
+                    self.logger.info("Using default QHY filter names")
+                
+                self.logger.debug(f"Filter names retrieved from QHY filter wheel: {names}")
+                return success_status(f"Filter names retrieved from QHY filter wheel", data=names)
+            else:
+                # Standard ASCOM filter wheel
+                names = list(device.FilterNames)
+                self.logger.debug(f"Filter names retrieved from {device_type} filter wheel")
+                return success_status(f"Filter names retrieved from {device_type} filter wheel", data=names)
         except Exception as e:
             return error_status(f"Failed to get filter names from {device_type} filter wheel: {e}")
 
@@ -500,9 +521,26 @@ class ASCOMCamera:
             return error_status("No filter wheel device available")
         
         try:
-            device.Position = position
-            self.logger.info(f"Filter position set to {position} on {device_type} filter wheel")
-            return success_status(f"Filter position set to {position} on {device_type} filter wheel")
+            # Handle QHY filter wheels with position validation
+            if self._is_qhy_filter_wheel(device_type):
+                # QHY filter wheels might need position validation
+                if position < 0:
+                    return error_status(f"Invalid filter position for QHY filter wheel: {position}")
+                
+                # Set position
+                device.Position = position
+                
+                # Wait a bit for QHY filter wheel to settle
+                import time
+                time.sleep(0.5)
+                
+                self.logger.info(f"Filter position set to {position} on QHY filter wheel")
+                return success_status(f"Filter position set to {position} on QHY filter wheel")
+            else:
+                # Standard ASCOM filter wheel
+                device.Position = position
+                self.logger.info(f"Filter position set to {position} on {device_type} filter wheel")
+                return success_status(f"Filter position set to {position} on {device_type} filter wheel")
         except Exception as e:
             return error_status(f"Failed to set filter position on {device_type} filter wheel: {e}")
 
@@ -516,6 +554,17 @@ class ASCOMCamera:
         
         try:
             pos = device.Position
+            
+            # Handle QHY filter wheel position -1 (unknown/not set)
+            if self._is_qhy_filter_wheel(device_type) and pos == -1:
+                self.logger.warning("QHY filter wheel position is -1 (unknown/not set)")
+                # Try to get a valid position by reading again
+                import time
+                time.sleep(0.1)
+                pos = device.Position
+                if pos == -1:
+                    self.logger.warning("QHY filter wheel still reporting position -1")
+            
             self.logger.debug(f"Current filter position from {device_type} filter wheel: {pos}")
             return success_status(f"Current filter position from {device_type} filter wheel", data=pos)
         except Exception as e:
