@@ -40,6 +40,11 @@ def get_test_config(config_path=None):
         ConfigManager instance
     """
     if config_path:
+        # Make relative paths relative to tests directory
+        if not os.path.isabs(config_path):
+            tests_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(tests_dir, config_path)
+        
         # Use custom config file
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file not found: {config_path}")
