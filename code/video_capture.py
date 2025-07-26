@@ -66,6 +66,12 @@ class VideoCapture:
             self.ascom_driver = cam_cfg.get('ascom_driver', None)
             self.exposure_time = cam_cfg.get('exposure_time', 0.1)
             self.gain = cam_cfg.get('gain', 1.0)
+            # Set default values for ASCOM cameras
+            self.camera_index = None  # ASCOM cameras don't use camera_index
+            self.frame_width = 1920   # Will be updated from camera
+            self.frame_height = 1080  # Will be updated from camera
+            self.fps = 1              # ASCOM cameras typically use 1 FPS for long exposures
+            self.auto_exposure = False # ASCOM cameras use manual exposure
         # Remove any remaining German comments and ensure all are in English
         
         # Telescope parameters for FOV calculation
@@ -126,6 +132,19 @@ class VideoCapture:
             status = cam.connect()
             if status.is_success:
                 self.ascom_camera = cam
+                
+                # Get actual camera dimensions from ASCOM camera
+                try:
+                    camera_info = cam.get_camera_info()
+                    if camera_info and 'width' in camera_info and 'height' in camera_info:
+                        self.frame_width = camera_info['width']
+                        self.frame_height = camera_info['height']
+                        self.logger.info(f"ASCOM camera dimensions: {self.frame_width}x{self.frame_height}")
+                    else:
+                        self.logger.warning("Could not get camera dimensions from ASCOM camera, using defaults")
+                except Exception as e:
+                    self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
+                
                 self.logger.info("ASCOM camera connected")
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
@@ -170,9 +189,14 @@ class VideoCapture:
     
     def disconnect(self):
         """Disconnects from the video camera."""
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        if self.camera_type == 'ascom':
+            if self.ascom_camera:
+                self.ascom_camera.disconnect()
+                self.ascom_camera = None
+        else:
+            if self.cap:
+                self.cap.release()
+                self.cap = None
         self.is_capturing = False
         self.logger.info("Camera disconnected")
     
@@ -181,14 +205,23 @@ class VideoCapture:
         Returns:
             CameraStatus: Status object with start information or error.
         """
-        if not self.cap or not self.cap.isOpened():
-            if not self.connect():
-                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+        if self.camera_type == 'ascom':
+            # For ASCOM cameras, just ensure connection
+            if not self.ascom_camera:
+                connect_status = self.connect()
+                if not connect_status.is_success:
+                    return error_status("Failed to connect to ASCOM camera", details={'driver': self.ascom_driver})
+        else:
+            # For OpenCV cameras, check cap object
+            if not self.cap or not self.cap.isOpened():
+                if not self.connect():
+                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+        
         self.is_capturing = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
         self.logger.info("Video capture started")
-        return success_status("Video capture started", details={'camera_index': self.camera_index, 'is_capturing': True})
+        return success_status("Video capture started", details={'camera_type': self.camera_type, 'is_capturing': True})
     
     def stop_capture(self) -> CameraStatus:
         """Stops continuous frame capture.
@@ -199,7 +232,7 @@ class VideoCapture:
         if hasattr(self, 'capture_thread'):
             self.capture_thread.join(timeout=2.0)
         self.logger.info("Video capture stopped")
-        return success_status("Video capture stopped", details={'camera_index': self.camera_index, 'is_capturing': False})
+        return success_status("Video capture stopped", details={'camera_type': self.camera_type, 'is_capturing': False})
     
     def _capture_loop(self) -> None:
         """Background thread for continuous frame capture."""
