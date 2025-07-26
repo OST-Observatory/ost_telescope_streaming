@@ -8,6 +8,7 @@ import subprocess
 import os
 import time
 import logging
+import math
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
@@ -110,15 +111,57 @@ class PlateSolve2Solver(PlateSolver):
             # Try automated solving first if available
             if self.automated_available and self.automated_solver:
                 self.logger.info("Attempting automated PlateSolve 2 solving")
-                automated_result = self.automated_solver.solve(image_path)
-                if automated_result['success']:
+                
+                # Get current mount coordinates if available
+                ra_deg = None
+                dec_deg = None
+                try:
+                    # Try to get coordinates from mount if available
+                    from ascom_mount import ASCOMMount
+                    mount = ASCOMMount(config=self.config, logger=self.logger)
+                    mount_status = mount.get_coordinates()
+                    if mount_status.is_success:
+                        ra_deg, dec_deg = mount_status.data
+                        self.logger.info(f"Using mount coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
+                    else:
+                        self.logger.warning(f"Could not get mount coordinates: {mount_status.message}")
+                except Exception as e:
+                    self.logger.warning(f"Could not get mount coordinates: {e}")
+                
+                # Get FOV from config
+                fov_width_deg = None
+                fov_height_deg = None
+                try:
+                    telescope_config = self.config.get_telescope_config()
+                    camera_config = self.config.get_camera_config()
+                    focal_length = telescope_config.get('focal_length', 1000)
+                    sensor_width = camera_config.get('sensor_width', 6.17)
+                    sensor_height = camera_config.get('sensor_height', 4.55)
+                    
+                    # Calculate FOV in degrees
+                    fov_width_deg = math.degrees(2 * math.atan(sensor_width / (2 * focal_length)))
+                    fov_height_deg = math.degrees(2 * math.atan(sensor_height / (2 * focal_length)))
+                    
+                    self.logger.info(f"Calculated FOV: {fov_width_deg:.4f}° x {fov_height_deg:.4f}° (focal={focal_length}mm, sensor={sensor_width}x{sensor_height}mm)")
+                except Exception as e:
+                    self.logger.warning(f"Could not calculate FOV: {e}")
+                
+                automated_result = self.automated_solver.solve(
+                    image_path, 
+                    ra_deg=ra_deg, 
+                    dec_deg=dec_deg,
+                    fov_width_deg=fov_width_deg,
+                    fov_height_deg=fov_height_deg
+                )
+                
+                if automated_result.is_success:
                     return success_status(
                         "Automated solving successful",
-                        data=automated_result,
-                        details={'method': 'automated', 'solving_time': automated_result.get('solving_time')}
+                        data=automated_result.data,
+                        details={'method': 'automated', 'solving_time': automated_result.details.get('solving_time')}
                     )
                 else:
-                    self.logger.warning(f"Automated solving failed: {automated_result['error_message']}")
+                    self.logger.warning(f"Automated solving failed: {automated_result.message}")
                     self.logger.info("Falling back to GUI mode")
             
             # Fall back to GUI mode (CLI mode removed as it doesn't work)

@@ -470,6 +470,24 @@ class VideoCapture:
             # Log the data properties for debugging
             self.logger.debug(f"ASCOM FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
             
+            # Ensure data is in a format that PlateSolve 2 can read
+            # PlateSolve 2 prefers 16-bit or 32-bit integer data
+            if image_data.dtype == np.int32:
+                # Keep as int32 (PlateSolve 2 should handle this)
+                pass
+            elif image_data.dtype == np.int16:
+                # Keep as int16
+                pass
+            elif image_data.dtype == np.uint16:
+                # Convert uint16 to int16 for better compatibility
+                image_data = image_data.astype(np.int16)
+            elif image_data.dtype == np.uint8:
+                # Convert uint8 to int16
+                image_data = image_data.astype(np.int16)
+            else:
+                # Convert other types to int16
+                image_data = image_data.astype(np.int16)
+            
             # Create FITS header with astronomical information
             header = fits.Header()
             
