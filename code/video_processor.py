@@ -88,7 +88,7 @@ class VideoProcessor:
         # Initialize video capture
         if self.video_enabled:
             try:
-                self.video_capture = VideoCapture()
+                self.video_capture = VideoCapture(config=self.config, logger=self.logger)
                 if self.video_capture.connect():
                     self.logger.info("Video capture initialized")
                 else:
@@ -101,7 +101,7 @@ class VideoProcessor:
         # Initialize plate solver
         if self.auto_solve:
             try:
-                self.plate_solver = PlateSolverFactory.create_solver(self.solver_type)
+                self.plate_solver = PlateSolverFactory.create_solver(self.solver_type, config=self.config, logger=self.logger)
                 if self.plate_solver and self.plate_solver.is_available():
                     self.logger.info(f"Plate solver initialized: {self.plate_solver.get_name()}")
                 else:

@@ -83,7 +83,7 @@ class PlateSolve2Solver(PlateSolver):
         self.max_stars: int = ps2_cfg.get('max_stars', 200)
         try:
             from platesolve2_automated import PlateSolve2Automated
-            self.automated_solver = PlateSolve2Automated()
+            self.automated_solver = PlateSolve2Automated(config=self.config, logger=self.logger)
             self.automated_available: bool = True
             self.logger.info("Automated PlateSolve 2 solver available")
         except ImportError:
@@ -195,25 +195,33 @@ class AstrometryNetSolver(PlateSolver):
 class PlateSolverFactory:
     """Factory für Plate-Solver-Instanzen."""
     @staticmethod
-    def create_solver(solver_type: Optional[str] = None) -> Optional[PlateSolver]:
+    def create_solver(solver_type: Optional[str] = None, config=None, logger=None) -> Optional[PlateSolver]:
         """Erzeugt eine PlateSolver-Instanz."""
         if solver_type is None:
-            solver_type = config.get_plate_solve_config().get('default_solver', 'platesolve2')
+            if config:
+                solver_type = config.get_plate_solve_config().get('default_solver', 'platesolve2')
+            else:
+                from config_manager import ConfigManager
+                default_config = ConfigManager()
+                solver_type = default_config.get_plate_solve_config().get('default_solver', 'platesolve2')
         solvers = {
             'platesolve2': PlateSolve2Solver,
             'astrometry': AstrometryNetSolver,
         }
         solver_class = solvers.get(solver_type.lower())
         if solver_class:
-            return solver_class()
+            return solver_class(config=config, logger=logger)
         else:
-            logging.error(f"Unknown solver type: {solver_type}")
+            if logger:
+                logger.error(f"Unknown solver type: {solver_type}")
+            else:
+                logging.error(f"Unknown solver type: {solver_type}")
             return None
     @staticmethod
-    def get_available_solvers() -> Dict[str, bool]:
+    def get_available_solvers(config=None, logger=None) -> Dict[str, bool]:
         """Gibt eine Liste verfügbarer Solver zurück."""
         solvers = {
-            'platesolve2': PlateSolve2Solver(),
-            'astrometry': AstrometryNetSolver(),
+            'platesolve2': PlateSolve2Solver(config=config, logger=logger),
+            'astrometry': AstrometryNetSolver(config=config, logger=logger),
         }
         return {name: solver.is_available() for name, solver in solvers.items()} 

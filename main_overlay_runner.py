@@ -24,7 +24,25 @@ def main():
     
     print("OST Telescope Streaming - Overlay Runner")
     print("=" * 50)
+    
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True
+    )
+    
+    # Get logger for overlay runner
     logger = logging.getLogger("overlay_runner_cli")
+    
+    # Set logger level from config if available
+    try:
+        log_config = config.get('logging', {})
+        log_level = log_config.get('level', 'INFO')
+        logger.setLevel(getattr(logging, log_level.upper()))
+    except Exception as e:
+        print(f"Warning: Could not set log level from config: {e}")
+    
     runner = OverlayRunner(config=config, logger=logger)
     runner.run()
 

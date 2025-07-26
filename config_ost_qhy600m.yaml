@@ -66,7 +66,7 @@ video:
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  file_format: "png"  # File format for saved frames (jpg, png, tiff, etc.)
+  file_format: "jpg"  # File format for saved frames (jpg, png, tiff, etc.)
 
 # Plate-Solving Settings
 # ----------------------
