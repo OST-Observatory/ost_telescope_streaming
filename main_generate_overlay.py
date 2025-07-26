@@ -5,12 +5,26 @@ from pathlib import Path
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
-from config_manager import config
+from config_manager import ConfigManager
 from generate_overlay import OverlayGenerator
 import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Generates an overlay based on RA/Dec.")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    
+    # Parse config argument first to load the right configuration
+    args, remaining = parser.parse_known_args()
+    
+    # Load configuration
+    if args.config:
+        config = ConfigManager(config_path=args.config)
+    else:
+        config = ConfigManager()
+    
+    # Recreate parser with the loaded configuration defaults
+    parser = argparse.ArgumentParser(description="Generates an overlay based on RA/Dec.")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
     parser.add_argument("--ra", type=float, required=True, help="Right Ascension in degrees")
     parser.add_argument("--dec", type=float, required=True, help="Declination in degrees")
     parser.add_argument("--output", type=str, help="Output file (default: from config)")

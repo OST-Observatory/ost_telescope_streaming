@@ -5,12 +5,23 @@ from pathlib import Path
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
-from config_manager import config
+from config_manager import ConfigManager
 from ascom_mount import ASCOMMount
 import argparse
 import time
 
 def main():
+    parser = argparse.ArgumentParser(description="ASCOM mount control")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    
+    # Parse config argument first to load the right configuration
+    args, remaining = parser.parse_known_args()
+    
+    # Load configuration
+    if args.config:
+        config = ConfigManager(config_path=args.config)
+    else:
+        config = ConfigManager()
     logger = logging.getLogger("ascom_mount_cli")
     try:
         with ASCOMMount(config=config, logger=logger) as mount:

@@ -71,7 +71,7 @@ class OverlayRunner:
         # Initialize overlay generator if available
         if OVERLAY_AVAILABLE:
             try:
-                self.overlay_generator = OverlayGenerator()
+                self.overlay_generator = OverlayGenerator(config=self.config, logger=self.logger)
                 self.logger.info("Overlay generator initialized")
             except Exception as e:
                 self.logger.warning(f"Failed to initialize overlay generator: {e}")
@@ -183,49 +183,132 @@ class OverlayRunner:
             return
             
         try:
-            self.mount = ASCOMMount()
-            self.logger.info("Overlay Runner started")
-            self.logger.info(f"Update interval: {self.update_interval} seconds")
-            
-            # Initialize video processor if available and enabled
-            if VIDEO_AVAILABLE and self.video_enabled:
-                try:
-                    self.video_processor = VideoProcessor()
-                    
-                    # Set up callbacks
-                    def on_solve_result(result):
-                        self.last_solve_result = result
-                        self.logger.info(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
-                    
-                    def on_error(error):
-                        self.logger.error(f"Video processing error: {error}")
-                    
-                    self.video_processor.set_callbacks(
-                        on_solve_result=on_solve_result,
-                        on_error=on_error
-                    )
-                    
-                    if self.video_processor.start():
-                        self.logger.info("Video processor started")
-                    else:
-                        self.logger.error("Failed to start video processor")
+            with ASCOMMount(config=self.config, logger=self.logger) as self.mount:
+                self.logger.info("Overlay Runner started")
+                self.logger.info(f"Update interval: {self.update_interval} seconds")
+                
+                # Initialize video processor if available and enabled
+                if VIDEO_AVAILABLE and self.video_enabled:
+                    try:
+                        self.video_processor = VideoProcessor(config=self.config, logger=self.logger)
+                        
+                        # Set up callbacks
+                        def on_solve_result(result):
+                            self.last_solve_result = result
+                            self.logger.info(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
+                        
+                        def on_error(error):
+                            self.logger.error(f"Video processing error: {error}")
+                        
+                        self.video_processor.set_callbacks(
+                            on_solve_result=on_solve_result,
+                            on_error=on_error
+                        )
+                        
+                        start_status = self.video_processor.start()
+                        if start_status.is_success:
+                            self.logger.info("Video processor started")
+                        else:
+                            self.logger.error(f"Failed to start video processor: {start_status.message}")
+                            self.video_processor = None
+                    except Exception as e:
+                        self.logger.error(f"Error initializing video processor: {e}")
                         self.video_processor = None
-                except Exception as e:
-                    self.logger.error(f"Error initializing video processor: {e}")
-                    self.video_processor = None
-            else:
-                self.logger.info("Video processing disabled or not available")
-            
-            consecutive_failures = 0
-            
-            while self.running:
-                try:
-                    # Read coordinates
-                    mount_status = self.mount.get_coordinates()
-                    
-                    if not mount_status.is_success:
+                else:
+                    self.logger.info("Video processing disabled or not available")
+                
+                consecutive_failures = 0
+                
+                while self.running:
+                    try:
+                        # Read coordinates
+                        mount_status = self.mount.get_coordinates()
+                        
+                        if not mount_status.is_success:
+                            consecutive_failures += 1
+                            self.logger.error(f"Failed to get coordinates: {mount_status.message}")
+                            
+                            if consecutive_failures >= self.max_retries:
+                                self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                                break
+                            
+                            self.logger.info(f"Waiting {self.retry_delay} seconds before retry...")
+                            time.sleep(self.retry_delay)
+                            continue
+                        
+                        # Extract coordinates from status
+                        ra_deg, dec_deg = mount_status.data
+                        
+                        # Video processing is handled automatically by the video processor
+                        # Plate-solving results are available via callbacks
+                        
+                        # Wait for plate-solving result if required
+                        if self.wait_for_plate_solve:
+                            self.logger.info("Waiting for plate-solving result before generating overlay...")
+                            while self.last_solve_result is None and self.running:
+                                time.sleep(0.5)
+                            if not self.running:
+                                break
+                            # Use plate-solving results for coordinates and parameters
+                            ra_deg = self.last_solve_result.ra_center
+                            dec_deg = self.last_solve_result.dec_center
+                            fov_width_deg = self.last_solve_result.fov_width
+                            fov_height_deg = self.last_solve_result.fov_height
+                            position_angle_deg = self.last_solve_result.position_angle
+                            image_size = self.last_solve_result.image_size
+                            self.logger.info(f"Using plate-solving results: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°, FOV={fov_width_deg:.3f}°x{fov_height_deg:.3f}°, PA={position_angle_deg:.1f}°")
+                        else:
+                            # Use mount coordinates and default values
+                            fov_width_deg = None
+                            fov_height_deg = None
+                            position_angle_deg = None
+                            image_size = None
+                            # Try to get image size from video config
+                            try:
+                                video_config = self.config.get_video_config()
+                                if video_config.get('camera_type') == 'opencv':
+                                    opencv_config = video_config.get('opencv', {})
+                                    width = opencv_config.get('frame_width', 1920)
+                                    height = opencv_config.get('frame_height', 1080)
+                                    image_size = (width, height)
+                            except Exception as e:
+                                self.logger.warning(f"Could not get image size from config: {e}")
+                        
+                        # Generate output filename
+                        if self.use_timestamps:
+                            timestamp = datetime.now().strftime(self.timestamp_format)
+                            output_file = f"overlay_{timestamp}.png"
+                        else:
+                            output_file = "overlay.png"
+                        
+                        # Create overlay with all available parameters
+                        overlay_status = self.generate_overlay_with_coords(
+                            ra_deg, dec_deg, output_file,
+                            fov_width_deg, fov_height_deg, position_angle_deg, image_size
+                        )
+                        
+                        if overlay_status.is_success:
+                            consecutive_failures = 0
+                            self.logger.info(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
+                        else:
+                            consecutive_failures += 1
+                            self.logger.error(f"Error #{consecutive_failures}: {overlay_status.message}")
+                            
+                            if consecutive_failures >= self.max_retries:
+                                self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
+                                break
+                        
+                        # Wait until next update
+                        if self.running:
+                            self.logger.info(f"Waiting {self.update_interval} seconds...")
+                            time.sleep(self.update_interval)
+                            
+                    except KeyboardInterrupt:
+                        self.logger.info("\nStopped by user.")
+                        break
+                    except Exception as e:
                         consecutive_failures += 1
-                        self.logger.error(f"Failed to get coordinates: {mount_status.message}")
+                        self.logger.error(f"Error in main loop: {e}")
                         
                         if consecutive_failures >= self.max_retries:
                             self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
@@ -233,96 +316,11 @@ class OverlayRunner:
                         
                         self.logger.info(f"Waiting {self.retry_delay} seconds before retry...")
                         time.sleep(self.retry_delay)
-                        continue
-                    
-                    # Extract coordinates from status
-                    ra_deg, dec_deg = mount_status.data
-                    
-                    # Video processing is handled automatically by the video processor
-                    # Plate-solving results are available via callbacks
-                    
-                    # Wait for plate-solving result if required
-                    if self.wait_for_plate_solve:
-                        self.logger.info("Waiting for plate-solving result before generating overlay...")
-                        while self.last_solve_result is None and self.running:
-                            time.sleep(0.5)
-                        if not self.running:
-                            break
-                        # Use plate-solving results for coordinates and parameters
-                        ra_deg = self.last_solve_result.ra_center
-                        dec_deg = self.last_solve_result.dec_center
-                        fov_width_deg = self.last_solve_result.fov_width
-                        fov_height_deg = self.last_solve_result.fov_height
-                        position_angle_deg = self.last_solve_result.position_angle
-                        image_size = self.last_solve_result.image_size
-                        self.logger.info(f"Using plate-solving results: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°, FOV={fov_width_deg:.3f}°x{fov_height_deg:.3f}°, PA={position_angle_deg:.1f}°")
-                    else:
-                        # Use mount coordinates and default values
-                        fov_width_deg = None
-                        fov_height_deg = None
-                        position_angle_deg = None
-                        image_size = None
-                        # Try to get image size from video config
-                        try:
-                            video_config = self.config.get_video_config()
-                            if video_config.get('camera_type') == 'opencv':
-                                opencv_config = video_config.get('opencv', {})
-                                width = opencv_config.get('frame_width', 1920)
-                                height = opencv_config.get('frame_height', 1080)
-                                image_size = (width, height)
-                        except Exception as e:
-                            self.logger.warning(f"Could not get image size from config: {e}")
-                    
-                    # Generate output filename
-                    if self.use_timestamps:
-                        timestamp = datetime.now().strftime(self.timestamp_format)
-                        output_file = f"overlay_{timestamp}.png"
-                    else:
-                        output_file = "overlay.png"
-                    
-                    # Create overlay with all available parameters
-                    overlay_status = self.generate_overlay_with_coords(
-                        ra_deg, dec_deg, output_file,
-                        fov_width_deg, fov_height_deg, position_angle_deg, image_size
-                    )
-                    
-                    if overlay_status.is_success:
-                        consecutive_failures = 0
-                        self.logger.info(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
-                    else:
-                        consecutive_failures += 1
-                        self.logger.error(f"Error #{consecutive_failures}: {overlay_status.message}")
-                        
-                        if consecutive_failures >= self.max_retries:
-                            self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
-                            break
-                    
-                    # Wait until next update
-                    if self.running:
-                        self.logger.info(f"Waiting {self.update_interval} seconds...")
-                        time.sleep(self.update_interval)
-                        
-                except KeyboardInterrupt:
-                    self.logger.info("\nStopped by user.")
-                    break
-                except Exception as e:
-                    consecutive_failures += 1
-                    self.logger.error(f"Error in main loop: {e}")
-                    
-                    if consecutive_failures >= self.max_retries:
-                        self.logger.error(f"Too many consecutive errors ({consecutive_failures}). Exiting.")
-                        break
-                    
-                    self.logger.info(f"Waiting {self.retry_delay} seconds before retry...")
-                    time.sleep(self.retry_delay)
                     
         except Exception as e:
             self.logger.critical(f"Critical error: {e}")
         finally:
-            if self.mount:
-                disconnect_status = self.mount.disconnect()
-                if not disconnect_status.is_success:
-                    self.logger.warning(f"Error during disconnect: {disconnect_status.message}")
+            # ASCOMMount is a context manager, so it will be cleaned up automatically
             if self.video_processor:
                 self.video_processor.stop()
             self.logger.info("Overlay Runner stopped.")

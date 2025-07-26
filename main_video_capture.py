@@ -11,11 +11,23 @@ import argparse
 import sys
 
 def main():
+    parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    
+    # Parse config argument first to load the right configuration
+    args, remaining = parser.parse_known_args()
+    
     # Load configuration
-    config = ConfigManager()
+    if args.config:
+        config = ConfigManager(config_path=args.config)
+    else:
+        config = ConfigManager()
+    
     video_config = config.get_video_config()
     
+    # Recreate parser with the loaded configuration defaults
     parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
     parser.add_argument("--camera-index", type=int, default=video_config['opencv']['camera_index'],
                        help="Camera device index (OpenCV)")
     parser.add_argument("--camera-type", choices=['opencv', 'ascom'], 

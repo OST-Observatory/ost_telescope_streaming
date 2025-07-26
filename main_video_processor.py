@@ -5,13 +5,27 @@ from pathlib import Path
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
-from config_manager import config
+from config_manager import ConfigManager
 from video_processor import VideoProcessor
 import time
 import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Test video processor")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    
+    # Parse config argument first to load the right configuration
+    args, remaining = parser.parse_known_args()
+    
+    # Load configuration
+    if args.config:
+        config = ConfigManager(config_path=args.config)
+    else:
+        config = ConfigManager()
+    
+    # Recreate parser with the loaded configuration defaults
+    parser = argparse.ArgumentParser(description="Test video processor")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
     parser.add_argument("--duration", type=int, default=60, help="Test duration in seconds")
     parser.add_argument("--interval", type=int, default=10, help="Plate-solving interval in seconds")
     parser.add_argument("--solve", action="store_true", help="Enable plate-solving")
