@@ -135,15 +135,31 @@ class VideoCapture:
                 
                 # Get actual camera dimensions from ASCOM camera
                 try:
-                    camera_info = cam.get_camera_info()
-                    if camera_info and 'width' in camera_info and 'height' in camera_info:
-                        self.frame_width = camera_info['width']
-                        self.frame_height = camera_info['height']
-                        self.logger.info(f"ASCOM camera dimensions: {self.frame_width}x{self.frame_height}")
-                    else:
-                        self.logger.warning("Could not get camera dimensions from ASCOM camera, using defaults")
+                    # Get native sensor dimensions from ASCOM camera
+                    native_width = cam.camera.CameraXSize
+                    native_height = cam.camera.CameraYSize
+                    
+                    # Get binning from config
+                    ascom_config = self.video_config.get('ascom', {})
+                    binning = ascom_config.get('binning', 1)
+                    
+                    # Calculate effective dimensions with binning
+                    self.frame_width = native_width // binning
+                    self.frame_height = native_height // binning
+                    
+                    self.logger.info(f"ASCOM camera dimensions: {self.frame_width}x{self.frame_height} (native: {native_width}x{native_height}, binning: {binning}x{binning})")
+                    
+                    # Set the subframe to use the full sensor with binning
+                    cam.camera.NumX = self.frame_width
+                    cam.camera.NumY = self.frame_height
+                    cam.camera.StartX = 0
+                    cam.camera.StartY = 0
+                    
                 except Exception as e:
                     self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
+                    # Use default dimensions from config
+                    self.frame_width = 1920
+                    self.frame_height = 1080
                 
                 self.logger.info("ASCOM camera connected")
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
@@ -423,22 +439,54 @@ class VideoCapture:
     
     def get_camera_info(self) -> dict[str, Any]:
         """Returns camera information and settings."""
-        if not self.cap or not self.cap.isOpened():
-            return {"error": "Camera not connected"}
-        
-        info = {
-            "camera_index": self.camera_index,
-            "frame_width": int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-            "frame_height": int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-            "fps": self.cap.get(cv2.CAP_PROP_FPS),
-            "fov_width": self.fov_width,
-            "fov_height": self.fov_height,
-            "sampling_arcsec_per_pixel": self.get_sampling_arcsec_per_pixel(),
-            "is_capturing": self.is_capturing,
-            "capture_enabled": self.capture_enabled
-        }
-        
-        return info 
+        if self.camera_type == 'ascom':
+            if not self.ascom_camera:
+                return {"error": "ASCOM camera not connected"}
+            
+            try:
+                info = {
+                    "camera_type": "ascom",
+                    "driver": self.ascom_driver,
+                    "frame_width": self.frame_width,
+                    "frame_height": self.frame_height,
+                    "fov_width": self.fov_width,
+                    "fov_height": self.fov_height,
+                    "sampling_arcsec_per_pixel": self.get_sampling_arcsec_per_pixel(),
+                    "is_capturing": self.is_capturing,
+                    "capture_enabled": self.capture_enabled
+                }
+                
+                # Add ASCOM-specific info if available
+                if hasattr(self.ascom_camera, 'camera'):
+                    try:
+                        info["native_width"] = self.ascom_camera.camera.CameraXSize
+                        info["native_height"] = self.ascom_camera.camera.CameraYSize
+                        info["is_connected"] = self.ascom_camera.camera.Connected
+                    except Exception as e:
+                        info["ascom_error"] = str(e)
+                
+                return info
+            except Exception as e:
+                return {"error": f"Error getting ASCOM camera info: {e}"}
+        else:
+            # OpenCV camera
+            if not self.cap or not self.cap.isOpened():
+                return {"error": "Camera not connected"}
+            
+            info = {
+                "camera_type": "opencv",
+                "camera_index": self.camera_index,
+                "frame_width": int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                "frame_height": int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                "fps": self.cap.get(cv2.CAP_PROP_FPS),
+                "fov_width": self.fov_width,
+                "fov_height": self.fov_height,
+                "sampling_arcsec_per_pixel": self.get_sampling_arcsec_per_pixel(),
+                "is_capturing": self.is_capturing,
+                "capture_enabled": self.capture_enabled
+            }
+            
+            return info 
 
     def _convert_ascom_to_opencv(self, ascom_image_data):
         """Convert ASCOM image data to OpenCV format with debayering.
