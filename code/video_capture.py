@@ -407,32 +407,7 @@ class VideoCapture:
             # For ASCOM cameras, preserve original data for FITS files
             if self.camera_type == 'ascom' and self.ascom_camera and file_extension in ['.fit', '.fits']:
                 # Save original ASCOM data as FITS
-                try:
-                    import astropy.io.fits as fits
-                    
-                    # Get original ASCOM data (not converted)
-                    if hasattr(frame, 'data'):
-                        # Frame is a status object with data
-                        image_data = frame.data
-                    else:
-                        # Frame is direct data
-                        image_data = frame
-                    
-                    # Ensure it's a numpy array
-                    if not isinstance(image_data, np.ndarray):
-                        image_data = np.array(image_data)
-                    
-                    # Create FITS file
-                    hdu = fits.PrimaryHDU(image_data)
-                    hdu.writeto(str(output_path), overwrite=True)
-                    
-                    self.logger.info(f"FITS frame saved: {output_path.absolute()}")
-                    return success_status("FITS frame saved", data=str(output_path.absolute()), details={'camera_id': self.ascom_driver})
-                    
-                except ImportError:
-                    self.logger.warning("astropy not available, falling back to OpenCV format")
-                except Exception as e:
-                    self.logger.warning(f"Failed to save FITS: {e}, falling back to OpenCV format")
+                return self._save_ascom_fits(frame, str(output_path))
             
             # Convert frame to proper OpenCV format if needed
             if self.camera_type == 'ascom' and self.ascom_camera:
@@ -467,6 +442,82 @@ class VideoCapture:
             self.logger.error(f"Error saving frame: {e}")
             camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
             return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
+    
+    def _save_ascom_fits(self, frame: Any, filename: str) -> CameraStatus:
+        """Saves ASCOM image data as FITS file with proper headers.
+        Args:
+            frame: The image data (could be status object or direct data)
+            filename: Output filename
+        Returns:
+            CameraStatus: Status object with result
+        """
+        try:
+            import astropy.io.fits as fits
+            from astropy.time import Time
+            
+            # Get original ASCOM data
+            if hasattr(frame, 'data'):
+                # Frame is a status object with data
+                image_data = frame.data
+            else:
+                # Frame is direct data
+                image_data = frame
+            
+            # Ensure it's a numpy array
+            if not isinstance(image_data, np.ndarray):
+                image_data = np.array(image_data)
+            
+            # Log the data properties for debugging
+            self.logger.debug(f"ASCOM FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
+            
+            # Create FITS header with astronomical information
+            header = fits.Header()
+            
+            # Basic image information
+            header['NAXIS'] = len(image_data.shape)
+            header['NAXIS1'] = image_data.shape[1] if len(image_data.shape) >= 2 else 1
+            header['NAXIS2'] = image_data.shape[0] if len(image_data.shape) >= 2 else 1
+            
+            # Data type information
+            header['BITPIX'] = image_data.dtype.itemsize * 8
+            header['BZERO'] = 0
+            header['BSCALE'] = 1
+            
+            # Camera information
+            if hasattr(self.ascom_camera, 'camera'):
+                try:
+                    header['CAMERA'] = self.ascom_driver
+                    header['EXPTIME'] = self.ascom_camera.camera.ExposureDuration
+                    header['GAIN'] = getattr(self.ascom_camera.camera, 'Gain', 'UNKNOWN')
+                    header['BINNING'] = f"{self.ascom_camera.camera.BinX}x{self.ascom_camera.camera.BinY}"
+                except Exception as e:
+                    self.logger.warning(f"Could not add camera info to FITS header: {e}")
+            
+            # Telescope information
+            header['FOCAL'] = self.focal_length
+            header['APERTURE'] = self.aperture
+            header['PIXSIZE'] = self.sensor_width / self.frame_width  # mm per pixel
+            
+            # Field of view information
+            header['FOVW'] = self.fov_width
+            header['FOVH'] = self.fov_height
+            
+            # Timestamp
+            header['DATE-OBS'] = Time.now().isot
+            
+            # Create FITS file
+            hdu = fits.PrimaryHDU(image_data, header=header)
+            hdu.writeto(filename, overwrite=True)
+            
+            self.logger.info(f"FITS frame saved: {filename}")
+            return success_status("FITS frame saved", data=filename, details={'camera_id': self.ascom_driver})
+            
+        except ImportError:
+            self.logger.warning("astropy not available, falling back to OpenCV format")
+            return error_status("astropy not available for FITS saving")
+        except Exception as e:
+            self.logger.error(f"Failed to save FITS: {e}")
+            return error_status(f"Failed to save FITS: {e}")
     
     def get_camera_info(self) -> dict[str, Any]:
         """Returns camera information and settings."""

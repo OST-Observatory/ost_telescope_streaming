@@ -203,11 +203,35 @@ class VideoProcessor:
                 
                 frame_filename = self.frame_dir / f"{'_'.join(filename_parts)}.{self.file_format}"
                 
-                save_status = self.video_capture.save_frame(frame, str(frame_filename))
-                if save_status.is_success:
+                # For ASCOM cameras, get original data for FITS files
+                if (self.video_capture.camera_type == 'ascom' and 
+                    self.video_capture.ascom_camera and 
+                    self.file_format.lower() in ['fit', 'fits']):
+                    # Get settings from config
+                    ascom_config = self.video_config.get('ascom', {})
+                    exposure_time = ascom_config.get('exposure_time', 1.0)
+                    gain = ascom_config.get('gain', None)
+                    binning = ascom_config.get('binning', 1)
+                    
+                    # Get original ASCOM data
+                    ascom_status = self.video_capture.capture_single_frame_ascom(
+                        exposure_time=exposure_time,
+                        gain=gain,
+                        binning=binning
+                    )
+                    if ascom_status.is_success:
+                        save_status = self.video_capture.save_frame(ascom_status, str(frame_filename))
+                    else:
+                        self.logger.warning(f"Failed to capture ASCOM frame: {ascom_status.message}")
+                        save_status = None
+                else:
+                    # Use current frame (converted for display)
+                    save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                
+                if save_status and save_status.is_success:
                     self.logger.info(f"Frame saved: {frame_filename}")
                 else:
-                    self.logger.warning(f"Failed to save frame: {save_status.message}")
+                    self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
                     frame_filename = None
             
             # Trigger capture callback
