@@ -274,8 +274,8 @@ class VideoCapture:
                         gain = ascom_config.get('gain', None)
                         binning = ascom_config.get('binning', 1)
                         
-                        # Capture frame with ASCOM camera
-                        status = self.ascom_camera.expose(exposure_time, gain, binning)
+                        # Use the existing capture_single_frame_ascom method
+                        status = self.capture_single_frame_ascom(exposure_time, gain, binning)
                         if status.is_success:
                             # Convert ASCOM image to OpenCV format with debayering
                             frame = self._convert_ascom_to_opencv(status.data)
@@ -339,27 +339,27 @@ class VideoCapture:
             return error_status("ASCOM camera not connected")
         
         try:
-            # Get sensor dimensions from ASCOM camera
+            # Use the already set dimensions from connect()
+            effective_width = self.frame_width
+            effective_height = self.frame_height
+            
+            # Only set subframe if dimensions have changed
             try:
-                # Get native sensor dimensions
-                native_width = self.ascom_camera.camera.CameraXSize
-                native_height = self.ascom_camera.camera.CameraYSize
+                current_numx = self.ascom_camera.camera.NumX
+                current_numy = self.ascom_camera.camera.NumY
                 
-                # Calculate effective dimensions with binning
-                effective_width = native_width // binning
-                effective_height = native_height // binning
-                
-                self.logger.info(f"Native sensor: {native_width}x{native_height}, Binning: {binning}x{binning}, Effective: {effective_width}x{effective_height}")
-                
-                # Set the subframe to use the full sensor with binning
-                self.ascom_camera.camera.NumX = effective_width
-                self.ascom_camera.camera.NumY = effective_height
-                self.ascom_camera.camera.StartX = 0
-                self.ascom_camera.camera.StartY = 0
-                
+                if current_numx != effective_width or current_numy != effective_height:
+                    self.logger.debug(f"Updating subframe: {current_numx}x{current_numy} -> {effective_width}x{effective_height}")
+                    self.ascom_camera.camera.NumX = effective_width
+                    self.ascom_camera.camera.NumY = effective_height
+                    self.ascom_camera.camera.StartX = 0
+                    self.ascom_camera.camera.StartY = 0
+                else:
+                    self.logger.debug(f"Subframe already set correctly: {effective_width}x{effective_height}")
+                    
             except Exception as e:
-                self.logger.warning(f"Could not get sensor dimensions from ASCOM camera: {e}")
-                self.logger.info("Using default dimensions - this may cause issues with some cameras")
+                self.logger.warning(f"Could not update subframe: {e}")
+                self.logger.info("Using existing subframe settings")
             
             # Start exposure
             exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning)
@@ -496,8 +496,18 @@ class VideoCapture:
             numpy.ndarray: OpenCV-compatible image array or None if conversion fails
         """
         try:
+            # Check if image data is None or empty
+            if ascom_image_data is None:
+                self.logger.error("ASCOM image data is None")
+                return None
+            
             # Convert ASCOM image array to numpy array
             image_array = np.array(ascom_image_data)
+            
+            # Check if array is empty or has invalid shape
+            if image_array.size == 0:
+                self.logger.error("ASCOM image array is empty")
+                return None
             
             # Log the original data type and shape for debugging
             self.logger.debug(f"ASCOM image data type: {image_array.dtype}, shape: {image_array.shape}")
