@@ -53,17 +53,25 @@ class PlateSolve2Automated:
         """
         start_time = time.time()
         try:
+            # Convert image path to absolute path
+            abs_image_path = str(Path(image_path).resolve())
+            self.logger.info(f"Using absolute image path: {abs_image_path}")
+            
             # Remove old .apm file if it exists
-            apm_path = self._get_apm_path(image_path)
+            apm_path = self._get_apm_path(abs_image_path)
             if os.path.exists(apm_path):
                 os.remove(apm_path)
             # Calculate or estimate parameters
             ra_rad, dec_rad, fov_width_rad, fov_height_rad = self._prepare_parameters(
                 ra_deg, dec_deg, fov_width_deg, fov_height_deg
             )
+            # Convert image path to absolute path
+            abs_image_path = str(Path(image_path).resolve())
+            self.logger.info(f"Using absolute image path: {abs_image_path}")
+            
             # Build command line string
             cmd_string = self._build_command_string(
-                image_path, ra_rad, dec_rad, fov_width_rad, fov_height_rad
+                abs_image_path, ra_rad, dec_rad, fov_width_rad, fov_height_rad
             )
             if self.verbose:
                 self.logger.info(f"PlateSolve 2 command: {cmd_string}")
@@ -178,6 +186,10 @@ class PlateSolve2Automated:
                              fov_width_rad: float, fov_height_rad: float) -> str:
         """Build the command line string for PlateSolve 2."""
         
+        # Convert Windows backslashes to forward slashes for PlateSolve 2
+        # PlateSolve 2 sometimes has issues with backslashes in paths
+        normalized_image_path = str(Path(image_path)).replace('\\', '/')
+        
         # Format: ra,dec,width_field_of_view,height_field_of_view,number_of_regions_to_test,path_to_image,"0"
         cmd_parts = [
             str(ra_rad),           # RA in radians
@@ -185,7 +197,7 @@ class PlateSolve2Automated:
             str(fov_width_rad),    # FOV width in radians
             str(fov_height_rad),   # FOV height in radians
             str(self.number_of_regions),  # Number of regions to test
-            image_path,            # Path to image
+            normalized_image_path, # Path to image (normalized)
             "0"                    # Fixed parameter
         ]
         
@@ -200,13 +212,23 @@ class PlateSolve2Automated:
             if self.verbose:
                 self.logger.info(f"Executing: {' '.join(full_cmd)}")
             
+            # Determine working directory
+            working_dir = None
+            if self.working_directory:
+                working_dir = self.working_directory
+            else:
+                # Use the directory of the executable as fallback
+                working_dir = str(Path(self.executable_path).parent)
+            
+            self.logger.info(f"Working directory: {working_dir}")
+            
             # Execute with timeout
             self.current_process = subprocess.run(
                 full_cmd,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=self.working_directory if self.working_directory else None
+                cwd=working_dir
             )
             
             if self.verbose:
@@ -221,6 +243,8 @@ class PlateSolve2Automated:
                 return True
             else:
                 self.logger.error(f"PlateSolve 2 failed with return code: {self.current_process.returncode}")
+                if self.current_process.stderr:
+                    self.logger.error(f"Error output: {self.current_process.stderr}")
                 return False
                 
         except subprocess.TimeoutExpired:
