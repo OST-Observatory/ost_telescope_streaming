@@ -215,7 +215,7 @@ class VideoProcessor:
                     
                     # Get original ASCOM data
                     ascom_status = self.video_capture.capture_single_frame_ascom(
-                        exposure_time=exposure_time,
+                        exposure_time_s=exposure_time,
                         gain=gain,
                         binning=binning
                     )
