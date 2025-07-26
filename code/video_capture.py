@@ -402,6 +402,37 @@ class VideoCapture:
         """
         try:
             output_path = Path(filename)
+            file_extension = output_path.suffix.lower()
+            
+            # For ASCOM cameras, preserve original data for FITS files
+            if self.camera_type == 'ascom' and self.ascom_camera and file_extension in ['.fit', '.fits']:
+                # Save original ASCOM data as FITS
+                try:
+                    import astropy.io.fits as fits
+                    
+                    # Get original ASCOM data (not converted)
+                    if hasattr(frame, 'data'):
+                        # Frame is a status object with data
+                        image_data = frame.data
+                    else:
+                        # Frame is direct data
+                        image_data = frame
+                    
+                    # Ensure it's a numpy array
+                    if not isinstance(image_data, np.ndarray):
+                        image_data = np.array(image_data)
+                    
+                    # Create FITS file
+                    hdu = fits.PrimaryHDU(image_data)
+                    hdu.writeto(str(output_path), overwrite=True)
+                    
+                    self.logger.info(f"FITS frame saved: {output_path.absolute()}")
+                    return success_status("FITS frame saved", data=str(output_path.absolute()), details={'camera_id': self.ascom_driver})
+                    
+                except ImportError:
+                    self.logger.warning("astropy not available, falling back to OpenCV format")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save FITS: {e}, falling back to OpenCV format")
             
             # Convert frame to proper OpenCV format if needed
             if self.camera_type == 'ascom' and self.ascom_camera:

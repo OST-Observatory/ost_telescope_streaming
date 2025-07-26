@@ -76,7 +76,14 @@ class VideoProcessor:
         
         # Ensure frame directory exists
         if self.save_frames:
-            self.frame_dir.mkdir(exist_ok=True)
+            try:
+                self.frame_dir.mkdir(exist_ok=True)
+                self.logger.info(f"Frame directory: {self.frame_dir.absolute()}")
+            except Exception as e:
+                self.logger.error(f"Failed to create frame directory: {e}")
+                # Fallback to current directory
+                self.frame_dir = Path(".")
+                self.logger.warning(f"Using current directory for frame storage: {self.frame_dir.absolute()}")
     
     def initialize(self) -> bool:
         """Initialisiert Videoaufnahme und Plate-Solver.
@@ -196,10 +203,11 @@ class VideoProcessor:
                 
                 frame_filename = self.frame_dir / f"{'_'.join(filename_parts)}.{self.file_format}"
                 
-                if self.video_capture.save_frame(frame, str(frame_filename)):
-                    self.logger.debug(f"Frame saved: {frame_filename}")
+                save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                if save_status.is_success:
+                    self.logger.info(f"Frame saved: {frame_filename}")
                 else:
-                    self.logger.warning("Failed to save frame")
+                    self.logger.warning(f"Failed to save frame: {save_status.message}")
                     frame_filename = None
             
             # Trigger capture callback
