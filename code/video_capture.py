@@ -471,61 +471,117 @@ class VideoCapture:
             self.logger.debug(f"ASCOM FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
             
             # Ensure data is in a format that PlateSolve 2 can read
-            # PlateSolve 2 prefers 16-bit or 32-bit integer data
-            if image_data.dtype == np.int32:
-                # Keep as int32 (PlateSolve 2 should handle this)
-                pass
-            elif image_data.dtype == np.int16:
-                # Keep as int16
+            # PlateSolve 2 prefers 16-bit integer data for best compatibility
+            original_dtype = image_data.dtype
+            original_min = image_data.min()
+            original_max = image_data.max()
+            
+            self.logger.debug(f"Original data: dtype={original_dtype}, min={original_min}, max={original_max}")
+            
+            # Convert to int16 for PlateSolve 2 compatibility
+            if image_data.dtype == np.int16:
+                # Already int16, keep as is
                 pass
             elif image_data.dtype == np.uint16:
-                # Convert uint16 to int16 for better compatibility
-                image_data = image_data.astype(np.int16)
+                # Convert uint16 to int16 (most common case for ASCOM cameras)
+                # Handle potential overflow by clipping
+                image_data = np.clip(image_data, 0, 32767).astype(np.int16)
+            elif image_data.dtype == np.int32:
+                # Convert int32 to int16 (clip to avoid overflow)
+                image_data = np.clip(image_data, -32768, 32767).astype(np.int16)
             elif image_data.dtype == np.uint8:
                 # Convert uint8 to int16
                 image_data = image_data.astype(np.int16)
+            elif image_data.dtype == np.float32 or image_data.dtype == np.float64:
+                # Convert float to int16 (normalize and clip)
+                if original_max > original_min:
+                    # Normalize to 0-32767 range
+                    image_data = ((image_data - original_min) / (original_max - original_min) * 32767).astype(np.int16)
+                else:
+                    # All values are the same, set to 0
+                    image_data = np.zeros_like(image_data, dtype=np.int16)
             else:
                 # Convert other types to int16
                 image_data = image_data.astype(np.int16)
             
+            self.logger.debug(f"Converted data: dtype={image_data.dtype}, min={image_data.min()}, max={image_data.max()}")
+            
             # Create FITS header with astronomical information
             header = fits.Header()
             
-            # Basic image information
+            # REQUIRED FITS headers (FITS Standard)
+            header['SIMPLE'] = True
+            header['BITPIX'] = image_data.dtype.itemsize * 8
             header['NAXIS'] = len(image_data.shape)
             header['NAXIS1'] = image_data.shape[1] if len(image_data.shape) >= 2 else 1
             header['NAXIS2'] = image_data.shape[0] if len(image_data.shape) >= 2 else 1
             
-            # Data type information
-            header['BITPIX'] = image_data.dtype.itemsize * 8
+            # Data scaling (important for PlateSolve 2)
             header['BZERO'] = 0
             header['BSCALE'] = 1
+            
+            # Standard astronomical headers
+            header['DATE'] = Time.now().isot
+            header['DATE-OBS'] = Time.now().isot
+            header['ORIGIN'] = 'OST Telescope Streaming'
+            header['TELESCOP'] = 'OST Telescope'
+            header['INSTRUME'] = self.ascom_driver if hasattr(self, 'ascom_driver') else 'Unknown'
             
             # Camera information
             if hasattr(self.ascom_camera, 'camera'):
                 try:
-                    header['CAMERA'] = self.ascom_driver
-                    header['EXPTIME'] = self.ascom_camera.camera.ExposureDuration
-                    header['GAIN'] = getattr(self.ascom_camera.camera, 'Gain', 'UNKNOWN')
-                    header['BINNING'] = f"{self.ascom_camera.camera.BinX}x{self.ascom_camera.camera.BinY}"
+                    header['EXPTIME'] = float(self.ascom_camera.camera.ExposureDuration)
+                    header['GAIN'] = float(getattr(self.ascom_camera.camera, 'Gain', 0))
+                    header['XBINNING'] = int(self.ascom_camera.camera.BinX)
+                    header['YBINNING'] = int(self.ascom_camera.camera.BinY)
+                    header['XORGSUBF'] = int(self.ascom_camera.camera.StartX)
+                    header['YORGSUBF'] = int(self.ascom_camera.camera.StartY)
+                    header['NAXIS1'] = int(self.ascom_camera.camera.NumX)
+                    header['NAXIS2'] = int(self.ascom_camera.camera.NumY)
                 except Exception as e:
                     self.logger.warning(f"Could not add camera info to FITS header: {e}")
             
             # Telescope information
-            header['FOCAL'] = self.focal_length
-            header['APERTURE'] = self.aperture
-            header['PIXSIZE'] = self.sensor_width / self.frame_width  # mm per pixel
+            header['FOCALLEN'] = float(self.focal_length)
+            header['APERTURE'] = float(self.aperture)
+            header['PIXSIZE1'] = float(self.sensor_width / self.frame_width)  # mm per pixel X
+            header['PIXSIZE2'] = float(self.sensor_height / self.frame_height)  # mm per pixel Y
             
             # Field of view information
-            header['FOVW'] = self.fov_width
-            header['FOVH'] = self.fov_height
+            header['FOVW'] = float(self.fov_width)
+            header['FOVH'] = float(self.fov_height)
             
-            # Timestamp
-            header['DATE-OBS'] = Time.now().isot
+            # PlateSolve 2 specific headers
+            header['IMAGETYP'] = 'LIGHT'
+            header['OBJECT'] = 'Unknown'
+            header['OBSERVER'] = 'OST System'
+            header['SITELAT'] = 0.0  # Default, should be set from config
+            header['SITELONG'] = 0.0  # Default, should be set from config
             
-            # Create FITS file
+            # Ensure 2D array for FITS (PlateSolve 2 requirement)
+            if len(image_data.shape) == 1:
+                # Convert 1D to 2D
+                image_data = image_data.reshape(1, -1)
+            elif len(image_data.shape) > 2:
+                # Take first 2D slice if 3D or higher
+                image_data = image_data[:, :, 0] if len(image_data.shape) == 3 else image_data[:, :]
+            
+            # Update header with final dimensions
+            header['NAXIS'] = len(image_data.shape)
+            header['NAXIS1'] = image_data.shape[1]
+            header['NAXIS2'] = image_data.shape[0]
+            header['BITPIX'] = image_data.dtype.itemsize * 8
+            
+            # Create FITS file with proper data type
             hdu = fits.PrimaryHDU(image_data, header=header)
-            hdu.writeto(filename, overwrite=True)
+            
+            # Verify FITS file is valid
+            hdu.verify('fix')
+            
+            # Write to file
+            hdu.writeto(filename, overwrite=True, output_verify='fix')
+            
+            self.logger.debug(f"FITS file created: {filename}, shape={image_data.shape}, dtype={image_data.dtype}")
             
             self.logger.info(f"FITS frame saved: {filename}")
             return success_status("FITS frame saved", data=filename, details={'camera_id': self.ascom_driver})
