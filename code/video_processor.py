@@ -188,10 +188,12 @@ class VideoProcessor:
             
             self.capture_count += 1
             
-            # Save frame if enabled
+            # Save frames if enabled
             frame_filename = None
+            fits_filename = None
+            
             if self.save_frames:
-                # Generate filename with configurable timestamp and capture count
+                # Generate base filename with configurable timestamp and capture count
                 filename_parts = ["capture"]
                 
                 if self.use_timestamps:
@@ -201,38 +203,57 @@ class VideoProcessor:
                 if self.use_capture_count:
                     filename_parts.append(f"{self.capture_count:04d}")
                 
-                frame_filename = self.frame_dir / f"{'_'.join(filename_parts)}.{self.file_format}"
+                base_filename = '_'.join(filename_parts)
                 
-                # For ASCOM cameras, get original data for FITS files
+                # For ASCOM cameras: Save both FITS (for plate-solving) and display format
                 if (self.video_capture.camera_type == 'ascom' and 
-                    self.video_capture.ascom_camera and 
-                    self.file_format.lower() in ['fit', 'fits']):
+                    self.video_capture.ascom_camera):
+                    
                     # Get settings from config
                     ascom_config = self.video_config.get('ascom', {})
                     exposure_time = ascom_config.get('exposure_time', 1.0)
                     gain = ascom_config.get('gain', None)
                     binning = ascom_config.get('binning', 1)
                     
-                    # Get original ASCOM data
+                    # 1. Always save FITS for plate-solving and processing
+                    fits_filename = self.frame_dir / f"{base_filename}.fits"
                     ascom_status = self.video_capture.capture_single_frame_ascom(
                         exposure_time_s=exposure_time,
                         gain=gain,
                         binning=binning
                     )
                     if ascom_status.is_success:
-                        save_status = self.video_capture.save_frame(ascom_status, str(frame_filename))
+                        fits_save_status = self.video_capture.save_frame(ascom_status, str(fits_filename))
+                        if fits_save_status and fits_save_status.is_success:
+                            self.logger.info(f"FITS frame saved: {fits_filename}")
+                        else:
+                            self.logger.warning(f"Failed to save FITS frame: {fits_save_status.message if fits_save_status else 'No status'}")
                     else:
                         self.logger.warning(f"Failed to capture ASCOM frame: {ascom_status.message}")
-                        save_status = None
-                else:
-                    # Use current frame (converted for display)
-                    save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                    
+                    # 2. Save display format (PNG/JPG) if different from FITS
+                    if self.file_format.lower() not in ['fit', 'fits']:
+                        frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
+                        # Use current frame (converted for display)
+                        display_save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                        if display_save_status and display_save_status.is_success:
+                            self.logger.info(f"Display frame saved: {frame_filename}")
+                        else:
+                            self.logger.warning(f"Failed to save display frame: {display_save_status.message if display_save_status else 'No status'}")
+                            frame_filename = None
+                    else:
+                        # If FITS is the display format, use FITS file for both
+                        frame_filename = fits_filename
                 
-                if save_status and save_status.is_success:
-                    self.logger.info(f"Frame saved: {frame_filename}")
                 else:
-                    self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
-                    frame_filename = None
+                    # For non-ASCOM cameras: Save only the configured format
+                    frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
+                    save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                    if save_status and save_status.is_success:
+                        self.logger.info(f"Frame saved: {frame_filename}")
+                    else:
+                        self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
+                        frame_filename = None
             
             # Trigger capture callback
             if self.on_capture_frame:
@@ -242,8 +263,12 @@ class VideoProcessor:
             if (self.plate_solver and self.auto_solve and 
                 time.time() - self.last_solve_time >= self.min_solve_interval):
                 
-                if frame_filename and frame_filename.exists():
-                    self._solve_frame(str(frame_filename))
+                # Use FITS file for ASCOM cameras, otherwise use display format
+                solve_filename = fits_filename if fits_filename and fits_filename.exists() else frame_filename
+                
+                if solve_filename and solve_filename.exists():
+                    self.logger.info(f"Plate-solving frame: {solve_filename}")
+                    self._solve_frame(str(solve_filename))
                 else:
                     self.logger.warning("No frame file available for plate-solving")
             
