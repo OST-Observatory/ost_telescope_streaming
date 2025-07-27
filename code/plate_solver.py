@@ -139,10 +139,11 @@ class PlateSolve2Solver(PlateSolver):
                     sensor_height = camera_config.get('sensor_height', 4.55)
                     
                     # Calculate FOV in degrees
-                    fov_width_deg = math.degrees(2 * math.atan(sensor_width / (2 * focal_length)))
-                    fov_height_deg = math.degrees(2 * math.atan(sensor_height / (2 * focal_length)))
+                    # Note: Due to ASCOM image transposition, width and height are swapped
+                    fov_width_deg = math.degrees(2 * math.atan(sensor_height / (2 * focal_length)))  # Now height
+                    fov_height_deg = math.degrees(2 * math.atan(sensor_width / (2 * focal_length)))  # Now width
                     
-                    self.logger.info(f"Calculated FOV: {fov_width_deg:.4f}° x {fov_height_deg:.4f}° (focal={focal_length}mm, sensor={sensor_width}x{sensor_height}mm)")
+                    self.logger.info(f"Calculated FOV (transposed): {fov_width_deg:.4f}° x {fov_height_deg:.4f}° (focal={focal_length}mm, sensor={sensor_width}x{sensor_height}mm)")
                 except Exception as e:
                     self.logger.warning(f"Could not calculate FOV: {e}")
                 

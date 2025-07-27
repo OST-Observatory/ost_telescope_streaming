@@ -506,6 +506,13 @@ class VideoCapture:
             
             self.logger.debug(f"Converted data: dtype={image_data.dtype}, min={image_data.min()}, max={image_data.max()}")
             
+            # Fix image orientation for ASCOM cameras
+            # ASCOM images are often rotated 90° compared to other software
+            # Transpose the image to correct orientation
+            original_shape = image_data.shape
+            image_data = np.transpose(image_data)
+            self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
+            
             # Create FITS header with astronomical information
             header = fits.Header()
             
@@ -536,20 +543,22 @@ class VideoCapture:
                     header['YBINNING'] = int(self.ascom_camera.camera.BinY)
                     header['XORGSUBF'] = int(self.ascom_camera.camera.StartX)
                     header['YORGSUBF'] = int(self.ascom_camera.camera.StartY)
-                    header['NAXIS1'] = int(self.ascom_camera.camera.NumX)
-                    header['NAXIS2'] = int(self.ascom_camera.camera.NumY)
+                    # Image dimensions (swapped due to transposition)
+                    header['NAXIS1'] = int(self.ascom_camera.camera.NumY)  # Width (now height)
+                    header['NAXIS2'] = int(self.ascom_camera.camera.NumX)  # Height (now width)
                 except Exception as e:
                     self.logger.warning(f"Could not add camera info to FITS header: {e}")
             
             # Telescope information
             header['FOCALLEN'] = float(self.focal_length)
             header['APERTURE'] = float(self.aperture)
-            header['PIXSIZE1'] = float(self.sensor_width / self.frame_width)  # mm per pixel X
-            header['PIXSIZE2'] = float(self.sensor_height / self.frame_height)  # mm per pixel Y
+            # Pixel sizes (swapped due to image transposition)
+            header['PIXSIZE1'] = float(self.sensor_height / self.frame_height)  # mm per pixel X (now height)
+            header['PIXSIZE2'] = float(self.sensor_width / self.frame_width)    # mm per pixel Y (now width)
             
-            # Field of view information
-            header['FOVW'] = float(self.fov_width)
-            header['FOVH'] = float(self.fov_height)
+            # Field of view information (swapped due to image transposition)
+            header['FOVW'] = float(self.fov_height)  # Now width after transpose
+            header['FOVH'] = float(self.fov_width)   # Now height after transpose
             
             # PlateSolve 2 specific headers
             header['IMAGETYP'] = 'LIGHT'
