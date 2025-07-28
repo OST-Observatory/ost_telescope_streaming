@@ -532,14 +532,9 @@ class VideoCapture:
             image_data = np.transpose(image_data)
             self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
             
-            # Adjust Bayer pattern if this is a color camera
-            if is_color_camera and bayer_pattern:
-                original_bayer = bayer_pattern
-                bayer_pattern = self._adjust_bayer_pattern_for_transpose(bayer_pattern)
-                if original_bayer != bayer_pattern:
-                    self.logger.info(f"Bayer pattern adjusted for transpose: {original_bayer} -> {bayer_pattern}")
-                else:
-                    self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
+            # Note: For 90° rotation (transpose), Bayer patterns remain unchanged
+            # RGGB -> RGGB, GRBG -> GRBG, GBRG -> GBRG, BGGR -> BGGR
+            # No pattern adjustment needed for this rotation
             
             # Create FITS header with astronomical information
             header = fits.Header()
@@ -879,13 +874,6 @@ class VideoCapture:
             # Log the original data type and shape for debugging
             self.logger.debug(f"ASCOM image data type: {image_array.dtype}, shape: {image_array.shape}")
             
-            # Fix image orientation for ASCOM cameras
-            # ASCOM images are often rotated 90° compared to other software
-            # Transpose the image to correct orientation
-            original_shape = image_array.shape
-            image_array = np.transpose(image_array)
-            self.logger.debug(f"Image orientation corrected: {original_shape} -> {image_array.shape}")
-            
             # Convert data type to uint16 first (most ASCOM cameras use 16-bit)
             if image_array.dtype == np.int32:
                 # For 32-bit signed integers, convert to uint16
@@ -908,88 +896,64 @@ class VideoCapture:
                     bayer_pattern = sensor_type
                     self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
             
-            # Adjust Bayer pattern if this is a color camera (after transpose)
-            if is_color_camera and bayer_pattern:
-                original_bayer = bayer_pattern
-                bayer_pattern = self._adjust_bayer_pattern_for_transpose(bayer_pattern)
-                if original_bayer != bayer_pattern:
-                    self.logger.info(f"Bayer pattern adjusted for transpose: {original_bayer} -> {bayer_pattern}")
-                else:
-                    self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
-            
-            # If already 3-channel (already debayered), return as is
+            # If already 3-channel (already debayered), handle as is
             if len(image_array.shape) == 3 and image_array.shape[2] == 3:
-                self.logger.debug("Image is already 3-channel RGB, returning as is")
-                return image_array
-            
-            # Apply debayering for color cameras
-            if is_color_camera and bayer_pattern:
-                # Apply debayering based on Bayer pattern
-                if bayer_pattern == 'RGGB':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                elif bayer_pattern == 'GRBG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
-                elif bayer_pattern == 'GBRG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
-                elif bayer_pattern == 'BGGR':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
+                self.logger.debug("Image is already 3-channel RGB, proceeding with orientation correction")
+                result_image = image_array
+            else:
+                # Apply debayering for color cameras FIRST (before rotation)
+                if is_color_camera and bayer_pattern:
+                    # Apply debayering based on Bayer pattern
+                    if bayer_pattern == 'RGGB':
+                        bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
+                    elif bayer_pattern == 'GRBG':
+                        bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
+                    elif bayer_pattern == 'GBRG':
+                        bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
+                    elif bayer_pattern == 'BGGR':
+                        bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
+                    else:
+                        self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
+                        bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
+                    
+                    # Apply debayering
+                    try:
+                        result_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
+                        self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
+                    except Exception as e:
+                        self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
+                        # Fall back to grayscale conversion
+                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
                 else:
-                    self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                
-                # Apply debayering
-                try:
-                    color_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
-                    self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
-                    return color_image
-                except Exception as e:
-                    self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
-                    # Fall back to grayscale conversion
-                    return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                    # For monochrome cameras, convert to 3-channel grayscale
+                    if len(image_array.shape) == 2:
+                        self.logger.debug("Converting monochrome image to 3-channel")
+                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                    else:
+                        # If already 3-channel but not RGB (e.g., RGBA), convert to BGR
+                        if len(image_array.shape) == 3:
+                            if image_array.shape[2] == 4:  # RGBA
+                                self.logger.debug("Converting RGBA to BGR")
+                                result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
+                            elif image_array.shape[2] == 1:  # Single channel
+                                self.logger.debug("Converting single channel to 3-channel")
+                                result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                            else:
+                                self.logger.debug("Returning existing 3-channel image")
+                                result_image = image_array
+                        else:
+                            # Fallback: assume monochrome and convert
+                            self.logger.debug("Fallback: converting to 3-channel grayscale")
+                            result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
             
-            # For monochrome cameras or if debayering failed, convert to 3-channel grayscale
-            if len(image_array.shape) == 2:
-                self.logger.debug("Converting monochrome image to 3-channel")
-                return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            # NOW apply orientation correction to the debayered RGB image
+            # This is much simpler and more robust than rotating Bayer patterns
+            original_shape = result_image.shape
+            result_image = np.transpose(result_image, (1, 0, 2))  # Transpose only spatial dimensions
+            self.logger.debug(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
             
-            # If already 3-channel but not RGB (e.g., RGBA), convert to BGR
-            if len(image_array.shape) == 3:
-                if image_array.shape[2] == 4:  # RGBA
-                    self.logger.debug("Converting RGBA to BGR")
-                    return cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                elif image_array.shape[2] == 1:  # Single channel
-                    self.logger.debug("Converting single channel to 3-channel")
-                    return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                else:
-                    self.logger.debug("Returning existing 3-channel image")
-                    return image_array
-            
-            # Fallback: assume monochrome and convert
-            self.logger.debug("Fallback: converting to 3-channel grayscale")
-            return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            return result_image
             
         except Exception as e:
             self.logger.error(f"Error converting ASCOM image: {e}")
             return None 
-
-    def _adjust_bayer_pattern_for_transpose(self, bayer_pattern: str) -> str:
-        """Adjust Bayer pattern when image is transposed.
-        
-        When we transpose a Bayer pattern image, the pattern changes:
-        - RGGB -> RGGB (no change for 90° rotation)
-        - GRBG -> GRBG (no change for 90° rotation) 
-        - GBRG -> GBRG (no change for 90° rotation)
-        - BGGR -> BGGR (no change for 90° rotation)
-        
-        Actually, for a 90° rotation (transpose), the pattern stays the same
-        because we're just swapping rows and columns, not rotating the pattern.
-        
-        Args:
-            bayer_pattern: Original Bayer pattern (RGGB, GRBG, GBRG, BGGR)
-        Returns:
-            str: Adjusted Bayer pattern (same as input for transpose)
-        """
-        # For transpose (90° rotation), the Bayer pattern stays the same
-        # because we're swapping rows and columns, not rotating the pattern
-        self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
-        return bayer_pattern 
