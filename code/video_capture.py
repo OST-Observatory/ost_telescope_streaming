@@ -532,6 +532,15 @@ class VideoCapture:
             image_data = np.transpose(image_data)
             self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
             
+            # Adjust Bayer pattern if this is a color camera
+            if is_color_camera and bayer_pattern:
+                original_bayer = bayer_pattern
+                bayer_pattern = self._adjust_bayer_pattern_for_transpose(bayer_pattern)
+                if original_bayer != bayer_pattern:
+                    self.logger.info(f"Bayer pattern adjusted for transpose: {original_bayer} -> {bayer_pattern}")
+                else:
+                    self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
+            
             # Create FITS header with astronomical information
             header = fits.Header()
             
@@ -899,6 +908,15 @@ class VideoCapture:
                     bayer_pattern = sensor_type
                     self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
             
+            # Adjust Bayer pattern if this is a color camera (after transpose)
+            if is_color_camera and bayer_pattern:
+                original_bayer = bayer_pattern
+                bayer_pattern = self._adjust_bayer_pattern_for_transpose(bayer_pattern)
+                if original_bayer != bayer_pattern:
+                    self.logger.info(f"Bayer pattern adjusted for transpose: {original_bayer} -> {bayer_pattern}")
+                else:
+                    self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
+            
             # If already 3-channel (already debayered), return as is
             if len(image_array.shape) == 3 and image_array.shape[2] == 3:
                 self.logger.debug("Image is already 3-channel RGB, returning as is")
@@ -953,3 +971,25 @@ class VideoCapture:
         except Exception as e:
             self.logger.error(f"Error converting ASCOM image: {e}")
             return None 
+
+    def _adjust_bayer_pattern_for_transpose(self, bayer_pattern: str) -> str:
+        """Adjust Bayer pattern when image is transposed.
+        
+        When we transpose a Bayer pattern image, the pattern changes:
+        - RGGB -> RGGB (no change for 90° rotation)
+        - GRBG -> GRBG (no change for 90° rotation) 
+        - GBRG -> GBRG (no change for 90° rotation)
+        - BGGR -> BGGR (no change for 90° rotation)
+        
+        Actually, for a 90° rotation (transpose), the pattern stays the same
+        because we're just swapping rows and columns, not rotating the pattern.
+        
+        Args:
+            bayer_pattern: Original Bayer pattern (RGGB, GRBG, GBRG, BGGR)
+        Returns:
+            str: Adjusted Bayer pattern (same as input for transpose)
+        """
+        # For transpose (90° rotation), the Bayer pattern stays the same
+        # because we're swapping rows and columns, not rotating the pattern
+        self.logger.debug(f"Bayer pattern unchanged for transpose: {bayer_pattern}")
+        return bayer_pattern 
