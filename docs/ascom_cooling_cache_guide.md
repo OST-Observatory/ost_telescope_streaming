@@ -74,11 +74,16 @@ status = camera.get_fresh_cooling_info()  # Force refresh
 Use the special tests for cooling cache issues:
 
 ```bash
+cd tests
+
 # Test basic cooling cache functionality
-python tests/test_cooling_cache.py
+python test_cooling_cache.py --config ../config_ost_qhy600m.yaml
 
 # Test persistent cache across instances
-python tests/test_persistent_cache.py
+python test_persistent_cache.py --config ../config_ost_qhy600m.yaml
+
+# Debug cache issues
+python test_cache_debug.py --config ../config_ost_qhy600m.yaml --debug
 ```
 
 These tests:

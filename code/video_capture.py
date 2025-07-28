@@ -445,6 +445,7 @@ class VideoCapture:
     
     def _save_ascom_fits(self, frame: Any, filename: str) -> CameraStatus:
         """Saves ASCOM image data as FITS file with proper headers.
+        Supports both monochrome and color cameras with debayering.
         Args:
             frame: The image data (could be status object or direct data)
             filename: Output filename
@@ -469,6 +470,24 @@ class VideoCapture:
             
             # Log the data properties for debugging
             self.logger.debug(f"ASCOM FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
+            
+            # Check if this is a color camera
+            is_color_camera = False
+            bayer_pattern = None
+            
+            if hasattr(self.ascom_camera, 'sensor_type'):
+                sensor_type = self.ascom_camera.sensor_type
+                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
+                    is_color_camera = True
+                    bayer_pattern = sensor_type
+                    self.logger.info(f"Detected color camera with Bayer pattern: {bayer_pattern}")
+            
+            # For color cameras, we have two options:
+            # 1. Save raw Bayer data (for plate-solving)
+            # 2. Save debayered color data (for display)
+            
+            # For plate-solving, we typically want the raw Bayer data
+            # But we need to ensure it's in the right format
             
             # Ensure data is in a format that PlateSolve 2 can read
             # PlateSolve 2 prefers 16-bit integer data for best compatibility
@@ -523,6 +542,11 @@ class VideoCapture:
             header['NAXIS1'] = image_data.shape[1] if len(image_data.shape) >= 2 else 1
             header['NAXIS2'] = image_data.shape[0] if len(image_data.shape) >= 2 else 1
             
+            # Add NAXIS3 for color images
+            if len(image_data.shape) == 3:
+                header['NAXIS3'] = image_data.shape[2]
+                header['NAXIS'] = 3
+            
             # Data scaling (important for PlateSolve 2)
             header['BZERO'] = 0
             header['BSCALE'] = 1
@@ -533,6 +557,16 @@ class VideoCapture:
             header['ORIGIN'] = 'OST Telescope Streaming'
             header['TELESCOP'] = 'OST Telescope'
             header['INSTRUME'] = self.ascom_driver if hasattr(self, 'ascom_driver') else 'Unknown'
+            
+            # Color camera information
+            if is_color_camera:
+                header['BAYERPAT'] = bayer_pattern
+                header['COLORCAM'] = True
+                header['IMAGETYP'] = 'LIGHT'
+                self.logger.info(f"Added color camera info: Bayer pattern = {bayer_pattern}")
+            else:
+                header['COLORCAM'] = False
+                header['IMAGETYP'] = 'LIGHT'
             
             # Camera information
             if hasattr(self.ascom_camera, 'camera'):
@@ -561,11 +595,30 @@ class VideoCapture:
             header['FOVH'] = float(self.fov_width)   # Now height after transpose
             
             # PlateSolve 2 specific headers
-            header['IMAGETYP'] = 'LIGHT'
             header['OBJECT'] = 'Unknown'
             header['OBSERVER'] = 'OST System'
             header['SITELAT'] = 0.0  # Default, should be set from config
             header['SITELONG'] = 0.0  # Default, should be set from config
+            
+            # For plate-solving, we want 2D data
+            # If it's a color camera, we need to handle this carefully
+            if is_color_camera and len(image_data.shape) == 3:
+                # For color cameras, we have several options:
+                # 1. Use the green channel (most sensitive for plate-solving)
+                # 2. Convert to grayscale
+                # 3. Use the first channel
+                
+                # Option 1: Use green channel (most common for plate-solving)
+                if image_data.shape[2] >= 3:
+                    # Convert to grayscale using standard RGB weights
+                    # Green channel is most sensitive for astronomical imaging
+                    green_channel = image_data[:, :, 1]  # Green channel
+                    self.logger.info("Using green channel for plate-solving (color camera)")
+                    image_data = green_channel
+                else:
+                    # Use first channel if not RGB
+                    image_data = image_data[:, :, 0]
+                    self.logger.info("Using first channel for plate-solving (color camera)")
             
             # Ensure 2D array for FITS (PlateSolve 2 requirement)
             if len(image_data.shape) == 1:
@@ -655,6 +708,7 @@ class VideoCapture:
 
     def _convert_ascom_to_opencv(self, ascom_image_data):
         """Convert ASCOM image data to OpenCV format with debayering.
+        Supports both monochrome and color cameras with automatic Bayer pattern detection.
         Args:
             ascom_image_data: Raw image data from ASCOM camera
         Returns:
@@ -689,32 +743,65 @@ class VideoCapture:
                 image_array = image_array.astype(np.uint16)
             
             # Check if camera is color (has Bayer pattern)
+            is_color_camera = False
+            bayer_pattern = None
+            
             if hasattr(self.ascom_camera, 'sensor_type'):
                 sensor_type = self.ascom_camera.sensor_type
                 if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                    # Apply debayering based on Bayer pattern
-                    if sensor_type == 'RGGB':
-                        bayer_pattern = cv2.COLOR_BayerRG2BGR
-                    elif sensor_type == 'GRBG':
-                        bayer_pattern = cv2.COLOR_BayerGR2BGR
-                    elif sensor_type == 'GBRG':
-                        bayer_pattern = cv2.COLOR_BayerGB2BGR
-                    elif sensor_type == 'BGGR':
-                        bayer_pattern = cv2.COLOR_BayerBG2BGR
-                    
-                    # Apply debayering
-                    color_image = cv2.cvtColor(image_array, bayer_pattern)
-                    return color_image
+                    is_color_camera = True
+                    bayer_pattern = sensor_type
+                    self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
             
-            # For monochrome cameras, convert to 3-channel grayscale
-            if len(image_array.shape) == 2:
-                return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-            
-            # If already 3-channel, return as is
-            if len(image_array.shape) == 3:
+            # If already 3-channel (already debayered), return as is
+            if len(image_array.shape) == 3 and image_array.shape[2] == 3:
+                self.logger.debug("Image is already 3-channel RGB, returning as is")
                 return image_array
             
+            # Apply debayering for color cameras
+            if is_color_camera and bayer_pattern:
+                # Apply debayering based on Bayer pattern
+                if bayer_pattern == 'RGGB':
+                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
+                elif bayer_pattern == 'GRBG':
+                    bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
+                elif bayer_pattern == 'GBRG':
+                    bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
+                elif bayer_pattern == 'BGGR':
+                    bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
+                else:
+                    self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
+                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
+                
+                # Apply debayering
+                try:
+                    color_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
+                    self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
+                    return color_image
+                except Exception as e:
+                    self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
+                    # Fall back to grayscale conversion
+                    return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            
+            # For monochrome cameras or if debayering failed, convert to 3-channel grayscale
+            if len(image_array.shape) == 2:
+                self.logger.debug("Converting monochrome image to 3-channel")
+                return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            
+            # If already 3-channel but not RGB (e.g., RGBA), convert to BGR
+            if len(image_array.shape) == 3:
+                if image_array.shape[2] == 4:  # RGBA
+                    self.logger.debug("Converting RGBA to BGR")
+                    return cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
+                elif image_array.shape[2] == 1:  # Single channel
+                    self.logger.debug("Converting single channel to 3-channel")
+                    return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                else:
+                    self.logger.debug("Returning existing 3-channel image")
+                    return image_array
+            
             # Fallback: assume monochrome and convert
+            self.logger.debug("Fallback: converting to 3-channel grayscale")
             return cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
             
         except Exception as e:

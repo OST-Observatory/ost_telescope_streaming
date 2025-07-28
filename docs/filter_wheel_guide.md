@@ -80,14 +80,16 @@ if camera.has_filter_wheel():
 ### Command Line Usage
 
 ```bash
-# Test filter wheel functionality
-python tests/test_filter_wheel.py
+cd tests
 
-# Test with specific config
-python tests/test_filter_wheel.py --config config_qhy_with_filterwheel.yaml
+# Test filter wheel functionality
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml
+
+# Test with debug output
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml --debug
 
 # Test with specific driver
-python tests/test_filter_wheel.py --driver ASCOM.QHYCCD.Camera --debug
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml --driver ASCOM.QHYCCD.Camera --debug
 ```
 
 ## API Reference

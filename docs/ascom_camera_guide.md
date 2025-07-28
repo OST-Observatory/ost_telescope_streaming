@@ -40,31 +40,30 @@ video:
 
 ### Command Line Interface
 
-The `main_video_capture.py` script provides a comprehensive CLI for ASCOM camera control:
+The test scripts in the `tests/` directory provide comprehensive testing for ASCOM camera functionality:
 
-#### Basic Capture
+#### Basic Camera Test
 ```bash
-python main_video_capture.py --camera-type ascom --ascom-driver "ASCOM.QHYCamera.Camera" --exposure 5.0 --gain 20 --output test_image.jpg
+cd tests
+python test_ascom_camera.py --config ../config_ost_qhy600m.yaml
 ```
 
-#### Camera Information
+#### Filter Wheel Test
 ```bash
-python main_video_capture.py --camera-type ascom --ascom-driver "ASCOM.QHYCamera.Camera" --action info
+cd tests
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml
 ```
 
-#### Cooling Control
+#### Cooling Cache Test
 ```bash
-python main_video_capture.py --camera-type ascom --ascom-driver "ASCOM.QHYCamera.Camera" --action cooling --cooling-temp -10.0
+cd tests
+python test_cooling_cache.py --config ../config_ost_qhy600m.yaml
 ```
 
-#### Filter Wheel Control
+#### Main Application
 ```bash
-python main_video_capture.py --camera-type ascom --ascom-driver "ASCOM.QHYCamera.Camera" --action filter --filter-position 2
-```
-
-#### Debayered Capture
-```bash
-python main_video_capture.py --camera-type ascom --ascom-driver "ASCOM.QHYCamera.Camera" --action debayer --exposure 3.0 --gain 15 --output color_image.jpg
+# Use the main application for continuous operation
+python overlay_runner.py --config config_ost_qhy600m.yaml
 ```
 
 ### Python API

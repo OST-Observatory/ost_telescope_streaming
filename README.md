@@ -92,44 +92,79 @@ streaming:
 
 ## 📖 Usage
 
-### Generate Single Overlay
+### Main Application - Overlay Runner
+
+The **main application** is `overlay_runner.py`, which provides the complete automated telescope streaming system:
 
 ```bash
-python code/generate_overlay.py --ra 180.0 --dec 45.0
+python overlay_runner.py
 ```
 
-**Parameters:**
-- `--ra`: Right Ascension in degrees (0-360)
-- `--dec`: Declination in degrees (-90 to +90)
-- `--output`: Output file (optional, default from config)
+**Features:**
+- Automatic video capture from ASCOM or OpenCV cameras
+- Real-time plate-solving with PlateSolve 2
+- Continuous overlay generation based on telescope position
+- Dual-format saving (FITS for processing, PNG/JPG for display)
+- Integrated mount control and coordinate tracking
 
-### Continuous Streaming with Overlay Generation
-
+**Configuration:**
 ```bash
-python code/overlay_runner.py
+# Use specific configuration file
+python overlay_runner.py --config config_ost_qhy600m.yaml
+
+# Use default configuration
+python overlay_runner.py
 ```
 
-The runner automatically creates a new overlay every 30 seconds based on the current telescope position.
+### Test Scripts
 
-### Video Capture and Plate Solving
+The system includes comprehensive test scripts in the `tests/` directory:
 
+#### Basic Functionality Tests
 ```bash
-python code/video_processor.py
+cd tests
+python test_basic_functionality.py
 ```
 
-Automatically captures video frames and performs plate solving to determine coordinates.
-
-### Test Telescope Coordinates
-
+#### Video System Tests
 ```bash
-python code/ascom_mount.py
+cd tests
+python test_video_system.py --config ../config_ost_qhy600m.yaml
 ```
 
-Continuously displays current RA/Dec coordinates of the mount.
+#### Integration Tests
+```bash
+cd tests
+python test_integration.py --config ../config_ost_qhy600m.yaml
+```
+
+#### Plate-Solving Tests
+```bash
+cd tests
+python test_automated_platesolve2.py --config ../config_ost_qhy600m.yaml
+```
+
+#### Complete System Tests
+```bash
+cd tests
+python test_final_integration.py --config ../config_ost_qhy600m.yaml
+```
+
+#### ASCOM Camera Tests
+```bash
+cd tests
+python test_ascom_camera.py --config ../config_ost_qhy600m.yaml
+```
+
+#### Filter Wheel Tests
+```bash
+cd tests
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml
+```
 
 ## 🧪 Testing
 
-The project includes a comprehensive test suite to verify all components:
+The project includes a comprehensive test suite in the `tests/` directory to verify all components:
 
 ### Quick Test Run
 
@@ -144,24 +179,50 @@ python test_final_integration.py
 
 ```bash
 cd tests
+# Basic functionality tests
 python test_basic_functionality.py    # Configuration, SIMBAD, coordinates
-python test_video_system.py           # Video capture and processing
-python test_integration.py            # System integration
-python test_automated_platesolve2.py  # PlateSolve 2 automation
-python test_final_integration.py      # End-to-end system test
+python test_status_system.py          # Status objects and error handling
+
+# Hardware integration tests
+python test_ascom_camera.py --config ../config_ost_qhy600m.yaml
+python test_filter_wheel.py --config ../config_ost_qhy600m.yaml
+
+# Video system tests
+python test_video_system.py --config ../config_ost_qhy600m.yaml
+
+# Plate-solving tests
+python test_automated_platesolve2.py --config ../config_ost_qhy600m.yaml
+
+# System integration tests
+python test_integration.py --config ../config_ost_qhy600m.yaml
+python test_final_integration.py --config ../config_ost_qhy600m.yaml
+
+# Cache functionality tests
+python test_cooling_cache.py --config ../config_ost_qhy600m.yaml
+python test_persistent_cache.py --config ../config_ost_qhy600m.yaml
+python test_cache_debug.py --config ../config_ost_qhy600m.yaml
 ```
 
-### Video System Testing
+### Test Configuration
 
+All test scripts support configuration via `--config`:
 ```bash
-# List available cameras
-python test_video_system.py --list
+python test_ascom_camera.py --config ../config_ost_qhy600m.yaml
+python test_video_system.py --config ../config_ost_qhy600m.yaml
+```
 
-# Test specific camera
-python test_video_system.py --test-camera --camera 0
+### Test Options
 
-# Skip hardware tests (software-only)
-python test_video_system.py --skip-camera
+Most test scripts support additional options:
+```bash
+# Verbose output
+python test_ascom_camera.py --verbose --config ../config_ost_qhy600m.yaml
+
+# Debug mode
+python test_ascom_camera.py --debug --config ../config_ost_qhy600m.yaml
+
+# Quiet mode
+python test_ascom_camera.py --quiet --config ../config_ost_qhy600m.yaml
 ```
 
 ### Test Results
@@ -170,32 +231,51 @@ All tests provide detailed output with:
 - ✅ Successful tests
 - ❌ Failed tests
 - 📋 Summary at the end
+- 🔍 Detailed logging for debugging
 
 ## 📁 Project Structure
 
 ```
 ost_telescope_streaming/
+├── overlay_runner.py            # 🚀 MAIN APPLICATION - Complete automated system
 ├── code/
 │   ├── ascom_mount.py           # Telescope control and coordinate reading
 │   ├── generate_overlay.py      # Overlay generator (class-based)
-│   ├── overlay_runner.py        # Main automation loop
+│   ├── overlay_runner.py        # Main automation loop (core module)
 │   ├── config_manager.py        # Configuration management
 │   ├── plate_solver.py          # Plate solving interface
-│   ├── plate_solver_automated.py # Automated PlateSolve 2 integration
+│   ├── platesolve2_automated.py # Automated PlateSolve 2 integration
 │   ├── video_capture.py         # Video capture module
-│   └── video_processor.py       # Video processing and plate solving
-├── tests/
+│   ├── video_processor.py       # Video processing and plate solving
+│   ├── ascom_camera.py          # ASCOM camera interface
+│   ├── status.py                # Status objects and error handling
+│   └── exceptions.py            # Custom exceptions
+├── tests/                       # 🧪 TEST SCRIPTS
 │   ├── README.md                # Test documentation
+│   ├── test_utils.py            # Test utilities and helpers
 │   ├── test_basic_functionality.py    # Configuration, SIMBAD, coordinates
 │   ├── test_video_system.py           # Video capture and processing
 │   ├── test_integration.py            # System integration
 │   ├── test_automated_platesolve2.py  # PlateSolve 2 automation
 │   ├── test_final_integration.py      # End-to-end system test
+│   ├── test_ascom_camera.py           # ASCOM camera functionality
+│   ├── test_filter_wheel.py           # Filter wheel functionality
+│   ├── test_cooling_cache.py          # ASCOM cooling cache
+│   ├── test_persistent_cache.py       # Persistent cache functionality
+│   ├── test_cache_debug.py            # Cache debugging
+│   ├── test_status_system.py          # Status object system
 │   └── analyze_objects.py             # SIMBAD object analysis utility
-├── config.yaml                 # Configuration file
-├── requirements.txt            # Dependencies
-├── clean_cache.py              # Cache cleaning utility
-└── README.md                   # This file
+├── docs/                        # 📚 DOCUMENTATION
+│   ├── ascom_camera_guide.md    # ASCOM camera setup guide
+│   ├── ascom_cooling_cache_guide.md # Cooling cache documentation
+│   ├── filter_wheel_guide.md    # Filter wheel setup guide
+│   └── dual_format_saving_guide.md # Dual-format saving documentation
+├── config.yaml                  # Default configuration file
+├── config_ost_qhy600m.yaml      # QHY600M-specific configuration
+├── requirements.txt             # Dependencies
+├── clean_cache.py               # Cache cleaning utility
+├── LICENSE                      # License file
+└── README.md                    # This file
 ```
 
 ## 🔧 Troubleshooting
@@ -285,10 +365,13 @@ The system uses a modular architecture with clear separation of concerns:
 
 ### Key Components:
 
+- **OverlayRunner** (`overlay_runner.py`): Main application with complete automated system
 - **OverlayGenerator**: Class-based overlay generation with direct import capability
 - **PlateSolve2Automated**: Automated PlateSolve 2 integration with .apm file parsing
-- **VideoProcessor**: Modular video capture and processing system
-- **OverlayRunner**: Main automation loop with integrated components
+- **VideoProcessor**: Modular video capture and processing system with dual-format saving
+- **ASCOMCamera**: ASCOM camera interface with cooling and filter wheel support
+- **ConfigManager**: Centralized configuration management with validation
+- **Status System**: Standardized error handling and status reporting
 
 ## 🤝 Contributing
 
