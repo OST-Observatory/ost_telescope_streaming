@@ -529,8 +529,13 @@ class VideoCapture:
             # ASCOM images are often rotated 90° compared to other software
             # Transpose the image to correct orientation
             original_shape = image_data.shape
-            image_data = np.transpose(image_data)
-            self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
+            
+            # Check if rotation is needed
+            if self._needs_rotation(image_data.shape):
+                image_data = np.transpose(image_data)
+                self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
+            else:
+                self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
             
             # Note: For 90° rotation (transpose), Bayer patterns remain unchanged
             # RGGB -> RGGB, GRBG -> GRBG, GBRG -> GBRG, BGGR -> BGGR
@@ -949,11 +954,45 @@ class VideoCapture:
             # NOW apply orientation correction to the debayered RGB image
             # This is much simpler and more robust than rotating Bayer patterns
             original_shape = result_image.shape
-            result_image = np.transpose(result_image, (1, 0, 2))  # Transpose only spatial dimensions
-            self.logger.debug(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
+            
+            # Check if rotation is needed
+            if self._needs_rotation(result_image.shape):
+                result_image = np.transpose(result_image, (1, 0, 2))  # Transpose only spatial dimensions
+                self.logger.info(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
+                
+                # Debug: Check if the rotation actually changed the dimensions
+                if original_shape[0] == result_image.shape[1] and original_shape[1] == result_image.shape[0]:
+                    self.logger.info(f"✅ Rotation applied successfully: {original_shape} -> {result_image.shape}")
+                else:
+                    self.logger.warning(f"⚠️ Rotation may not have worked as expected: {original_shape} -> {result_image.shape}")
+            else:
+                self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
             
             return result_image
             
         except Exception as e:
             self.logger.error(f"Error converting ASCOM image: {e}")
             return None 
+
+    def _needs_rotation(self, image_shape: tuple) -> bool:
+        """Check if the image needs rotation based on its dimensions.
+        
+        ASCOM cameras typically provide images with long side vertical,
+        but we want long side horizontal for display.
+        
+        Args:
+            image_shape: Tuple of (height, width) or (height, width, channels)
+        Returns:
+            bool: True if rotation is needed, False otherwise
+        """
+        if len(image_shape) >= 2:
+            height, width = image_shape[0], image_shape[1]
+            
+            # If height > width, the long side is vertical (needs rotation)
+            # If width > height, the long side is horizontal (no rotation needed)
+            needs_rotation = height > width
+            
+            self.logger.debug(f"Image dimensions: {width}x{height}, needs rotation: {needs_rotation}")
+            return needs_rotation
+        
+        return False 
