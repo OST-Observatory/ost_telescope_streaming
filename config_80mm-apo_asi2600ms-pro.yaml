@@ -1,5 +1,5 @@
-# OST Telescope Streaming Configuration for QHY Camera with Separate Filter Wheel
-# =============================================================================
+# OST Telescope Streaming Configuration
+# =====================================
 
 # Telescope Mount Settings
 # ------------------------
@@ -15,25 +15,25 @@ mount:
 # -------------------
 telescope:
   # Focal length in millimeters
-  focal_length: 3454
+  focal_length: 480
   # Aperture diameter in millimeters
-  aperture: 508
+  aperture: 80
   # Telescope type (refractor, reflector, etc.)
   type: "reflector"
   # Focal ratio (focal_length / aperture)   TODO: Replace with calculation
-  focal_ratio: 6.8
+  focal_ratio: 6.0
 
 # Camera Parameters
 # ----------------
 camera:
   # Sensor width in millimeters
-  sensor_width: 36.0
+  sensor_width: 23.5
   # Sensor height in millimeters
-  sensor_height: 24.0
+  sensor_height: 15.7
   # Pixel size in micrometers
   pixel_size: 3.76
   # Camera type (mono, color, etc.)
-  type: "mono"
+  type: "color"
   # Bit depth
   bit_depth: 16
 
@@ -55,18 +55,18 @@ video:
 
   # Settings only for ASCOM cameras
   ascom:
-    ascom_driver: "ASCOM.QHYCCD.Camera"  # ASCOM driver ID for astro cameras
-    exposure_time: 0.1  # Manual exposure time in seconds
+    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
+    exposure_time: 2.0  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
-    binning: 2  # Binning factor (1x1, 2x2, etc.)
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
     # Separate filter wheel driver for QHY cameras
-    filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver
+    # filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver
 
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  file_format: "png"  # File format for saved frames (jpg, png, tiff, etc.)
+  file_format: "png"  # File format for saved frames (fits, jpg, png, tiff, etc.)
 
 # Plate-Solving Settings
 # ----------------------
@@ -85,7 +85,7 @@ plate_solve:
     timeout: 60
     verbose: true
     auto_mode: true
-    number_of_regions: 999
+    number_of_regions: 150
     min_stars: 20
     max_stars: 200
 
