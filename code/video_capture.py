@@ -571,17 +571,156 @@ class VideoCapture:
             # Camera information
             if hasattr(self.ascom_camera, 'camera'):
                 try:
-                    header['EXPTIME'] = float(self.ascom_camera.camera.ExposureDuration)
-                    header['GAIN'] = float(getattr(self.ascom_camera.camera, 'Gain', 0))
-                    header['XBINNING'] = int(self.ascom_camera.camera.BinX)
-                    header['YBINNING'] = int(self.ascom_camera.camera.BinY)
-                    header['XORGSUBF'] = int(self.ascom_camera.camera.StartX)
-                    header['YORGSUBF'] = int(self.ascom_camera.camera.StartY)
+                    # Try different exposure time property names
+                    exposure_time = None
+                    for exp_prop in ['ExposureDuration', 'ExposureTime', 'Exposure']:
+                        if hasattr(self.ascom_camera.camera, exp_prop):
+                            try:
+                                exposure_time = float(getattr(self.ascom_camera.camera, exp_prop))
+                                self.logger.debug(f"Found exposure time using property: {exp_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    if exposure_time is not None:
+                        header['EXPTIME'] = exposure_time
+                    else:
+                        # Use the exposure time from our configuration
+                        header['EXPTIME'] = float(self.exposure_time)
+                        self.logger.debug(f"Using configured exposure time: {self.exposure_time}")
+                    
+                    # Try different gain property names
+                    gain_value = None
+                    for gain_prop in ['Gain', 'GainValue', 'CCDGain']:
+                        if hasattr(self.ascom_camera.camera, gain_prop):
+                            try:
+                                gain_value = float(getattr(self.ascom_camera.camera, gain_prop))
+                                self.logger.debug(f"Found gain using property: {gain_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    if gain_value is not None:
+                        header['GAIN'] = gain_value
+                    else:
+                        # Use the gain from our configuration
+                        header['GAIN'] = float(self.gain)
+                        self.logger.debug(f"Using configured gain: {self.gain}")
+                    
+                    # Try different binning property names
+                    bin_x = None
+                    bin_y = None
+                    for bin_prop in ['BinX', 'BinningX', 'XBinning']:
+                        if hasattr(self.ascom_camera.camera, bin_prop):
+                            try:
+                                bin_x = int(getattr(self.ascom_camera.camera, bin_prop))
+                                self.logger.debug(f"Found X binning using property: {bin_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    for bin_prop in ['BinY', 'BinningY', 'YBinning']:
+                        if hasattr(self.ascom_camera.camera, bin_prop):
+                            try:
+                                bin_y = int(getattr(self.ascom_camera.camera, bin_prop))
+                                self.logger.debug(f"Found Y binning using property: {bin_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    if bin_x is not None:
+                        header['XBINNING'] = bin_x
+                    else:
+                        header['XBINNING'] = 1
+                        self.logger.debug("Using default X binning: 1")
+                    
+                    if bin_y is not None:
+                        header['YBINNING'] = bin_y
+                    else:
+                        header['YBINNING'] = 1
+                        self.logger.debug("Using default Y binning: 1")
+                    
+                    # Try different subframe property names
+                    start_x = None
+                    start_y = None
+                    num_x = None
+                    num_y = None
+                    
+                    for start_prop in ['StartX', 'SubFrameX', 'XStart']:
+                        if hasattr(self.ascom_camera.camera, start_prop):
+                            try:
+                                start_x = int(getattr(self.ascom_camera.camera, start_prop))
+                                self.logger.debug(f"Found X start using property: {start_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    for start_prop in ['StartY', 'SubFrameY', 'YStart']:
+                        if hasattr(self.ascom_camera.camera, start_prop):
+                            try:
+                                start_y = int(getattr(self.ascom_camera.camera, start_prop))
+                                self.logger.debug(f"Found Y start using property: {start_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    for num_prop in ['NumX', 'SubFrameWidth', 'XSize']:
+                        if hasattr(self.ascom_camera.camera, num_prop):
+                            try:
+                                num_x = int(getattr(self.ascom_camera.camera, num_prop))
+                                self.logger.debug(f"Found X size using property: {num_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    for num_prop in ['NumY', 'SubFrameHeight', 'YSize']:
+                        if hasattr(self.ascom_camera.camera, num_prop):
+                            try:
+                                num_y = int(getattr(self.ascom_camera.camera, num_prop))
+                                self.logger.debug(f"Found Y size using property: {num_prop}")
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    if start_x is not None:
+                        header['XORGSUBF'] = start_x
+                    else:
+                        header['XORGSUBF'] = 0
+                        self.logger.debug("Using default X start: 0")
+                    
+                    if start_y is not None:
+                        header['YORGSUBF'] = start_y
+                    else:
+                        header['YORGSUBF'] = 0
+                        self.logger.debug("Using default Y start: 0")
+                    
                     # Image dimensions (swapped due to transposition)
-                    header['NAXIS1'] = int(self.ascom_camera.camera.NumY)  # Width (now height)
-                    header['NAXIS2'] = int(self.ascom_camera.camera.NumX)  # Height (now width)
+                    if num_y is not None:
+                        header['NAXIS1'] = int(num_y)  # Width (now height)
+                    else:
+                        header['NAXIS1'] = int(self.frame_height)
+                        self.logger.debug(f"Using frame height for NAXIS1: {self.frame_height}")
+                    
+                    if num_x is not None:
+                        header['NAXIS2'] = int(num_x)  # Height (now width)
+                    else:
+                        header['NAXIS2'] = int(self.frame_width)
+                        self.logger.debug(f"Using frame width for NAXIS2: {self.frame_width}")
+                    
+                    self.logger.debug(f"Successfully added camera info to FITS header")
+                    
                 except Exception as e:
                     self.logger.warning(f"Could not add camera info to FITS header: {e}")
+                    # Add basic camera info using configuration values
+                    header['EXPTIME'] = float(self.exposure_time)
+                    header['GAIN'] = float(self.gain)
+                    header['XBINNING'] = 1
+                    header['YBINNING'] = 1
+                    header['XORGSUBF'] = 0
+                    header['YORGSUBF'] = 0
+                    header['NAXIS1'] = int(self.frame_height)
+                    header['NAXIS2'] = int(self.frame_width)
+                    self.logger.info("Added basic camera info using configuration values")
             
             # Telescope information
             header['FOCALLEN'] = float(self.focal_length)
