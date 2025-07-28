@@ -91,12 +91,15 @@ class PlateSolve2Solver(PlateSolver):
             self.automated_solver = None
             self.automated_available: bool = False
             self.logger.info("Automated PlateSolve 2 solver not available, using manual mode")
+
     def get_name(self) -> str:
         """Gibt den Namen des Solvers zurück."""
         return "PlateSolve 2"
+    
     def is_available(self) -> bool:
         """Prüft, ob PlateSolve 2 verfügbar ist."""
         return bool(self.executable_path)
+    
     def solve(self, image_path: str) -> PlateSolveStatus:
         """Führt Plate-Solving für das gegebene Bild aus.
         Returns:
@@ -108,7 +111,7 @@ class PlateSolve2Solver(PlateSolver):
             return error_status(f"Image file not found: {image_path}")
         start_time = time.time()
         try:
-            # Try automated solving first if available
+            # Try automated solving if available
             if self.automated_available and self.automated_solver:
                 self.logger.info("Attempting automated PlateSolve 2 solving")
                 
@@ -156,64 +159,30 @@ class PlateSolve2Solver(PlateSolver):
                 )
                 
                 if automated_result.is_success:
+                    solving_time = time.time() - start_time
+                    self.logger.info(f"Plate-solving successful in {solving_time:.2f} seconds")
                     return success_status(
                         "Automated solving successful",
                         data=automated_result.data,
-                        details={'method': 'automated', 'solving_time': automated_result.details.get('solving_time')}
+                        details={'method': 'automated', 'solving_time': solving_time}
                     )
                 else:
-                    self.logger.warning(f"Automated solving failed: {automated_result.message}")
-                    self.logger.info("Falling back to GUI mode")
-            
-            # Fall back to GUI mode (CLI mode removed as it doesn't work)
-            return self._solve_with_gui(image_path)
-            
-        except Exception as e:
-            self.logger.error(f"PlateSolve 2 exception: {e}")
-            return error_status(f"PlateSolve 2 error: {str(e)}")
-    
-    def _solve_with_gui(self, image_path: str) -> PlateSolveStatus:
-        """Solve using PlateSolve 2 GUI mode."""
-        try:
-            # Open PlateSolve 2 with the image file
-            cmd = [self.executable_path, image_path]
-            
-            if self.verbose:
-                self.logger.info(f"Opening PlateSolve 2 GUI: {' '.join(cmd)}")
-            
-            # Start PlateSolve 2 GUI
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            # Wait for the process to start
-            time.sleep(2)
-            
-            # Check if process is running
-            if process.poll() is None:
-                self.logger.info("PlateSolve 2 GUI opened successfully")
-                self.logger.info("Please solve the image manually in PlateSolve 2")
-                self.logger.info("You can save results or copy coordinates from the GUI")
-                
-                # For now, return a result indicating GUI is open
-                return warning_status(
-                    "PlateSolve 2 GUI opened - manual solving required",
-                    details={'method': 'gui'}
-                )
-                
+                    solving_time = time.time() - start_time
+                    self.logger.warning(f"Automated solving failed after {solving_time:.2f} seconds: {automated_result.message}")
+                    self.logger.info("Continuing with next exposure - conditions may improve")
+                    return error_status(
+                        f"Plate-solving failed: {automated_result.message}",
+                        details={'method': 'automated', 'solving_time': solving_time, 'reason': 'no_stars_or_poor_conditions'}
+                    )
             else:
-                # Process finished (possibly an error)
-                stdout, stderr = process.communicate()
-                if stderr:
-                    return error_status(f"PlateSolve 2 error: {stderr.strip()}")
-                else:
-                    return error_status("PlateSolve 2 process finished unexpectedly")
+                # No automated solver available
+                self.logger.error("No automated PlateSolve 2 solver available")
+                return error_status("No automated PlateSolve 2 solver available")
             
         except Exception as e:
-            return error_status(f"GUI mode error: {str(e)}")
+            solving_time = time.time() - start_time
+            self.logger.error(f"PlateSolve 2 exception after {solving_time:.2f} seconds: {e}")
+            return error_status(f"PlateSolve 2 error: {str(e)}", details={'solving_time': solving_time})
     
 
 

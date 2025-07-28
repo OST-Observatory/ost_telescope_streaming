@@ -195,10 +195,15 @@ class OverlayRunner:
                         # Set up callbacks
                         def on_solve_result(result):
                             self.last_solve_result = result
-                            self.logger.info(f"Plate-solving result: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
+                            self.logger.info(f"Plate-solving successful: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°")
                         
                         def on_error(error):
-                            self.logger.error(f"Video processing error: {error}")
+                            # Don't log every plate-solving failure as an error
+                            # Only log actual system errors
+                            if "plate-solving" not in str(error).lower() and "no stars" not in str(error).lower():
+                                self.logger.error(f"Video processing error: {error}")
+                            else:
+                                self.logger.debug(f"Plate-solving attempt failed (normal for poor conditions): {error}")
                         
                         self.video_processor.set_callbacks(
                             on_solve_result=on_solve_result,

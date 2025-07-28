@@ -330,8 +330,17 @@ class VideoProcessor:
                 if self.on_solve_result:
                     self.on_solve_result(result)
             else:
-                error_msg = status.error_message if hasattr(status, 'error_message') else 'Unknown error'
-                self.logger.warning(f"Plate-solving failed: {error_msg}")
+                # Plate-solving failed - this is normal for poor conditions
+                error_msg = status.message if hasattr(status, 'message') else 'Unknown error'
+                details = status.details if hasattr(status, 'details') else {}
+                solving_time = details.get('solving_time', 0)
+                
+                self.logger.warning(f"Plate-solving failed after {solving_time:.2f}s: {error_msg}")
+                self.logger.info("Continuing with next exposure - conditions may improve for next attempt")
+                
+                # Check if this is a "no stars" or "poor conditions" failure
+                if 'no_stars' in error_msg.lower() or 'poor_conditions' in str(details).lower():
+                    self.logger.info("Failure likely due to poor seeing or cloud cover - normal for astronomical imaging")
             
             self.last_solve_time = time.time()
             return result
