@@ -870,6 +870,13 @@ class VideoCapture:
             # Log the original data type and shape for debugging
             self.logger.debug(f"ASCOM image data type: {image_array.dtype}, shape: {image_array.shape}")
             
+            # Fix image orientation for ASCOM cameras
+            # ASCOM images are often rotated 90° compared to other software
+            # Transpose the image to correct orientation
+            original_shape = image_array.shape
+            image_array = np.transpose(image_array)
+            self.logger.debug(f"Image orientation corrected: {original_shape} -> {image_array.shape}")
+            
             # Convert data type to uint16 first (most ASCOM cameras use 16-bit)
             if image_array.dtype == np.int32:
                 # For 32-bit signed integers, convert to uint16
