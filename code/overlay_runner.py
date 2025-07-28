@@ -207,7 +207,7 @@ class OverlayRunner:
                         
                         start_status = self.video_processor.start()
                         if start_status.is_success:
-                            self.logger.info("Video processor started")
+                            self.logger.debug("Video processor start successful")
                         else:
                             self.logger.error(f"Failed to start video processor: {start_status.message}")
                             self.video_processor = None
