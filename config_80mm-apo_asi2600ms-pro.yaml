@@ -145,7 +145,7 @@ overlay:
     # Text color (RGB)
     text_color: [255, 255, 255]  # White
     # Object marker size in pixels
-    marker_size: 5
+    marker_size: 20
     # Text offset from marker in pixels
     text_offset: [8, -8]
 

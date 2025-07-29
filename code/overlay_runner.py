@@ -279,16 +279,31 @@ class OverlayRunner:
                             fov_height_deg = None
                             position_angle_deg = None
                             image_size = None
-                            # Try to get image size from video config
-                            try:
-                                video_config = self.config.get_video_config()
-                                if video_config.get('camera_type') == 'opencv':
-                                    opencv_config = video_config.get('opencv', {})
-                                    width = opencv_config.get('frame_width', 1920)
-                                    height = opencv_config.get('frame_height', 1080)
-                                    image_size = (width, height)
-                            except Exception as e:
-                                self.logger.warning(f"Could not get image size from config: {e}")
+                            
+                            # Try to get actual image size from captured frame
+                            if self.video_processor:
+                                try:
+                                    latest_frame = self.video_processor.get_latest_frame_path()
+                                    if latest_frame and os.path.exists(latest_frame):
+                                        # Get actual image dimensions from the captured frame
+                                        from PIL import Image
+                                        with Image.open(latest_frame) as img:
+                                            image_size = img.size
+                                            self.logger.debug(f"Detected image size from captured frame: {image_size}")
+                                except Exception as e:
+                                    self.logger.warning(f"Could not get image size from captured frame: {e}")
+                                    # Fallback to config if frame detection fails
+                                    try:
+                                        overlay_config = self.config.get_overlay_config()
+                                        image_size = overlay_config.get('image_size', [1920, 1080])
+                                        if isinstance(image_size, list) and len(image_size) == 2:
+                                            image_size = tuple(image_size)
+                                        else:
+                                            image_size = (1920, 1080)  # Default fallback
+                                        self.logger.debug(f"Using fallback image size from overlay config: {image_size}")
+                                    except Exception as e:
+                                        self.logger.warning(f"Could not get image size from overlay config: {e}")
+                                        image_size = (1920, 1080)  # Final fallback
                         
                         # Generate output filename
                         if self.use_timestamps:
