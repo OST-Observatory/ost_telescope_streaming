@@ -636,26 +636,53 @@ class VideoProcessor:
             if hasattr(self.video_capture, 'get_latest_frame_path'):
                 return self.video_capture.get_latest_frame_path()
             
-            # Fallback: try to find the most recent image file in the capture directory
-            if hasattr(self.video_capture, 'capture_dir'):
-                capture_dir = self.video_capture.capture_dir
-                if os.path.exists(capture_dir):
-                    # Look for image files in the capture directory
-                    image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
-                    latest_file = None
-                    latest_time = 0
-                    
-                    for filename in os.listdir(capture_dir):
-                        if any(filename.lower().endswith(ext) for ext in image_extensions):
-                            file_path = os.path.join(capture_dir, filename)
+            # Get the plate solve directory from config
+            plate_solve_dir = self.video_config.get('plate_solve_dir', 'plate_solve_frames')
+            
+            # Get the configured image format from video config
+            image_format = self.video_config.get('image_format', 'png').lower()
+            if image_format.startswith('.'):
+                image_format = image_format[1:]  # Remove leading dot if present
+            
+            # Check if timestamps are used
+            use_timestamps = self.config.get_overlay_config().get('use_timestamps', False)
+            
+            if not use_timestamps:
+                # Simple case: look for "capture.{extension}" file
+                capture_file = os.path.join(plate_solve_dir, f"capture.{image_format}")
+                if os.path.exists(capture_file):
+                    self.logger.debug(f"Found capture file: {capture_file}")
+                    return capture_file
+                else:
+                    self.logger.debug(f"Capture file not found: {capture_file}")
+                    return None
+            else:
+                # Timestamp case: find the most recent file with the configured extension
+                if not os.path.exists(plate_solve_dir):
+                    self.logger.debug(f"Plate solve directory does not exist: {plate_solve_dir}")
+                    return None
+                
+                latest_file = None
+                latest_time = 0
+                
+                for filename in os.listdir(plate_solve_dir):
+                    if filename.lower().endswith(f'.{image_format}'):
+                        file_path = os.path.join(plate_solve_dir, filename)
+                        try:
                             file_time = os.path.getmtime(file_path)
                             if file_time > latest_time:
                                 latest_time = file_time
                                 latest_file = file_path
-                    
-                    return latest_file
-            
-            return None
+                        except OSError as e:
+                            self.logger.debug(f"Could not get modification time for {file_path}: {e}")
+                            continue
+                
+                if latest_file:
+                    self.logger.debug(f"Found latest timestamped frame: {latest_file}")
+                else:
+                    self.logger.debug(f"No {image_format} files found in {plate_solve_dir}")
+                
+                return latest_file
             
         except Exception as e:
             self.logger.error(f"Error getting latest frame path: {e}")
