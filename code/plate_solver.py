@@ -65,6 +65,25 @@ class PlateSolveResult:
         self.solving_time = solving_time
         self.method = method
         self.confidence = confidence
+    
+    def __str__(self) -> str:
+        """String representation of the plate-solving result.
+        
+        Returns:
+            str: Human-readable representation of the result
+        """
+        confidence_str = f", confidence={self.confidence:.2f}" if self.confidence is not None else ""
+        return (f"PlateSolveResult(RA={self.ra_center:.4f}°, Dec={self.dec_center:.4f}°, "
+                f"FOV={self.fov_width:.3f}°x{self.fov_height:.3f}°, "
+                f"method={self.method}, time={self.solving_time:.1f}s{confidence_str})")
+    
+    def __repr__(self) -> str:
+        """Detailed string representation for debugging.
+        
+        Returns:
+            str: Detailed representation of the result
+        """
+        return self.__str__()
 
 class PlateSolver(ABC):
     """

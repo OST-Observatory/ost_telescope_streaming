@@ -420,27 +420,44 @@ class VideoProcessor:
                 self.on_error(e)
     
     def _status_to_result(self, status) -> Optional[PlateSolveResult]:
-        """Convert PlateSolveStatus to PlateSolveResult."""
+        """Convert PlateSolveStatus to PlateSolveResult.
+        
+        Converts the status-based result from plate-solving into the
+        standardized PlateSolveResult object for compatibility with
+        existing callback systems.
+        
+        Args:
+            status: PlateSolveStatus object from plate solver
+            
+        Returns:
+            Optional[PlateSolveResult]: Converted result or None if failed
+        """
         if not status or not status.is_success:
             return None
         
-        # Create PlateSolveResult from status data
-        result = PlateSolveResult(success=True)
-        
         # Extract data from status
         data = status.data if hasattr(status, 'data') else {}
+        details = status.details if hasattr(status, 'details') else {}
         
-        # Map status data to result fields
-        result.ra_center = data.get('ra_center')
-        result.dec_center = data.get('dec_center')
-        result.fov_width = data.get('fov_width')
-        result.fov_height = data.get('fov_height')
-        result.position_angle = data.get('position_angle')
-        result.image_size = data.get('image_size')
-        result.confidence = data.get('confidence')
-        result.stars_detected = data.get('stars_detected')
-        result.solving_time = data.get('solving_time')
-        result.solver_used = data.get('solver_used')
+        # Get required parameters with defaults
+        ra_center = data.get('ra_center', 0.0)
+        dec_center = data.get('dec_center', 0.0)
+        fov_width = data.get('fov_width', 1.0)
+        fov_height = data.get('fov_height', 1.0)
+        solving_time = details.get('solving_time', 0.0)
+        method = details.get('method', 'unknown')
+        confidence = data.get('confidence')
+        
+        # Create PlateSolveResult with new API
+        result = PlateSolveResult(
+            ra_center=ra_center,
+            dec_center=dec_center,
+            fov_width=fov_width,
+            fov_height=fov_height,
+            solving_time=solving_time,
+            method=method,
+            confidence=confidence
+        )
         
         return result
 
@@ -474,10 +491,10 @@ class VideoProcessor:
             # Convert status to result
             result = self._status_to_result(status)
             
-            if result and result.success:
+            if result:
                 self.successful_solves += 1
                 self.last_solve_result = result
-                self.logger.info(f"Plate-solving successful: {result}")
+                self.logger.info(f"Plate-solving successful: RA={result.ra_center:.4f}°, Dec={result.dec_center:.4f}°, FOV={result.fov_width:.3f}°x{result.fov_height:.3f}°")
                 
                 # Trigger solve callback
                 if self.on_solve_result:
@@ -526,10 +543,20 @@ class VideoProcessor:
             return error_status("No plate solver available")
         try:
             result = self._solve_frame(frame_path)
-            if result and result.success:
-                return success_status("Plate-solving successful", data=result.__dict__)
+            if result:
+                # Convert PlateSolveResult to dictionary for status data
+                result_data = {
+                    'ra_center': result.ra_center,
+                    'dec_center': result.dec_center,
+                    'fov_width': result.fov_width,
+                    'fov_height': result.fov_height,
+                    'solving_time': result.solving_time,
+                    'method': result.method,
+                    'confidence': result.confidence
+                }
+                return success_status("Plate-solving successful", data=result_data)
             else:
-                return error_status(f"Plate-solving failed: {result.error_message if result else 'Unknown error'}")
+                return error_status("Plate-solving failed: No result returned")
         except Exception as e:
             self.logger.error(f"Error in plate-solving: {e}")
             return error_status(f"Error in plate-solving: {e}")

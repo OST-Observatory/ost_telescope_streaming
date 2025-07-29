@@ -58,17 +58,17 @@ def test_automated_platesolve2_integration() -> bool:
         
         print(f"Result: {result}")
         
-        if result.success:
+        if result.is_success:
             print(f"✓ Automated solving successful!")
-            print(f"✓ Method used: {result.method_used}")
-            print(f"✓ RA: {result.ra_center:.4f}°")
-            print(f"✓ Dec: {result.dec_center:.4f}°")
-            print(f"✓ FOV: {result.fov_width:.4f}° x {result.fov_height:.4f}°")
-            print(f"✓ Confidence: {result.confidence}")
-            print(f"✓ Solving time: {result.solving_time:.1f}s")
+            print(f"✓ Method used: {result.data.get('method', 'unknown')}")
+            print(f"✓ RA: {result.data.get('ra_center', 0):.4f}°")
+            print(f"✓ Dec: {result.data.get('dec_center', 0):.4f}°")
+            print(f"✓ FOV: {result.data.get('fov_width', 0):.4f}° x {result.data.get('fov_height', 0):.4f}°")
+            print(f"✓ Confidence: {result.data.get('confidence', 'unknown')}")
+            print(f"✓ Solving time: {result.details.get('solving_time', 0):.1f}s")
             return True
         else:
-            print(f"✗ Solving failed: {result.error_message}")
+            print(f"✗ Solving failed: {result.message}")
             return False
             
     except Exception as e:
