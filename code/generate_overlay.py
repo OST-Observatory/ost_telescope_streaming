@@ -127,7 +127,8 @@ class OverlayGenerator:
 
     def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                         fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
-                        position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None) -> str:
+                        position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
+                        mag_limit: Optional[float] = None) -> str:
         """Generate an overlay image for the given coordinates.
 
         Creates a comprehensive astronomical overlay showing stars, deep sky objects,
@@ -141,6 +142,7 @@ class OverlayGenerator:
             fov_height_deg: Field of view height in degrees
             position_angle_deg: Position angle in degrees
             image_size: Image size as (width, height) in pixels
+            mag_limit: Magnitude limit for objects to include
 
         Returns:
             str: Path to the generated overlay file

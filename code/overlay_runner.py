@@ -88,7 +88,8 @@ class OverlayRunner:
     
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                                    fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
-                                   position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None) -> OverlayStatus:
+                                   position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
+                                   mag_limit: Optional[float] = None) -> OverlayStatus:
         """Generate an overlay for the given coordinates.
         
         Creates an astronomical overlay showing stars, deep sky objects,
@@ -102,6 +103,7 @@ class OverlayRunner:
             fov_height_deg: Field of view height in degrees (from plate-solving)
             position_angle_deg: Position angle in degrees (from plate-solving)
             image_size: Image size as (width, height) in pixels (from camera)
+            mag_limit: Magnitude limit for objects to include
             
         Returns:
             OverlayStatus: Status object with result or error information.
@@ -116,13 +118,13 @@ class OverlayRunner:
                 try:
                     result_file = self.overlay_generator.generate_overlay(
                         ra_deg, dec_deg, output_file, 
-                        fov_width_deg, fov_height_deg, position_angle_deg, image_size
+                        fov_width_deg, fov_height_deg, position_angle_deg, image_size, mag_limit
                     )
                     self.logger.info(f"Overlay created successfully: {result_file}")
                     return success_status(
                         f"Overlay created successfully: {result_file}",
                         data=result_file,
-                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size}
+                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size, 'mag_limit': mag_limit}
                     )
                 except Exception as e:
                     self.logger.error(f"Error creating overlay: {e}")
@@ -298,7 +300,7 @@ class OverlayRunner:
                         # Create overlay with all available parameters
                         overlay_status = self.generate_overlay_with_coords(
                             ra_deg, dec_deg, output_file,
-                            fov_width_deg, fov_height_deg, position_angle_deg, image_size
+                            fov_width_deg, fov_height_deg, position_angle_deg, image_size, None
                         )
                         
                         if overlay_status.is_success:
