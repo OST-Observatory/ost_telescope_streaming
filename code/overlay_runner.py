@@ -89,7 +89,7 @@ class OverlayRunner:
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                                    fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
                                    position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
-                                   mag_limit: Optional[float] = None) -> OverlayStatus:
+                                   mag_limit: Optional[float] = None, is_flipped: Optional[bool] = None) -> OverlayStatus:
         """Generate an overlay for the given coordinates.
         
         Creates an astronomical overlay showing stars, deep sky objects,
@@ -104,6 +104,7 @@ class OverlayRunner:
             position_angle_deg: Position angle in degrees (from plate-solving)
             image_size: Image size as (width, height) in pixels (from camera)
             mag_limit: Magnitude limit for objects to include
+            is_flipped: Whether the image is flipped (from plate-solving)
             
         Returns:
             OverlayStatus: Status object with result or error information.
@@ -118,13 +119,13 @@ class OverlayRunner:
                 try:
                     result_file = self.overlay_generator.generate_overlay(
                         ra_deg, dec_deg, output_file, 
-                        fov_width_deg, fov_height_deg, position_angle_deg, image_size, mag_limit
+                        fov_width_deg, fov_height_deg, position_angle_deg, image_size, mag_limit, is_flipped
                     )
                     self.logger.info(f"Overlay created successfully: {result_file}")
                     return success_status(
                         f"Overlay created successfully: {result_file}",
                         data=result_file,
-                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size, 'mag_limit': mag_limit}
+                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size, 'mag_limit': mag_limit, 'is_flipped': is_flipped}
                     )
                 except Exception as e:
                     self.logger.error(f"Error creating overlay: {e}")
@@ -272,13 +273,20 @@ class OverlayRunner:
                             fov_height_deg = self.last_solve_result.fov_height
                             position_angle_deg = self.last_solve_result.position_angle
                             image_size = self.last_solve_result.image_size
-                            self.logger.info(f"Using plate-solving results: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°, FOV={fov_width_deg:.3f}°x{fov_height_deg:.3f}°, PA={position_angle_deg:.1f}°")
+                            
+                            # Get flip information from plate-solving result
+                            is_flipped = getattr(self.last_solve_result, 'is_flipped', False)
+                            if is_flipped:
+                                self.logger.info("Plate-solving detected flipped image, will apply flip correction to overlay")
+                            
+                            self.logger.info(f"Using plate-solving results: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°, FOV={fov_width_deg:.3f}°x{fov_height_deg:.3f}°, PA={position_angle_deg:.1f}°, Flipped={is_flipped}")
                         else:
                             # Use mount coordinates and default values
                             fov_width_deg = None
                             fov_height_deg = None
                             position_angle_deg = None
                             image_size = None
+                            is_flipped = False
                             
                             # Try to get actual image size from captured frame
                             if self.video_processor:
@@ -315,7 +323,7 @@ class OverlayRunner:
                         # Create overlay with all available parameters
                         overlay_status = self.generate_overlay_with_coords(
                             ra_deg, dec_deg, output_file,
-                            fov_width_deg, fov_height_deg, position_angle_deg, image_size, None
+                            fov_width_deg, fov_height_deg, position_angle_deg, image_size, None, is_flipped
                         )
                         
                         if overlay_status.is_success:

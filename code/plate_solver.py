@@ -56,11 +56,13 @@ class PlateSolveResult:
         confidence: Confidence level of the solution (if available)
         position_angle: Position angle of the image (degrees)
         image_size: Image size as (width, height) in pixels
+        is_flipped: Whether the image is flipped (mirror X-axis)
     """
     
     def __init__(self, ra_center: float, dec_center: float, fov_width: float, fov_height: float, 
                  solving_time: float, method: str, confidence: Optional[float] = None,
-                 position_angle: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None):
+                 position_angle: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
+                 is_flipped: Optional[bool] = None):
         self.ra_center = ra_center
         self.dec_center = dec_center
         self.fov_width = fov_width
@@ -70,6 +72,7 @@ class PlateSolveResult:
         self.confidence = confidence
         self.position_angle = position_angle
         self.image_size = image_size
+        self.is_flipped = is_flipped
     
     def __str__(self) -> str:
         """String representation of the plate-solving result.
@@ -85,6 +88,7 @@ class PlateSolveResult:
             fov_h_str = f"{self.fov_height:.3f}" if self.fov_height is not None else "None"
             time_str = f"{self.solving_time:.1f}" if self.solving_time is not None else "None"
             pa_str = f"{self.position_angle:.1f}" if self.position_angle is not None else "None"
+            flipped_str = "Yes" if self.is_flipped else "No"
             
             confidence_str = ""
             if self.confidence is not None:
@@ -95,7 +99,7 @@ class PlateSolveResult:
             
             return (f"PlateSolveResult(RA={ra_str}°, Dec={dec_str}°, "
                     f"FOV={fov_w_str}°x{fov_h_str}°, PA={pa_str}°, "
-                    f"method={self.method}, time={time_str}s{confidence_str})")
+                    f"method={self.method}, time={time_str}s, flipped={flipped_str}{confidence_str})")
         except Exception as e:
             # Fallback if formatting fails
             return f"PlateSolveResult(error_formatting: {e})"

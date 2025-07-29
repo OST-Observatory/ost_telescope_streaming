@@ -461,6 +461,7 @@ class VideoProcessor:
         confidence = safe_float(data.get('confidence')) if data.get('confidence') is not None else None
         position_angle = safe_float(data.get('position_angle')) if data.get('position_angle') is not None else None
         image_size = data.get('image_size')  # Keep as tuple, no conversion needed
+        is_flipped = data.get('flipped', False)  # Get flip information
         
         # Create PlateSolveResult with new API
         result = PlateSolveResult(
@@ -472,7 +473,8 @@ class VideoProcessor:
             method=method,
             confidence=confidence,
             position_angle=position_angle,
-            image_size=image_size
+            image_size=image_size,
+            is_flipped=is_flipped
         )
         
         return result

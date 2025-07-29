@@ -73,7 +73,7 @@ class OverlayGenerator:
         self.logger.warning("Could not load TrueType font, using default font.")
         return ImageFont.load_default()
 
-    def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0):
+    def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0, is_flipped=False):
         """Converts sky coordinates to pixel coordinates with rotation support.
         Args:
             obj_coord: SkyCoord of the object
@@ -82,6 +82,7 @@ class OverlayGenerator:
             fov_width_deg: Field of view width in degrees
             fov_height_deg: Field of view height in degrees
             position_angle_deg: Position angle in degrees (rotation of the image)
+            is_flipped: Whether the image is flipped (mirror X-axis)
         Returns:
             tuple: (x, y) pixel coordinates
         """
@@ -110,6 +111,11 @@ class OverlayGenerator:
             x = size_px[0] / 2 + delta_ra_rot / scale_x
             y = size_px[1] / 2 - delta_dec_rot / scale_y  # Invert Y-axis (Dec up)
 
+            # Apply flip correction if needed
+            if is_flipped:
+                # Mirror the X-axis: x = width - x
+                x = size_px[0] - x
+
             return int(x), int(y)
         except Exception as e:
             raise ValueError(f"Error in coordinate conversion with rotation: {e}")
@@ -128,7 +134,7 @@ class OverlayGenerator:
     def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                         fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
                         position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
-                        mag_limit: Optional[float] = None) -> str:
+                        mag_limit: Optional[float] = None, is_flipped: Optional[bool] = None) -> str:
         """Generate an overlay image for the given coordinates.
 
         Creates a comprehensive astronomical overlay showing stars, deep sky objects,
@@ -143,6 +149,7 @@ class OverlayGenerator:
             position_angle_deg: Position angle in degrees
             image_size: Image size as (width, height) in pixels
             mag_limit: Magnitude limit for objects to include
+            is_flipped: Whether the image is flipped (from PlateSolve2)
 
         Returns:
             str: Path to the generated overlay file
@@ -161,7 +168,14 @@ class OverlayGenerator:
             pa_deg = position_angle_deg if position_angle_deg is not None else 0.0
             img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
+            is_flipped = is_flipped if is_flipped is not None else False
             output_file = output_file or self.default_filename
+
+            # Apply flip correction to position angle if needed
+            if is_flipped:
+                self.logger.info(f"Image is flipped, applying flip correction to overlay")
+                # For flipped images, we need to mirror the X-axis
+                # This is handled in the coordinate conversion
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
@@ -242,7 +256,7 @@ class OverlayGenerator:
 
                     # Use found column names
                     obj_coord = SkyCoord(ra=row[ra_col], dec=row[dec_col], unit="deg")
-                    x, y = self.skycoord_to_pixel_with_rotation(obj_coord, center, img_size, fov_w, fov_h, pa_deg)
+                    x, y = self.skycoord_to_pixel_with_rotation(obj_coord, center, img_size, fov_w, fov_h, pa_deg, is_flipped)
 
                     # Check if object is within image bounds
                     if 0 <= x <= img_size[0] and 0 <= y <= img_size[1]:
