@@ -304,6 +304,36 @@ class OverlayRunner:
                         )
                         
                         if overlay_status.is_success:
+                            # Get the overlay file path
+                            overlay_file = overlay_status.data
+                            
+                            # Combine overlay with captured image if video processor is available
+                            if self.video_processor and hasattr(self.video_processor, 'combine_overlay_with_image'):
+                                try:
+                                    # Get the latest captured frame
+                                    latest_frame = self.video_processor.get_latest_frame_path()
+                                    if latest_frame and os.path.exists(latest_frame):
+                                        # Generate combined image filename
+                                        if self.use_timestamps:
+                                            timestamp = datetime.now().strftime(self.timestamp_format)
+                                            combined_file = f"combined_{timestamp}.png"
+                                        else:
+                                            combined_file = "combined.png"
+                                        
+                                        # Combine overlay with captured image
+                                        combine_status = self.video_processor.combine_overlay_with_image(
+                                            latest_frame, overlay_file, combined_file
+                                        )
+                                        
+                                        if combine_status.is_success:
+                                            self.logger.info(f"Combined image created: {combined_file}")
+                                        else:
+                                            self.logger.warning(f"Failed to combine images: {combine_status.message}")
+                                    else:
+                                        self.logger.info("No captured frame available for combination")
+                                except Exception as e:
+                                    self.logger.warning(f"Error combining overlay with image: {e}")
+                            
                             consecutive_failures = 0
                             self.logger.info(f"Status: OK | Coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
                         else:
