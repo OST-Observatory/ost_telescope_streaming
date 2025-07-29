@@ -634,7 +634,17 @@ class VideoProcessor:
             
             # Try to get the latest frame path from video capture
             if hasattr(self.video_capture, 'get_latest_frame_path'):
-                return self.video_capture.get_latest_frame_path()
+                result = self.video_capture.get_latest_frame_path()
+                
+                # Handle both string and Status object returns
+                if isinstance(result, str):
+                    return result
+                elif hasattr(result, 'data') and result.data:
+                    return result.data
+                elif hasattr(result, 'is_success') and result.is_success and hasattr(result, 'data'):
+                    return result.data
+                else:
+                    self.logger.debug("Video capture get_latest_frame_path returned no valid path")
             
             # Get the plate solve directory from config
             plate_solve_dir = self.video_config.get('plate_solve_dir', 'plate_solve_frames')
