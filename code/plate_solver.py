@@ -54,10 +54,13 @@ class PlateSolveResult:
         solving_time: Time taken for solving (seconds)
         method: Method used for solving (e.g., 'platesolve2', 'astrometry')
         confidence: Confidence level of the solution (if available)
+        position_angle: Position angle of the image (degrees)
+        image_size: Image size as (width, height) in pixels
     """
     
     def __init__(self, ra_center: float, dec_center: float, fov_width: float, fov_height: float, 
-                 solving_time: float, method: str, confidence: Optional[float] = None):
+                 solving_time: float, method: str, confidence: Optional[float] = None,
+                 position_angle: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None):
         self.ra_center = ra_center
         self.dec_center = dec_center
         self.fov_width = fov_width
@@ -65,6 +68,8 @@ class PlateSolveResult:
         self.solving_time = solving_time
         self.method = method
         self.confidence = confidence
+        self.position_angle = position_angle
+        self.image_size = image_size
     
     def __str__(self) -> str:
         """String representation of the plate-solving result.
@@ -79,6 +84,7 @@ class PlateSolveResult:
             fov_w_str = f"{self.fov_width:.3f}" if self.fov_width is not None else "None"
             fov_h_str = f"{self.fov_height:.3f}" if self.fov_height is not None else "None"
             time_str = f"{self.solving_time:.1f}" if self.solving_time is not None else "None"
+            pa_str = f"{self.position_angle:.1f}" if self.position_angle is not None else "None"
             
             confidence_str = ""
             if self.confidence is not None:
@@ -88,7 +94,7 @@ class PlateSolveResult:
                     confidence_str = f", confidence={self.confidence}"
             
             return (f"PlateSolveResult(RA={ra_str}°, Dec={dec_str}°, "
-                    f"FOV={fov_w_str}°x{fov_h_str}°, "
+                    f"FOV={fov_w_str}°x{fov_h_str}°, PA={pa_str}°, "
                     f"method={self.method}, time={time_str}s{confidence_str})")
         except Exception as e:
             # Fallback if formatting fails

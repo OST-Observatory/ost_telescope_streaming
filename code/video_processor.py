@@ -456,6 +456,8 @@ class VideoProcessor:
         solving_time = safe_float(details.get('solving_time'), 0.0)
         method = details.get('method', 'unknown')
         confidence = safe_float(data.get('confidence')) if data.get('confidence') is not None else None
+        position_angle = safe_float(data.get('position_angle')) if data.get('position_angle') is not None else None
+        image_size = data.get('image_size')  # Keep as tuple, no conversion needed
         
         # Create PlateSolveResult with new API
         result = PlateSolveResult(
@@ -465,7 +467,9 @@ class VideoProcessor:
             fov_height=fov_height,
             solving_time=solving_time,
             method=method,
-            confidence=confidence
+            confidence=confidence,
+            position_angle=position_angle,
+            image_size=image_size
         )
         
         return result
@@ -561,7 +565,9 @@ class VideoProcessor:
                     'fov_height': result.fov_height,
                     'solving_time': result.solving_time,
                     'method': result.method,
-                    'confidence': result.confidence
+                    'confidence': result.confidence,
+                    'position_angle': result.position_angle,
+                    'image_size': result.image_size
                 }
                 return success_status("Plate-solving successful", data=result_data)
             else:
