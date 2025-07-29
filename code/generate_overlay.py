@@ -16,7 +16,7 @@ from status import OverlayStatus, success_status, error_status, warning_status
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
-    
+
     def __init__(self, config=None, logger=None):
         """Initialize the overlay generator with configuration."""
         from config_manager import ConfigManager
@@ -33,7 +33,7 @@ class OverlayGenerator:
         self.display_config = self.config.get_display_config()
         self.advanced_config = self.config.get_advanced_config()
         self.platform_config = self.config.get_platform_config()
-        
+
         # Initialize settings
         self.fov_deg = self.overlay_config.get('field_of_view', 1.5)
         self.mag_limit = self.overlay_config.get('magnitude_limit', 10.0)
@@ -42,37 +42,37 @@ class OverlayGenerator:
         self.image_size = tuple(self.overlay_config.get('image_size', [800, 800]))
         self.max_name_length = self.overlay_config.get('max_name_length', 15)
         self.default_filename = self.overlay_config.get('default_filename', 'overlay.png')
-        
+
         # Display settings
         self.object_color = tuple(self.display_config.get('object_color', [255, 0, 0]))
         self.text_color = tuple(self.display_config.get('text_color', [255, 255, 255]))
         self.marker_size = self.display_config.get('marker_size', 5)
         self.text_offset = self.display_config.get('text_offset', [8, -8])
-    
+
     def get_font(self):
         """Loads an available font for the current system."""
         font_size = self.overlay_config.get('font_size', 14)
-        
+
         font_paths = []
         system = platform.system().lower()
-        
+
         if system == "windows":
             font_paths = self.platform_config.get('fonts', {}).get('windows', ['arial.ttf'])
         elif system == "linux":
             font_paths = self.platform_config.get('fonts', {}).get('linux', [])
         elif system == "darwin":  # macOS
             font_paths = self.platform_config.get('fonts', {}).get('macos', [])
-        
+
         for font_path in font_paths:
             try:
                 return ImageFont.truetype(font_path, font_size)
             except (IOError, OSError):
                 continue
-        
+
         # Fallback to default font
         self.logger.warning("Could not load TrueType font, using default font.")
         return ImageFont.load_default()
-    
+
     def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0):
         """Converts sky coordinates to pixel coordinates with rotation support.
         Args:
@@ -93,11 +93,11 @@ class OverlayGenerator:
 
             # Convert to radians for rotation
             pa_rad = np.radians(position_angle_deg)
-            
+
             # Apply rotation matrix
             cos_pa = np.cos(pa_rad)
             sin_pa = np.sin(pa_rad)
-            
+
             # Rotate the coordinates
             delta_ra_rot = delta_ra * cos_pa + delta_dec * sin_pa
             delta_dec_rot = -delta_ra * sin_pa + delta_dec * cos_pa
@@ -117,35 +117,42 @@ class OverlayGenerator:
     def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
         """Converts sky coordinates to pixel coordinates (legacy method for backward compatibility)."""
         return self.skycoord_to_pixel_with_rotation(obj_coord, center_coord, size_px, fov_deg, fov_deg, 0.0)
-    
+
     def validate_coordinates(self, ra: float, dec: float):
         """Validates RA/Dec values."""
         if not (0 <= ra <= 360):
             raise ValueError(f"RA must be between 0 and 360 degrees, not {ra}")
         if not (-90 <= dec <= 90):
             raise ValueError(f"Dec must be between -90 and 90 degrees, not {dec}")
-    
-    def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None, 
+
+    def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                         fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
-                        position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
-                        mag_limit: Optional[float] = None) -> OverlayStatus:
-        """Generiert ein Overlay-Bild für die gegebenen Koordinaten.
+                        position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None) -> str:
+        """Generate an overlay image for the given coordinates.
+
+        Creates a comprehensive astronomical overlay showing stars, deep sky objects,
+        and other celestial features for the specified coordinates and field of view.
+
         Args:
-            ra_deg: Rektaszension in Grad
-            dec_deg: Deklination in Grad
-            output_file: Optionaler Ausgabedateiname
-            fov_width_deg: Field of view width in degrees (from plate-solving)
-            fov_height_deg: Field of view height in degrees (from plate-solving)
-            position_angle_deg: Position angle in degrees (from plate-solving)
-            image_size: Image size as (width, height) in pixels (from camera)
-            mag_limit: Magnitude limit for objects
+            ra_deg: Right Ascension in degrees
+            dec_deg: Declination in degrees
+            output_file: Optional output filename
+            fov_width_deg: Field of view width in degrees
+            fov_height_deg: Field of view height in degrees
+            position_angle_deg: Position angle in degrees
+            image_size: Image size as (width, height) in pixels
+
         Returns:
-            OverlayStatus: Status-Objekt mit Ergebnis oder Fehler.
+            str: Path to the generated overlay file
+
+        Note:
+            This method integrates multiple data sources to create a comprehensive
+            astronomical overlay suitable for telescope streaming and observation.
         """
         try:
             # Validate input values
             self.validate_coordinates(ra_deg, dec_deg)
-            
+
             # Use provided values or defaults
             fov_w = fov_width_deg if fov_width_deg is not None else self.fov_deg
             fov_h = fov_height_deg if fov_height_deg is not None else self.fov_deg
@@ -153,7 +160,7 @@ class OverlayGenerator:
             img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
             output_file = output_file or self.default_filename
-            
+
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
             # Configure SIMBAD with updated field names
@@ -197,15 +204,15 @@ class OverlayGenerator:
                 try:
                     # Handle objects with and without V magnitude
                     has_v_magnitude = 'V' in row.colnames and row['V'] is not None and row['V'] != '--'
-                    
+
                     # Skip objects that are too faint (if they have magnitude)
                     if has_v_magnitude and row['V'] > mag_limit:
                         continue
-                    
+
                     # Skip objects without magnitude if configured
                     if not has_v_magnitude and not self.include_no_magnitude:
                         continue
-                    
+
                     # Filter by object type if specified
                     if self.object_types and 'otype' in row.colnames:
                         obj_type = row['otype']
@@ -215,18 +222,18 @@ class OverlayGenerator:
                     # Try different possible column names for RA/Dec
                     ra_col = None
                     dec_col = None
-                    
+
                     # Check for various possible column names
                     for ra_name in ['RA', 'ra', 'RA_d', 'ra_d']:
                         if ra_name in row.colnames:
                             ra_col = ra_name
                             break
-                    
+
                     for dec_name in ['DEC', 'dec', 'DEC_d', 'dec_d']:
                         if dec_name in row.colnames:
                             dec_col = dec_name
                             break
-                    
+
                     if ra_col is None or dec_col is None:
                         self.logger.warning(f"Could not find RA/Dec columns. Available: {row.colnames}")
                         continue
@@ -237,14 +244,14 @@ class OverlayGenerator:
 
                     # Check if object is within image bounds
                     if 0 <= x <= img_size[0] and 0 <= y <= img_size[1]:
-                        draw.ellipse((x - self.marker_size, y - self.marker_size, 
-                                    x + self.marker_size, y + self.marker_size), 
+                        draw.ellipse((x - self.marker_size, y - self.marker_size,
+                                    x + self.marker_size, y + self.marker_size),
                                    outline=self.object_color, width=2)
-                        
+
                         # Safe name handling - try different possible column names
                         name = None
                         name_columns = ['MAIN_ID', 'main_id', 'MAINID', 'mainid']
-                        
+
                         for name_col in name_columns:
                             if name_col in row.colnames:
                                 name_value = row[name_col]
@@ -254,19 +261,19 @@ class OverlayGenerator:
                                     else:
                                         name = str(name_value)
                                     break
-                        
+
                         # Fallback if no name found
                         if name is None:
                             name = f"Obj_{objects_drawn}"
-                        
+
                         # Truncate long names
                         if len(name) > self.max_name_length:
                             name = name[:self.max_name_length-3] + "..."
-                        
-                        draw.text((x + self.text_offset[0], y + self.text_offset[1]), 
+
+                        draw.text((x + self.text_offset[0], y + self.text_offset[1]),
                                 name, fill=self.text_color, font=font)
                         objects_drawn += 1
-                        
+
                 except Exception as e:
                     # More detailed error information for debugging
                     if self.advanced_config.get('debug_simbad', False):

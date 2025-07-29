@@ -1,7 +1,31 @@
 #!/usr/bin/env python3
 """
-Video processor module for telescope streaming system.
-Coordinates video capture and plate-solving operations.
+Video Processor Module for Telescope Streaming System
+
+This module coordinates video capture and plate-solving operations for astronomical imaging.
+It provides a high-level interface for managing continuous image capture, slewing detection,
+and automated plate-solving with configurable behavior.
+
+Key Features:
+- Continuous video capture with configurable intervals
+- Intelligent slewing detection to prevent captures during mount movement
+- Dual-format saving (FITS for plate-solving, PNG/JPG for display)
+- Automated plate-solving with robust error handling
+- Configurable capture and solving intervals
+- Callback system for external integration
+- Comprehensive status tracking and statistics
+
+Architecture:
+- Uses lazy loading for configuration to prevent double loading
+- Threaded processing loop for non-blocking operation
+- Status-based error handling for robust operation
+- Modular design with separate video capture and plate-solving components
+
+Dependencies:
+- video_capture: For camera interface and image capture
+- plate_solver: For astronomical plate-solving
+- ascom_mount: For slewing detection (optional)
+- config_manager: For configuration management
 """
 
 import time
@@ -19,16 +43,47 @@ from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
 
 class VideoProcessor:
-    """Koordiniert Videoaufnahme und Plate-Solving-Operationen."""
+    """
+    Coordinates video capture and plate-solving operations.
+    
+    This class manages the complete imaging pipeline from camera capture to
+    plate-solving, including intelligent slewing detection to ensure only
+    high-quality, stationary images are processed.
+    
+    The processor operates in two main modes:
+    1. Skip Mode: Skips captures during mount movement (default)
+    2. Wait Mode: Waits for slewing to complete before capturing
+    
+    Key Design Decisions:
+    - Lazy configuration loading prevents double loading when config is passed from tests
+    - Threaded processing ensures non-blocking operation
+    - Status-based error handling provides robust operation
+    - Dual-format saving ensures compatibility with both plate-solving and display
+    """
     def __init__(self, config=None, logger=None) -> None:
-        """Initialisiert den VideoProcessor."""
+        """Initialize the VideoProcessor.
+        
+        Sets up the video processor with configuration, logging, and initializes
+        all necessary components for video capture and plate-solving.
+        
+        Args:
+            config: Optional ConfigManager instance. If None, creates default config.
+            logger: Optional logger instance. If None, creates module logger.
+            
+        Note:
+            Uses lazy loading for configuration to prevent automatic loading of config.yaml
+            when config is passed from test scripts. This ensures only one config file
+            is loaded even when --config option is used.
+        """
         from config_manager import ConfigManager
+        
         # Only create default config if no config is provided
         # This prevents loading config.yaml when config is passed from tests
         if config is None:
             default_config = ConfigManager()
         else:
             default_config = None
+            
         import logging
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
@@ -38,7 +93,7 @@ class VideoProcessor:
         self.is_running: bool = False
         self.processing_thread: Optional[threading.Thread] = None
         
-        # Load configuration
+        # Load configuration sections
         self.video_config: dict[str, Any] = self.config.get_video_config()
         self.plate_solve_config: dict[str, Any] = self.config.get_plate_solve_config()
         
@@ -60,6 +115,7 @@ class VideoProcessor:
         self.min_solve_interval: int = self.plate_solve_config.get('min_solve_interval', 30)
         
         # Slewing detection settings
+        # These settings control how the system handles mount movement during imaging
         mount_config = self.config.get_mount_config()
         slewing_config = mount_config.get('slewing_detection', {})
         self.slewing_detection_enabled: bool = slewing_config.get('enabled', True)
@@ -68,7 +124,7 @@ class VideoProcessor:
         self.slewing_wait_timeout: float = slewing_config.get('wait_timeout', 300.0)
         self.slewing_check_interval: float = slewing_config.get('check_interval', 1.0)
         
-        # State tracking
+        # State tracking for statistics and timing
         self.last_capture_time: float = 0
         self.last_solve_time: float = 0
         self.last_solve_result: Optional[PlateSolveResult] = None
@@ -76,15 +132,13 @@ class VideoProcessor:
         self.solve_count: int = 0
         self.successful_solves: int = 0
         
-        # Callbacks
+        # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
         self.on_capture_frame: Optional[Callable[[Any, Any], None]] = None
         self.on_error: Optional[Callable[[Exception], None]] = None
         
-        # Setup logging
-        # self.logger = logging.getLogger(__name__) # This line is now redundant as logger is passed to __init__
-        
         # Ensure frame directory exists
+        # This prevents file saving errors during operation
         if self.save_frames:
             try:
                 self.frame_dir.mkdir(exist_ok=True)
@@ -96,9 +150,17 @@ class VideoProcessor:
                 self.logger.warning(f"Using current directory for frame storage: {self.frame_dir.absolute()}")
     
     def initialize(self) -> bool:
-        """Initialisiert Videoaufnahme und Plate-Solver.
+        """Initialize video capture and plate solver.
+        
+        Sets up all necessary components for video processing, including
+        video capture, plate solver, and mount for slewing detection.
+        
         Returns:
-            bool: True, wenn erfolgreich initialisiert, sonst False.
+            bool: True if successfully initialized, False otherwise.
+            
+        Note:
+            Mount initialization is optional - if it fails, slewing detection
+            will be disabled but other functionality continues to work.
         """
         success = True
         
@@ -129,6 +191,7 @@ class VideoProcessor:
                 self.plate_solver = None
         
         # Initialize mount for slewing detection
+        # This is optional - if it fails, slewing detection is disabled
         try:
             from ascom_mount import ASCOMMount
             self.mount = ASCOMMount(config=self.config, logger=self.logger)
@@ -140,9 +203,17 @@ class VideoProcessor:
         return success
     
     def start(self) -> VideoProcessingStatus:
-        """Startet die Videoverarbeitung.
+        """Start video processing.
+        
+        Begins the continuous video capture and plate-solving loop in a separate thread.
+        This method is non-blocking and returns immediately.
+        
         Returns:
-            VideoProcessingStatus: Status-Objekt mit Startinformation oder Fehler.
+            VideoProcessingStatus: Status object with start information or error.
+            
+        Note:
+            The processing loop runs in a separate thread to ensure the main
+            application remains responsive during continuous operation.
         """
         if not self.initialize():
             return error_status("Initialization failed", details={'video_enabled': self.video_enabled})
@@ -194,17 +265,34 @@ class VideoProcessor:
                 time.sleep(5)  # Wait before retrying
     
     def _capture_and_solve(self) -> None:
-        """Nimmt ein Frame auf und führt ggf. Plate-Solving durch."""
+        """Capture a frame and perform plate-solving if enabled.
+        
+        This is the core method that handles the complete imaging pipeline:
+        1. Slewing detection to ensure only stationary images are captured
+        2. Frame capture from the camera
+        3. Dual-format saving (FITS for plate-solving, PNG/JPG for display)
+        4. Automated plate-solving with robust error handling
+        
+        The method implements intelligent slewing detection with two modes:
+        - Skip Mode: Skips captures during mount movement (default)
+        - Wait Mode: Waits for slewing to complete before capturing
+        
+        Note:
+            This method is called from the processing loop and handles all
+            the complexity of ensuring high-quality astronomical imaging.
+        """
         if not self.video_capture:
             return
         
         try:
-            # Check if mount is slewing before capturing
+            # CRITICAL: Check if mount is slewing before capturing
+            # This prevents blurred images and improves plate-solving success
             if hasattr(self, 'mount') and self.mount and self.slewing_detection_enabled:
                 slewing_status = self.mount.is_slewing()
                 if slewing_status.is_success and slewing_status.data:
                     if self.slewing_wait_for_completion:
-                        # Wait for slewing to complete before capturing
+                        # Wait Mode: Wait for slewing to complete before capturing
+                        # This ensures we get every possible frame for critical imaging
                         self.logger.info("Mount is slewing, waiting for completion...")
                         wait_status = self.mount.wait_for_slewing_complete(
                             timeout=self.slewing_wait_timeout,
@@ -220,14 +308,16 @@ class VideoProcessor:
                             else:  # Error
                                 self.logger.warning("Continuing with capture despite slewing error")
                     else:
-                        # Skip capture if slewing (default behavior)
+                        # Skip Mode: Skip capture if slewing (default behavior)
+                        # This maximizes capture opportunities for high-frequency imaging
                         self.logger.debug("Mount is slewing, skipping capture")
                         return
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
                     # Continue with capture if we can't check slewing status
+                    # This ensures operation continues even if slewing detection fails
             
-            # Capture frame
+            # Capture frame from camera
             frame = self.video_capture.get_current_frame()
             if frame is None:
                 self.logger.warning("No frame available for capture")
@@ -241,6 +331,7 @@ class VideoProcessor:
             
             if self.save_frames:
                 # Generate base filename with configurable timestamp and capture count
+                # This provides flexible naming for different use cases
                 filename_parts = ["capture"]
                 
                 if self.use_timestamps:
@@ -252,17 +343,19 @@ class VideoProcessor:
                 
                 base_filename = '_'.join(filename_parts)
                 
-                # For ASCOM cameras: Save both FITS (for plate-solving) and display format
+                # DUAL-FORMAT SAVING: For ASCOM cameras, save both FITS and display format
+                # This ensures compatibility with both plate-solving and display applications
                 if (self.video_capture.camera_type == 'ascom' and 
                     self.video_capture.ascom_camera):
                     
-                    # Get settings from config
+                    # Get settings from config for ASCOM camera
                     ascom_config = self.video_config.get('ascom', {})
                     exposure_time = ascom_config.get('exposure_time', 1.0)
                     gain = ascom_config.get('gain', None)
                     binning = ascom_config.get('binning', 1)
                     
                     # 1. Always save FITS for plate-solving and processing
+                    # FITS format preserves all astronomical data and is required for plate-solving
                     fits_filename = self.frame_dir / f"{base_filename}.fits"
                     ascom_status = self.video_capture.capture_single_frame_ascom(
                         exposure_time_s=exposure_time,
@@ -279,6 +372,7 @@ class VideoProcessor:
                         self.logger.warning(f"Failed to capture ASCOM frame: {ascom_status.message}")
                     
                     # 2. Save display format (PNG/JPG) if different from FITS
+                    # This provides user-friendly images for display and sharing
                     if self.file_format.lower() not in ['fit', 'fits']:
                         frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
                         # Use current frame (converted for display)
@@ -294,6 +388,7 @@ class VideoProcessor:
                 
                 else:
                     # For non-ASCOM cameras: Save only the configured format
+                    # Non-ASCOM cameras don't need dual-format saving
                     frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
                     save_status = self.video_capture.save_frame(frame, str(frame_filename))
                     if save_status and save_status.is_success:
@@ -350,11 +445,22 @@ class VideoProcessor:
         return result
 
     def _solve_frame(self, frame_path: str) -> Optional[PlateSolveResult]:
-        """Führt Plate-Solving für ein bestimmtes Frame durch.
+        """Execute plate-solving for a specific frame.
+        
+        Performs plate-solving on the specified frame file using the
+        configured plate solver. This method handles the solving process
+        and returns the results in a standardized format.
+        
         Args:
-            frame_path: Pfad zum Bild
+            frame_path: Path to the frame file to solve
+            
         Returns:
-            Optional[PlateSolveResult]: Ergebnisobjekt oder None
+            Optional[PlateSolveResult]: Solving result or None if failed
+            
+        Note:
+            This method is called automatically during the capture cycle
+            when auto-solving is enabled and enough time has passed since
+            the last solve.
         """
         if not self.plate_solver:
             return None
@@ -399,11 +505,21 @@ class VideoProcessor:
             return None
     
     def solve_frame(self, frame_path: str) -> VideoProcessingStatus:
-        """Manuelles Plate-Solving für ein bestimmtes Frame.
+        """Manual plate-solving for a specific frame.
+        
+        Allows manual triggering of plate-solving for a specific frame file.
+        This is useful for testing or when you want to solve a frame outside
+        of the normal capture cycle.
+        
         Args:
-            frame_path: Pfad zum Bild
+            frame_path: Path to the frame file to solve
+            
         Returns:
-            VideoProcessingStatus: Status-Objekt mit Ergebnis oder Fehler.
+            VideoProcessingStatus: Status object with solving results
+            
+        Note:
+            This method can be called independently of the capture cycle
+            and is useful for debugging or manual processing.
         """
         if not self.plate_solver:
             self.logger.error("No plate solver available")
@@ -419,27 +535,59 @@ class VideoProcessor:
             return error_status(f"Error in plate-solving: {e}")
     
     def get_current_frame(self) -> Optional[Any]:
-        """Gibt das aktuellste aufgenommene Frame zurück."""
+        """Get the most recently captured frame.
+        
+        Returns the current frame from the video capture system.
+        This is useful for external applications that need access
+        to the latest captured image.
+        
+        Returns:
+            Optional[Any]: The current frame or None if not available.
+        """
         if self.video_capture:
             return self.video_capture.get_current_frame()
         return None
     
     def get_statistics(self) -> VideoProcessingStatus:
-        """Gibt Statistiken zur Videoverarbeitung zurück.
+        """Get processing statistics.
+        
+        Returns comprehensive statistics about the video processing
+        operation, including capture counts, solve counts, and timing
+        information.
+        
         Returns:
-            VideoProcessingStatus: Status-Objekt mit Statistikdaten.
+            VideoProcessingStatus: Status object with statistics data.
         """
         stats = {
             'capture_count': self.capture_count,
             'solve_count': self.solve_count,
             'successful_solves': self.successful_solves,
-            'last_solve_result': str(self.last_solve_result) if self.last_solve_result else None,
+            'last_capture_time': self.last_capture_time,
+            'last_solve_time': self.last_solve_time,
             'is_running': self.is_running
         }
-        return success_status("Video processor statistics", data=stats)
+        
+        return success_status(
+            f"Statistics: {self.capture_count} captures, {self.successful_solves} successful solves",
+            data=stats,
+            details=stats
+        )
     
     def set_callbacks(self, on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None, on_capture_frame: Optional[Callable[[Any, Any], None]] = None, on_error: Optional[Callable[[Exception], None]] = None) -> None:
-        """Setzt Callback-Funktionen für Ergebnisse, Frame-Capture und Fehler."""
+        """Set callback functions for results, frame capture, and errors.
+        
+        Allows external applications to receive notifications about
+        processing events through callback functions.
+        
+        Args:
+            on_solve_result: Callback for plate-solving results
+            on_capture_frame: Callback for frame capture events
+            on_error: Callback for error conditions
+            
+        Note:
+            Callbacks are called from the processing thread, so they
+            should be thread-safe and not block for extended periods.
+        """
         self.on_solve_result = on_solve_result
         self.on_capture_frame = on_capture_frame
         self.on_error = on_error 

@@ -89,17 +89,26 @@ class OverlayRunner:
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                                    fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
                                    position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None) -> OverlayStatus:
-        """Generiert ein Overlay für die gegebenen Koordinaten.
+        """Generate an overlay for the given coordinates.
+        
+        Creates an astronomical overlay showing stars, deep sky objects,
+        and other celestial features for the specified coordinates.
+        
         Args:
-            ra_deg: Rektaszension in Grad
-            dec_deg: Deklination in Grad
-            output_file: Optionaler Ausgabedateiname
+            ra_deg: Right Ascension in degrees
+            dec_deg: Declination in degrees
+            output_file: Optional output filename
             fov_width_deg: Field of view width in degrees (from plate-solving)
             fov_height_deg: Field of view height in degrees (from plate-solving)
             position_angle_deg: Position angle in degrees (from plate-solving)
             image_size: Image size as (width, height) in pixels (from camera)
+            
         Returns:
-            OverlayStatus: Status-Objekt mit Ergebnis oder Fehlerinformationen.
+            OverlayStatus: Status object with result or error information.
+            
+        Note:
+            This method supports both class-based and subprocess-based overlay
+            generation, with the class-based approach being preferred when available.
         """
         try:
             # Use class-based approach if available

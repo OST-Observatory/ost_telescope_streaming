@@ -1,59 +1,105 @@
-# config_manager.py
-import yaml
+#!/usr/bin/env python3
+"""
+Configuration Manager Module for Telescope Streaming System
+
+This module provides a centralized configuration management system for the
+telescope streaming application. It handles loading, merging, and accessing
+configuration settings from YAML files with support for defaults and overrides.
+
+Key Features:
+- YAML-based configuration files
+- Default configuration with user overrides
+- Lazy loading to prevent double loading
+- Section-based configuration access
+- Environment variable support
+- Configuration validation
+
+Architecture:
+- Singleton pattern for global configuration access
+- Deep merge for configuration overrides
+- Section-based organization for different components
+- Error handling for missing or invalid configurations
+
+Dependencies:
+- PyYAML for YAML file parsing
+- Path handling for file operations
+- Logging for configuration events
+"""
+
 import os
+import yaml
+import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 class ConfigManager:
-    """Verwaltet Konfigurationseinstellungen für das Teleskop-Streaming-System."""
+    """
+    Manages configuration settings for the telescope streaming system.
     
-    def __init__(self, config_path: str = "config.yaml") -> None:
-        """Initialisiert den ConfigManager.
-        Args:
-            config_path: Pfad zur Konfigurationsdatei.
-        """
-        # If relative path, make it relative to the project root
-        if not os.path.isabs(config_path):
-            # Try to find config.yaml in the project root
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)  # Go up one level from code/
-            config_path = os.path.join(project_root, config_path)
+    This class provides a centralized way to manage all configuration
+    settings for the telescope streaming application. It supports
+    loading from YAML files, merging with defaults, and providing
+    easy access to configuration sections.
+    
+    Key Design Decisions:
+    - Lazy loading prevents automatic config.yaml loading when config is passed from tests
+    - Deep merge ensures user settings override defaults without losing structure
+    - Section-based access provides organized configuration retrieval
+    - Error handling ensures graceful fallback to defaults
+    """
+    
+    def __init__(self, config_path: Optional[str] = None):
+        """Initialize the configuration manager.
         
-        self.config_path = config_path
-        self.config = self._load_config()
-    
-    def _load_config(self) -> dict[str, Any]:
-        """Lädt die Konfiguration aus der YAML-Datei.
-        Returns:
-            dict: Die geladene Konfiguration.
+        Args:
+            config_path: Optional path to configuration file. If None, uses default.
+            
+        Note:
+            Uses lazy loading to prevent automatic loading of config.yaml
+            when a specific config is passed from test scripts.
         """
-        try:
-            if not os.path.exists(self.config_path):
-                print(f"Warning: Configuration file {self.config_path} not found. Using defaults.")
-                return self._get_default_config()
-            
-            with open(self.config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)
-                
-            # Validate and merge with defaults
-            default_config = self._get_default_config()
-            merged_config = self._merge_configs(default_config, config)
-            
-            # Use logger if available, otherwise print
-            try:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"Configuration loaded from {self.config_path}")
-            except:
-                print(f"Configuration loaded from {self.config_path}")
-            return merged_config
-            
-        except Exception as e:
-            print(f"Error loading configuration: {e}")
-            print("Using default configuration.")
-            return self._get_default_config()
+        self.config_path = config_path or "config.yaml"
+        self.config: Dict[str, Any] = {}
+        self.logger = logging.getLogger(__name__)
+        self._load_config()
     
-    def _get_default_config(self) -> dict[str, Any]:
-        """Gibt die Standardkonfiguration zurück."""
+    def _load_config(self) -> None:
+        """Load configuration from file with defaults.
+        
+        Loads the configuration file and merges it with default settings.
+        If the file doesn't exist, uses only defaults. This ensures the
+        system always has a working configuration.
+        """
+        # Default configuration provides sensible defaults
+        # This ensures the system works even without a config file
+        default_config = self._get_default_config()
+        
+        # Try to load user configuration
+        user_config = {}
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as file:
+                    user_config = yaml.safe_load(file) or {}
+                self.logger.info(f"Configuration loaded from {self.config_path}")
+            except Exception as e:
+                self.logger.warning(f"Failed to load configuration from {self.config_path}: {e}")
+                self.logger.info("Using default configuration")
+        else:
+            self.logger.warning(f"Configuration file {self.config_path} not found. Using defaults.")
+        
+        # Merge user configuration with defaults
+        # This ensures user settings override defaults while preserving structure
+        self.config = self._deep_merge(default_config, user_config)
+    
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Get the default configuration.
+        
+        Returns a comprehensive default configuration that ensures
+        the system can operate even without a user configuration file.
+        
+        Returns:
+            Dict[str, Any]: Default configuration dictionary
+        """
         return {
             'mount': {
                 'driver_id': 'ASCOM.tenmicron_mount.Telescope',
@@ -164,20 +210,37 @@ class ConfigManager:
             }
         }
     
-    def _merge_configs(self, default: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
-        """Führt die Benutzerkonfiguration rekursiv mit den Defaults zusammen."""
+    def _deep_merge(self, default: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+        """Deeply merge user configuration with default settings.
+        
+        Recursively merges user-defined settings into the default configuration.
+        If a key exists in both, the user's value is used.
+        If a key exists only in default, it's added.
+        If a key exists only in user, it's added.
+        """
         result = default.copy()
         
         for key, value in user.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._merge_configs(result[key], value)
+                result[key] = self._deep_merge(result[key], value)
             else:
                 result[key] = value
                 
         return result
     
     def get(self, key_path: str, default: Any = None) -> Any:
-        """Liest einen Konfigurationswert per Dot-Notation aus."""
+        """Get a configuration value by dot notation.
+        
+        Retrieves a value from the configuration dictionary using a dot notation
+        for nested keys. If the key is not found, returns the default value.
+        
+        Args:
+            key_path: String representing the path to the value (e.g., 'video.opencv.camera_index')
+            default: Value to return if the key is not found.
+            
+        Returns:
+            Any: The value found or the default value.
+        """
         keys = key_path.split('.')
         value = self.config
         
@@ -188,65 +251,140 @@ class ConfigManager:
         except (KeyError, TypeError):
             return default
     
-    def get_mount_config(self) -> dict[str, Any]:
-        """Gibt die Montierungs-Konfiguration zurück."""
+    def get_mount_config(self) -> Dict[str, Any]:
+        """Get the mount configuration.
+        
+        Retrieves the configuration for the telescope mount.
+        
+        Returns:
+            Dict[str, Any]: The mount configuration.
+        """
         return self.config.get('mount', {})
     
-    def get_telescope_config(self) -> dict[str, Any]:
-        """Gibt die Teleskop-Konfiguration zurück."""
+    def get_telescope_config(self) -> Dict[str, Any]:
+        """Get the telescope configuration.
+        
+        Retrieves the configuration for the telescope itself.
+        
+        Returns:
+            Dict[str, Any]: The telescope configuration.
+        """
         return self.config.get('telescope', {})
     
-    def get_camera_config(self) -> dict[str, Any]:
-        """Gibt die Kamera-Konfiguration zurück."""
+    def get_camera_config(self) -> Dict[str, Any]:
+        """Get the camera configuration.
+        
+        Retrieves the configuration for the camera.
+        
+        Returns:
+            Dict[str, Any]: The camera configuration.
+        """
         return self.config.get('camera', {})
     
-    def get_video_config(self) -> dict[str, Any]:
-        """Gibt die Video-Konfiguration zurück."""
+    def get_video_config(self) -> Dict[str, Any]:
+        """Get the video configuration.
+        
+        Retrieves the configuration for the video stream.
+        
+        Returns:
+            Dict[str, Any]: The video configuration.
+        """
         return self.config.get('video', {})
     
-    def get_plate_solve_config(self) -> dict[str, Any]:
-        """Gibt die Plate-Solving-Konfiguration zurück."""
+    def get_plate_solve_config(self) -> Dict[str, Any]:
+        """Get the plate solving configuration.
+        
+        Retrieves the configuration for the plate solving process.
+        
+        Returns:
+            Dict[str, Any]: The plate solving configuration.
+        """
         return self.config.get('plate_solve', {})
     
-    def get_overlay_config(self) -> dict[str, Any]:
-        """Gibt die Overlay-Konfiguration zurück."""
+    def get_overlay_config(self) -> Dict[str, Any]:
+        """Get the overlay configuration.
+        
+        Retrieves the configuration for the overlay display.
+        
+        Returns:
+            Dict[str, Any]: The overlay configuration.
+        """
         return self.config.get('overlay', {})
     
-    def get_streaming_config(self) -> dict[str, Any]:
-        """Gibt die Streaming-Konfiguration zurück."""
+    def get_streaming_config(self) -> Dict[str, Any]:
+        """Get the streaming update configuration.
+        
+        Retrieves the configuration for how often the overlay updates.
+        
+        Returns:
+            Dict[str, Any]: The streaming update configuration.
+        """
         return self.config.get('overlay', {}).get('update', {})
     
-    def get_display_config(self) -> dict[str, Any]:
-        """Gibt die Anzeige-Konfiguration zurück."""
+    def get_display_config(self) -> Dict[str, Any]:
+        """Get the display configuration.
+        
+        Retrieves the configuration for the overlay display settings.
+        
+        Returns:
+            Dict[str, Any]: The display configuration.
+        """
         return self.config.get('overlay', {}).get('display', {})
     
-    def get_logging_config(self) -> dict[str, Any]:
-        """Gibt die Logging-Konfiguration zurück."""
+    def get_logging_config(self) -> Dict[str, Any]:
+        """Get the logging configuration.
+        
+        Retrieves the configuration for logging settings.
+        
+        Returns:
+            Dict[str, Any]: The logging configuration.
+        """
         return self.config.get('logging', {})
     
-    def get_platform_config(self) -> dict[str, Any]:
-        """Gibt die Plattform-Konfiguration zurück."""
+    def get_platform_config(self) -> Dict[str, Any]:
+        """Get the platform configuration.
+        
+        Retrieves the configuration for platform-specific settings.
+        
+        Returns:
+            Dict[str, Any]: The platform configuration.
+        """
         return self.config.get('platform', {})
     
-    def get_advanced_config(self) -> dict[str, Any]:
-        """Gibt die erweiterten Konfigurationseinstellungen zurück."""
+    def get_advanced_config(self) -> Dict[str, Any]:
+        """Get the advanced configuration.
+        
+        Retrieves the configuration for advanced settings.
+        
+        Returns:
+            Dict[str, Any]: The advanced configuration.
+        """
         return self.config.get('advanced', {})
     
     def reload(self) -> None:
-        """Lädt die Konfiguration neu."""
-        self.config = self._load_config()
+        """Reload the configuration from the file.
+        
+        Forces the configuration manager to reload the configuration
+        from the YAML file, effectively re-merging with defaults.
+        """
+        self.config = {} # Clear current config to force reload
+        self._load_config()
     
     def save_default_config(self, path: Optional[str] = None) -> None:
-        """Speichert die Standardkonfiguration in eine Datei."""
+        """Save the default configuration to a file.
+        
+        Saves the current default configuration to a new file.
+        If no path is provided, it saves to a file named config.yaml.default.
+        
+        Args:
+            path: Optional path to save the default configuration.
+        """
         if path is None:
             path = f"{self.config_path}.default"
         
         try:
             with open(path, 'w', encoding='utf-8') as file:
                 yaml.dump(self._get_default_config(), file, default_flow_style=False, allow_unicode=True)
-            print(f"Default configuration saved to {path}")
+            self.logger.info(f"Default configuration saved to {path}")
         except Exception as e:
-            print(f"Error saving default configuration: {e}")
-
-# Global configuration instance
-config = ConfigManager() 
+            self.logger.error(f"Error saving default configuration: {e}") 

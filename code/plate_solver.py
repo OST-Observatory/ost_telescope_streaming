@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 """
-Plate solving module for telescope streaming system.
-Provides abstract interface for different plate-solving engines.
+Plate Solver Module for Astronomical Image Processing
+
+This module provides a unified interface for different plate-solving engines,
+including PlateSolve 2 and Astrometry.net. It implements a factory pattern
+to create appropriate solver instances based on configuration.
+
+Key Features:
+- Unified interface for multiple plate-solving engines
+- Factory pattern for solver instantiation
+- Robust error handling and status reporting
+- Configuration-based solver selection
+- Support for both local (PlateSolve 2) and cloud-based (Astrometry.net) solving
+
+Architecture:
+- Abstract base class for solver implementations
+- Factory class for solver creation
+- Status-based error handling
+- Configuration integration
+
+Dependencies:
+- External plate-solving software (PlateSolve 2, Astrometry.net)
+- Configuration management
+- Status and exception handling
 """
 
 import subprocess
@@ -10,62 +31,105 @@ import time
 import logging
 import math
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
-from exceptions import PlateSolveError, FileError
+from exceptions import PlateSolveError, FileError, ConfigurationError
 from status import PlateSolveStatus, success_status, error_status, warning_status
 
 class PlateSolveResult:
-    """Container für Plate-Solving-Ergebnisse."""
-    def __init__(self, success: bool = False) -> None:
-        self.success: bool = success
-        self.ra_center: Optional[float] = None
-        self.dec_center: Optional[float] = None
-        self.fov_width: Optional[float] = None
-        self.fov_height: Optional[float] = None
-        self.position_angle: Optional[float] = None  # Position angle in degrees
-        self.image_size: Optional[Tuple[int, int]] = None  # (width, height) in pixels
-        self.confidence: Optional[float] = None
-        self.stars_detected: Optional[int] = None
-        self.solving_time: Optional[float] = None
-        self.error_message: Optional[str] = None
-        self.solver_used: Optional[str] = None
-    def __str__(self) -> str:
-        if self.success:
-            return (f"PlateSolveResult(success=True, "
-                   f"RA={self.ra_center:.4f}°, Dec={self.dec_center:.4f}°, "
-                   f"FOV={self.fov_width:.3f}°x{self.fov_height:.3f}°, "
-                   f"confidence={self.confidence:.2f}, stars={self.stars_detected})")
-        else:
-            return f"PlateSolveResult(success=False, error='{self.error_message}')"
+    """
+    Container for plate-solving results.
+    
+    This class holds the results of a plate-solving operation, including
+    coordinates, field of view, and metadata about the solving process.
+    
+    Attributes:
+        ra_center: Right Ascension of image center (degrees)
+        dec_center: Declination of image center (degrees)
+        fov_width: Field of view width (degrees)
+        fov_height: Field of view height (degrees)
+        solving_time: Time taken for solving (seconds)
+        method: Method used for solving (e.g., 'platesolve2', 'astrometry')
+        confidence: Confidence level of the solution (if available)
+    """
+    
+    def __init__(self, ra_center: float, dec_center: float, fov_width: float, fov_height: float, 
+                 solving_time: float, method: str, confidence: Optional[float] = None):
+        self.ra_center = ra_center
+        self.dec_center = dec_center
+        self.fov_width = fov_width
+        self.fov_height = fov_height
+        self.solving_time = solving_time
+        self.method = method
+        self.confidence = confidence
 
 class PlateSolver(ABC):
-    """Abstrakte Basisklasse für Plate-Solving-Engines."""
+    """
+    Abstract base class for plate-solving engines.
+    
+    This class defines the interface that all plate-solving implementations
+    must follow. It ensures consistent behavior across different solving
+    engines and provides a unified API for the rest of the system.
+    
+    Key Design Decisions:
+    - Abstract base class ensures consistent interface
+    - Status-based error handling for robust operation
+    - Configuration integration for flexible setup
+    - Method identification for debugging and logging
+    """
+    
     def __init__(self, config=None, logger=None):
+        """Initialize the plate solver with configuration and logging."""
         from config_manager import ConfigManager
+        
         # Only create default config if no config is provided
         # This prevents loading config.yaml when config is passed from tests
         if config is None:
             default_config = ConfigManager()
         else:
             default_config = None
-        import logging
+            
         self.config = config or default_config
-        self.logger = logger or logging.getLogger(self.__class__.__name__)
+        self.logger = logger or logging.getLogger(__name__)
+    
     @abstractmethod
     def solve(self, image_path: str) -> PlateSolveStatus:
-        """Plate-Solving für das gegebene Bild ausführen."""
+        """Execute plate-solving for the given image.
+        
+        This method must be implemented by all concrete solver classes.
+        It should perform the actual plate-solving operation and return
+        a status object with the results.
+        
+        Args:
+            image_path: Path to the image file to solve
+            
+        Returns:
+            PlateSolveStatus: Status object with solving results or error
+        """
         pass
+    
     @abstractmethod
     def is_available(self) -> bool:
-        """Prüft, ob der Solver verfügbar und konfiguriert ist."""
+        """Check if the solver is available and configured.
+        
+        This method should verify that the solver software is installed
+        and properly configured for use.
+        
+        Returns:
+            bool: True if solver is available, False otherwise
+        """
         pass
+    
     @abstractmethod
     def get_name(self) -> str:
-        """Gibt den Namen des Solvers zurück."""
+        """Get the name of the solver.
+        
+        Returns:
+            str: Human-readable name of the solver
+        """
         pass
 
 class PlateSolve2Solver(PlateSolver):
@@ -93,17 +157,41 @@ class PlateSolve2Solver(PlateSolver):
             self.logger.info("Automated PlateSolve 2 solver not available, using manual mode")
 
     def get_name(self) -> str:
-        """Gibt den Namen des Solvers zurück."""
+        """Get the name of the solver.
+        
+        Returns:
+            str: Human-readable name of the solver
+        """
         return "PlateSolve 2"
     
     def is_available(self) -> bool:
-        """Prüft, ob PlateSolve 2 verfügbar ist."""
+        """Check if PlateSolve 2 is available.
+        
+        Verifies that the PlateSolve 2 executable path is configured
+        and the software is accessible.
+        
+        Returns:
+            bool: True if PlateSolve 2 is available, False otherwise
+        """
         return bool(self.executable_path)
     
     def solve(self, image_path: str) -> PlateSolveStatus:
-        """Führt Plate-Solving für das gegebene Bild aus.
+        """Execute plate-solving for the given image.
+        
+        Performs plate-solving using PlateSolve 2, with support for both
+        automated and manual solving modes. The method attempts to get
+        current mount coordinates to improve solving accuracy.
+        
+        Args:
+            image_path: Path to the image file to solve
+            
         Returns:
-            PlateSolveStatus: Status-Objekt mit Ergebnis oder Fehler.
+            PlateSolveStatus: Status object with result or error.
+            
+        Note:
+            This method first tries automated solving if available, then
+            falls back to manual solving if needed. It also attempts to
+            get current mount coordinates to improve solving accuracy.
         """
         if not self.is_available():
             return error_status("PlateSolve 2 not available")
@@ -187,29 +275,83 @@ class PlateSolve2Solver(PlateSolver):
 
 
 class AstrometryNetSolver(PlateSolver):
-    """Astrometry.net API Integration (Platzhalter)."""
+    """Astrometry.net API Integration (Placeholder).
+    
+    This is a placeholder implementation for Astrometry.net integration.
+    It provides the interface but the actual solving functionality is not
+    yet implemented.
+    """
+    
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
         self.api_key: str = self.config.get_plate_solve_config().get('astrometry', {}).get('api_key', '')
         self.api_url: str = "http://nova.astrometry.net/api/"
+        
     def get_name(self) -> str:
-        """Gibt den Namen des Solvers zurück."""
+        """Get the name of the solver.
+        
+        Returns:
+            str: Human-readable name of the solver
+        """
         return "Astrometry.net"
+        
     def is_available(self) -> bool:
-        """Prüft, ob Astrometry.net verfügbar ist."""
+        """Check if Astrometry.net is available.
+        
+        Verifies that the API key is configured for Astrometry.net access.
+        
+        Returns:
+            bool: True if API key is configured, False otherwise
+        """
         return bool(self.api_key)
+        
     def solve(self, image_path: str) -> PlateSolveStatus:
-        """Führt Plate-Solving mit Astrometry.net aus (Platzhalter)."""
-        result = PlateSolveResult()
-        result.solver_used = self.get_name()
-        result.error_message = "Astrometry.net solver not yet implemented"
+        """Execute plate-solving with Astrometry.net (placeholder).
+        
+        This is a placeholder implementation. The actual Astrometry.net
+        integration is not yet implemented.
+        
+        Args:
+            image_path: Path to the image file to solve
+            
+        Returns:
+            PlateSolveStatus: Error status indicating not implemented
+        """
         return error_status("Astrometry.net solver not yet implemented")
 
 class PlateSolverFactory:
-    """Factory für Plate-Solver-Instanzen."""
+    """Factory for plate solver instances.
+    
+    This factory class creates appropriate plate solver instances based
+    on the specified solver type. It provides a centralized way to
+    instantiate different solver implementations.
+    
+    Key Design Decisions:
+    - Factory pattern for solver creation
+    - Configuration-based solver selection
+    - Lazy loading to prevent double config loading
+    - Error handling for unknown solver types
+    """
+    
     @staticmethod
     def create_solver(solver_type: Optional[str] = None, config=None, logger=None) -> Optional[PlateSolver]:
-        """Erzeugt eine PlateSolver-Instanz."""
+        """Create a plate solver instance.
+        
+        Creates an appropriate solver instance based on the specified type.
+        If no type is specified, uses the default solver from configuration.
+        
+        Args:
+            solver_type: Type of solver to create ('platesolve2', 'astrometry')
+            config: Configuration object
+            logger: Logger instance
+            
+        Returns:
+            Optional[PlateSolver]: Solver instance or None if type is unknown
+            
+        Note:
+            Uses lazy loading for configuration to prevent double loading
+            when config is passed from test scripts.
+        """
         if solver_type is None:
             if config:
                 solver_type = config.get_plate_solve_config().get('default_solver', 'platesolve2')
@@ -217,10 +359,12 @@ class PlateSolverFactory:
                 from config_manager import ConfigManager
                 default_config = ConfigManager()
                 solver_type = default_config.get_plate_solve_config().get('default_solver', 'platesolve2')
+                
         solvers = {
             'platesolve2': PlateSolve2Solver,
             'astrometry': AstrometryNetSolver,
         }
+        
         solver_class = solvers.get(solver_type.lower())
         if solver_class:
             return solver_class(config=config, logger=logger)
@@ -230,9 +374,21 @@ class PlateSolverFactory:
             else:
                 logging.error(f"Unknown solver type: {solver_type}")
             return None
+            
     @staticmethod
     def get_available_solvers(config=None, logger=None) -> Dict[str, bool]:
-        """Gibt eine Liste verfügbarer Solver zurück."""
+        """Get a list of available solvers.
+        
+        Returns a dictionary mapping solver names to their availability status.
+        This is useful for determining which solvers can be used on the system.
+        
+        Args:
+            config: Configuration object
+            logger: Logger instance
+            
+        Returns:
+            Dict[str, bool]: Dictionary mapping solver names to availability
+        """
         solvers = {
             'platesolve2': PlateSolve2Solver(config=config, logger=logger),
             'astrometry': AstrometryNetSolver(config=config, logger=logger),
