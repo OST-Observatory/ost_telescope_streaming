@@ -298,32 +298,6 @@ class PlateSolve2Automated:
             result['ra_center'] = ra_deg
             result['dec_center'] = dec_deg
             
-            # Calculate FOV from pixel scale and image dimensions
-            # Get image dimensions from the input image
-            try:
-                from PIL import Image
-                with Image.open(image_path) as img:
-                    image_width, image_height = img.size
-                    result['image_size'] = (image_width, image_height)
-                    
-                    # Calculate FOV from pixel scale
-                    # pixel_scale is in arcseconds per pixel
-                    # FOV = pixel_scale * image_size / 3600 (convert arcsec to degrees)
-                    fov_width_deg = (pixel_scale * image_width) / 3600.0
-                    fov_height_deg = (pixel_scale * image_height) / 3600.0
-                    result['fov_width'] = fov_width_deg
-                    result['fov_height'] = fov_height_deg
-                    
-                    if self.verbose:
-                        self.logger.info(f"Image size: {image_width}x{image_height} pixels")
-                        self.logger.info(f"Calculated FOV: {fov_width_deg:.4f}° x {fov_height_deg:.4f}°")
-            except Exception as e:
-                self.logger.warning(f"Could not determine image size: {e}")
-                # Use default values or calculated FOV if available
-                result['image_size'] = None
-                result['fov_width'] = None
-                result['fov_height'] = None
-            
             if self.verbose:
                 self.logger.info(f"Parsed RA: {ra_rad_str} rad = {ra_deg:.6f}°")
                 self.logger.info(f"Parsed Dec: {dec_rad_str} rad = {dec_deg:.6f}°")
@@ -378,6 +352,32 @@ class PlateSolve2Automated:
                 self.logger.info(f"Parsed code_2: {code_2}")
                 self.logger.info(f"Parsed code_3: {code_3_str} = {code_3}")
                 self.logger.info(f"Parsed n_stars: {n_stars}")
+            
+            # NOW calculate FOV from pixel scale and image dimensions
+            # Get image dimensions from the input image
+            try:
+                from PIL import Image
+                with Image.open(image_path) as img:
+                    image_width, image_height = img.size
+                    result['image_size'] = (image_width, image_height)
+                    
+                    # Calculate FOV from pixel scale
+                    # pixel_scale is in arcseconds per pixel
+                    # FOV = pixel_scale * image_size / 3600 (convert arcsec to degrees)
+                    fov_width_deg = (pixel_scale * image_width) / 3600.0
+                    fov_height_deg = (pixel_scale * image_height) / 3600.0
+                    result['fov_width'] = fov_width_deg
+                    result['fov_height'] = fov_height_deg
+                    
+                    if self.verbose:
+                        self.logger.info(f"Image size: {image_width}x{image_height} pixels")
+                        self.logger.info(f"Calculated FOV: {fov_width_deg:.4f}° x {fov_height_deg:.4f}°")
+            except Exception as e:
+                self.logger.warning(f"Could not determine image size: {e}")
+                # Use default values or calculated FOV if available
+                result['image_size'] = None
+                result['fov_width'] = None
+                result['fov_height'] = None
             
             # Line 3: Valid plate solution?
             valid_line = lines[2]

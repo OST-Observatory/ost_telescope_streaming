@@ -72,10 +72,27 @@ class PlateSolveResult:
         Returns:
             str: Human-readable representation of the result
         """
-        confidence_str = f", confidence={self.confidence:.2f}" if self.confidence is not None else ""
-        return (f"PlateSolveResult(RA={self.ra_center:.4f}°, Dec={self.dec_center:.4f}°, "
-                f"FOV={self.fov_width:.3f}°x{self.fov_height:.3f}°, "
-                f"method={self.method}, time={self.solving_time:.1f}s{confidence_str})")
+        try:
+            # Safely format values, handling None and invalid data
+            ra_str = f"{self.ra_center:.4f}" if self.ra_center is not None else "None"
+            dec_str = f"{self.dec_center:.4f}" if self.dec_center is not None else "None"
+            fov_w_str = f"{self.fov_width:.3f}" if self.fov_width is not None else "None"
+            fov_h_str = f"{self.fov_height:.3f}" if self.fov_height is not None else "None"
+            time_str = f"{self.solving_time:.1f}" if self.solving_time is not None else "None"
+            
+            confidence_str = ""
+            if self.confidence is not None:
+                try:
+                    confidence_str = f", confidence={self.confidence:.2f}"
+                except (ValueError, TypeError):
+                    confidence_str = f", confidence={self.confidence}"
+            
+            return (f"PlateSolveResult(RA={ra_str}°, Dec={dec_str}°, "
+                    f"FOV={fov_w_str}°x{fov_h_str}°, "
+                    f"method={self.method}, time={time_str}s{confidence_str})")
+        except Exception as e:
+            # Fallback if formatting fails
+            return f"PlateSolveResult(error_formatting: {e})"
     
     def __repr__(self) -> str:
         """Detailed string representation for debugging.

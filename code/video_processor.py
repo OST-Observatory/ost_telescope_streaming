@@ -439,14 +439,23 @@ class VideoProcessor:
         data = status.data if hasattr(status, 'data') else {}
         details = status.details if hasattr(status, 'details') else {}
         
-        # Get required parameters with defaults
-        ra_center = data.get('ra_center', 0.0)
-        dec_center = data.get('dec_center', 0.0)
-        fov_width = data.get('fov_width', 1.0)
-        fov_height = data.get('fov_height', 1.0)
-        solving_time = details.get('solving_time', 0.0)
+        # Get required parameters with defaults and ensure they are valid numbers
+        def safe_float(value, default=0.0):
+            """Safely convert value to float, returning default if conversion fails."""
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
+        ra_center = safe_float(data.get('ra_center'), 0.0)
+        dec_center = safe_float(data.get('dec_center'), 0.0)
+        fov_width = safe_float(data.get('fov_width'), 1.0)
+        fov_height = safe_float(data.get('fov_height'), 1.0)
+        solving_time = safe_float(details.get('solving_time'), 0.0)
         method = details.get('method', 'unknown')
-        confidence = data.get('confidence')
+        confidence = safe_float(data.get('confidence')) if data.get('confidence') is not None else None
         
         # Create PlateSolveResult with new API
         result = PlateSolveResult(
