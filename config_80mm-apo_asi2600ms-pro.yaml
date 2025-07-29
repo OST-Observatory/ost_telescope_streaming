@@ -63,7 +63,7 @@ video:
   # Settings only for ASCOM cameras
   ascom:
     ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
-    exposure_time: 2.0  # Manual exposure time in seconds
+    exposure_time: 5.0  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
     binning: 1  # Binning factor (1x1, 2x2, etc.)
     # Separate filter wheel driver for QHY cameras
