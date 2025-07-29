@@ -537,7 +537,7 @@ class VideoProcessor:
                 self.on_error(e)
             return None
     
-    def combine_overlay_with_image(self, image_path: str, overlay_path: str, output_path: Optional[str] = None) -> VideoProcessingStatus:
+    def combine_overlay_with_image(self, image_path, overlay_path, output_path: Optional[str] = None) -> VideoProcessingStatus:
         """Combine an overlay with a captured image.
         
         Merges the astronomical overlay with the captured telescope image
@@ -545,8 +545,8 @@ class VideoProcessor:
         to show both the original image and the astronomical annotations.
         
         Args:
-            image_path: Path to the captured telescope image
-            overlay_path: Path to the generated overlay image
+            image_path: Path to the captured telescope image (string or Status object)
+            overlay_path: Path to the generated overlay image (string or Status object)
             output_path: Optional output path for the combined image
             
         Returns:
@@ -557,6 +557,24 @@ class VideoProcessor:
             original telescope view and the astronomical overlay annotations.
         """
         try:
+            # Handle Status objects for image_path
+            if hasattr(image_path, 'data') and image_path.data:
+                image_path = image_path.data
+            elif hasattr(image_path, 'is_success') and image_path.is_success and hasattr(image_path, 'data'):
+                image_path = image_path.data
+            
+            # Handle Status objects for overlay_path
+            if hasattr(overlay_path, 'data') and overlay_path.data:
+                overlay_path = overlay_path.data
+            elif hasattr(overlay_path, 'is_success') and overlay_path.is_success and hasattr(overlay_path, 'data'):
+                overlay_path = overlay_path.data
+            
+            # Validate that we have string paths
+            if not isinstance(image_path, str):
+                return error_status(f"Invalid image_path type: {type(image_path)}, expected string")
+            if not isinstance(overlay_path, str):
+                return error_status(f"Invalid overlay_path type: {type(overlay_path)}, expected string")
+            
             # Validate input files
             if not os.path.exists(image_path):
                 return error_status(f"Image file not found: {image_path}")
