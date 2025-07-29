@@ -91,7 +91,7 @@ Examples:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f'overlay_runner_{datetime.now().strftime("%Y%m%d")}.log')
+            logging.FileHandler(f'overlay_runner_{datetime.now().strftime("%Y%m%d")}.log', encoding='utf-8')
         ],
         force=True
     )

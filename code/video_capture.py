@@ -962,9 +962,9 @@ class VideoCapture:
                 
                 # Debug: Check if the rotation actually changed the dimensions
                 if original_shape[0] == result_image.shape[1] and original_shape[1] == result_image.shape[0]:
-                    self.logger.info(f"✅ Rotation applied successfully: {original_shape} -> {result_image.shape}")
+                    self.logger.info(f"[OK] Rotation applied successfully: {original_shape} -> {result_image.shape}")
                 else:
-                    self.logger.warning(f"⚠️ Rotation may not have worked as expected: {original_shape} -> {result_image.shape}")
+                    self.logger.warning(f"[WARNING] Rotation may not have worked as expected: {original_shape} -> {result_image.shape}")
             else:
                 self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
             
