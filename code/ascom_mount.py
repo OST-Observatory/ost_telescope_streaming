@@ -114,6 +114,123 @@ class ASCOMMount:
             self.logger.warning(f"Error disconnecting: {e}")
             return error_status(f"Error disconnecting: {e}", details={'is_connected': True})
 
+    def is_slewing(self) -> MountStatus:
+        """Prüft, ob die Montierung gerade eine Slewing-Bewegung ausführt.
+        Returns:
+            MountStatus: Status-Objekt mit Slewing-Information.
+        """
+        try:
+            if not self.telescope.Connected:
+                return error_status("Mount not connected", details={'is_connected': False, 'is_slewing': False})
+            
+            # Check if mount is slewing
+            is_slewing = self.telescope.Slewing
+            
+            return success_status(
+                f"Mount slewing status: {'Slewing' if is_slewing else 'Not slewing'}",
+                data=is_slewing,
+                details={'is_connected': True, 'is_slewing': is_slewing}
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error checking slewing status: {e}")
+            return error_status(f"Error checking slewing status: {e}", details={'is_connected': True, 'is_slewing': None})
+
+    def wait_for_slewing_complete(self, timeout: float = 300.0, check_interval: float = 1.0) -> MountStatus:
+        """Wartet, bis die Slewing-Bewegung abgeschlossen ist.
+        Args:
+            timeout: Maximale Wartezeit in Sekunden (Standard: 5 Minuten)
+            check_interval: Intervall zwischen den Prüfungen in Sekunden (Standard: 1 Sekunde)
+        Returns:
+            MountStatus: Status-Objekt mit Ergebnis.
+        """
+        try:
+            if not self.telescope.Connected:
+                return error_status("Mount not connected", details={'is_connected': False})
+            
+            start_time = time.time()
+            self.logger.info(f"Waiting for slewing to complete (timeout: {timeout}s)...")
+            
+            while time.time() - start_time < timeout:
+                slewing_status = self.is_slewing()
+                
+                if not slewing_status.is_success:
+                    return slewing_status
+                
+                if not slewing_status.data:  # Not slewing
+                    elapsed_time = time.time() - start_time
+                    self.logger.info(f"Slewing completed after {elapsed_time:.1f} seconds")
+                    return success_status(
+                        "Slewing completed",
+                        data=True,
+                        details={'is_connected': True, 'is_slewing': False, 'wait_time': elapsed_time}
+                    )
+                
+                # Still slewing, wait and check again
+                time.sleep(check_interval)
+            
+            # Timeout reached
+            elapsed_time = time.time() - start_time
+            self.logger.warning(f"Slewing timeout after {elapsed_time:.1f} seconds")
+            return warning_status(
+                f"Slewing timeout after {elapsed_time:.1f} seconds",
+                data=False,
+                details={'is_connected': True, 'is_slewing': True, 'wait_time': elapsed_time, 'timeout': True}
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error waiting for slewing completion: {e}")
+            return error_status(f"Error waiting for slewing completion: {e}", details={'is_connected': True})
+
+    def get_mount_status(self) -> MountStatus:
+        """Gibt den vollständigen Status der Montierung zurück.
+        Returns:
+            MountStatus: Status-Objekt mit allen Mount-Informationen.
+        """
+        try:
+            if not self.telescope.Connected:
+                return error_status("Mount not connected", details={'is_connected': False})
+            
+            # Get coordinates
+            coord_status = self.get_coordinates()
+            if not coord_status.is_success:
+                return coord_status
+            
+            # Get slewing status
+            slewing_status = self.is_slewing()
+            if not slewing_status.is_success:
+                return slewing_status
+            
+            # Get additional mount properties if available
+            mount_info = {
+                'is_connected': True,
+                'is_slewing': slewing_status.data,
+                'coordinates': coord_status.data,
+                'ra_deg': coord_status.data[0],
+                'dec_deg': coord_status.data[1]
+            }
+            
+            # Try to get additional properties
+            try:
+                if hasattr(self.telescope, 'AtPark'):
+                    mount_info['at_park'] = self.telescope.AtPark
+                if hasattr(self.telescope, 'Tracking'):
+                    mount_info['tracking'] = self.telescope.Tracking
+                if hasattr(self.telescope, 'SideOfPier'):
+                    mount_info['side_of_pier'] = self.telescope.SideOfPier
+            except Exception as e:
+                self.logger.debug(f"Could not get additional mount properties: {e}")
+            
+            return success_status(
+                f"Mount status: RA={mount_info['ra_deg']:.4f}°, Dec={mount_info['dec_deg']:.4f}°, Slewing={'Yes' if mount_info['is_slewing'] else 'No'}",
+                data=mount_info,
+                details=mount_info
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error getting mount status: {e}")
+            return error_status(f"Error getting mount status: {e}", details={'is_connected': False})
+
     def __enter__(self) -> 'ASCOMMount':
         """Context-Manager-Einstieg."""
         return self

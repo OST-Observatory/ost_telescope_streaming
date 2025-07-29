@@ -10,6 +10,13 @@ mount:
   connection_timeout: 10
   # Coordinate validation
   validate_coordinates: true
+  # Slewing detection settings
+  slewing_detection:
+    enabled: true  # Enable slewing detection to prevent captures during movement
+    check_before_capture: true  # Check slewing status before each capture
+    wait_for_completion: true  # Wait for slewing to complete before capturing
+    wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
+    check_interval: 1.0  # Interval between slewing checks in seconds
 
 # Telescope Parameters
 # -------------------

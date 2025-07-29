@@ -34,6 +34,7 @@ class VideoProcessor:
         self.logger = logger or logging.getLogger(__name__)
         self.video_capture: Optional[VideoCapture] = None
         self.plate_solver: Optional[object] = None
+        self.mount: Optional[object] = None  # ASCOM mount for slewing detection
         self.is_running: bool = False
         self.processing_thread: Optional[threading.Thread] = None
         
@@ -57,6 +58,15 @@ class VideoProcessor:
         self.solver_type: str = self.plate_solve_config.get('default_solver', 'platesolve2')
         self.auto_solve: bool = self.plate_solve_config.get('auto_solve', True)
         self.min_solve_interval: int = self.plate_solve_config.get('min_solve_interval', 30)
+        
+        # Slewing detection settings
+        mount_config = self.config.get_mount_config()
+        slewing_config = mount_config.get('slewing_detection', {})
+        self.slewing_detection_enabled: bool = slewing_config.get('enabled', True)
+        self.slewing_check_before_capture: bool = slewing_config.get('check_before_capture', True)
+        self.slewing_wait_for_completion: bool = slewing_config.get('wait_for_completion', False)
+        self.slewing_wait_timeout: float = slewing_config.get('wait_timeout', 300.0)
+        self.slewing_check_interval: float = slewing_config.get('check_interval', 1.0)
         
         # State tracking
         self.last_capture_time: float = 0
@@ -117,6 +127,15 @@ class VideoProcessor:
             except Exception as e:
                 self.logger.error(f"Error initializing plate solver: {e}")
                 self.plate_solver = None
+        
+        # Initialize mount for slewing detection
+        try:
+            from ascom_mount import ASCOMMount
+            self.mount = ASCOMMount(config=self.config, logger=self.logger)
+            self.logger.info("Mount initialized for slewing detection")
+        except Exception as e:
+            self.logger.warning(f"Could not initialize mount for slewing detection: {e}")
+            self.mount = None
         
         return success
     
@@ -180,6 +199,34 @@ class VideoProcessor:
             return
         
         try:
+            # Check if mount is slewing before capturing
+            if hasattr(self, 'mount') and self.mount and self.slewing_detection_enabled:
+                slewing_status = self.mount.is_slewing()
+                if slewing_status.is_success and slewing_status.data:
+                    if self.slewing_wait_for_completion:
+                        # Wait for slewing to complete before capturing
+                        self.logger.info("Mount is slewing, waiting for completion...")
+                        wait_status = self.mount.wait_for_slewing_complete(
+                            timeout=self.slewing_wait_timeout,
+                            check_interval=self.slewing_check_interval
+                        )
+                        if wait_status.is_success and wait_status.data:
+                            self.logger.info("Slewing completed, proceeding with capture")
+                        else:
+                            self.logger.warning(f"Slewing wait failed or timed out: {wait_status.message}")
+                            if not wait_status.data:  # Timeout
+                                self.logger.info("Skipping capture due to slewing timeout")
+                                return
+                            else:  # Error
+                                self.logger.warning("Continuing with capture despite slewing error")
+                    else:
+                        # Skip capture if slewing (default behavior)
+                        self.logger.debug("Mount is slewing, skipping capture")
+                        return
+                elif not slewing_status.is_success:
+                    self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
+                    # Continue with capture if we can't check slewing status
+            
             # Capture frame
             frame = self.video_capture.get_current_frame()
             if frame is None:
