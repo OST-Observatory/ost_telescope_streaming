@@ -361,6 +361,60 @@ class ConfigManager:
         """
         return self.config.get('advanced', {})
     
+    def get_flat_config(self) -> dict[str, Any]:
+        """Get flat capture configuration.
+        
+        Returns:
+            dict: Flat capture configuration settings
+        """
+        return self.config.get('flat_capture', {
+            'target_count_rate': 0.5,      # 50% of maximum count
+            'count_tolerance': 0.1,        # 10% tolerance
+            'num_flats': 40,               # Number of flat frames to capture
+            'min_exposure': 0.001,         # Minimum exposure time (1ms)
+            'max_exposure': 10.0,          # Maximum exposure time (10s)
+            'exposure_step_factor': 1.5,   # Factor for exposure adjustment
+            'max_adjustment_attempts': 10,  # Maximum attempts to adjust exposure
+            'output_dir': 'flats'          # Output directory for flat frames
+        })
+    
+    def get_dark_config(self) -> dict[str, Any]:
+        """Get dark capture configuration.
+        
+        Returns:
+            dict: Dark capture configuration settings
+        """
+        return self.config.get('dark_capture', {
+            'num_darks': 40,                    # Number of dark frames per exposure time
+            'flat_exposure_time': None,         # Flat exposure time (auto-detected if None)
+            'science_exposure_time': 5.0,       # Science image exposure time
+            'min_exposure': 0.001,              # Minimum exposure time for bias frames
+            'max_exposure': 60.0,               # Maximum exposure time
+            'exposure_factors': [0.5, 1.0, 2.0, 4.0],  # Factors for extended range
+            'output_dir': 'darks'               # Output directory for dark frames
+        })
+    
+    def get_master_config(self) -> dict[str, Any]:
+        """Get master frame creation configuration.
+        
+        Returns:
+            dict: Master frame creation configuration settings
+        """
+        return self.config.get('master_frames', {
+            'output_dir': 'master_frames',           # Output directory for master frames
+            'rejection_method': 'sigma_clip',        # 'sigma_clip' or 'minmax'
+            'sigma_threshold': 3.0,                  # Sigma threshold for rejection
+            'normalization_method': 'mean',          # 'mean', 'median', 'max'
+            'quality_control': True,                 # Enable quality control
+            'save_individual_masters': True,         # Save individual master frames
+            'create_master_bias': True,              # Create master bias frame
+            'create_master_darks': True,             # Create master dark frames
+            'create_master_flats': True,             # Create master flat frames
+            'enable_calibration': True,              # Enable automatic calibration
+            'auto_load_masters': True,               # Auto-load master frames on startup
+            'calibration_tolerance': 0.1             # 10% tolerance for exposure time matching
+        })
+    
     def reload(self) -> None:
         """Reload the configuration from the file.
         

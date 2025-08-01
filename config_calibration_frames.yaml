@@ -1,0 +1,181 @@
+# Calibration Frames Configuration
+# Unified configuration for dark capture, flat capture, and master frame creation
+
+# =============================================================================
+# DARK CAPTURE CONFIGURATION
+# =============================================================================
+dark_capture:
+  # Number of dark frames per exposure time
+  num_darks: 40
+  
+  # Flat exposure time (auto-detected from existing flats if None)
+  flat_exposure_time: null  # Will be auto-detected
+  
+  # Science image exposure time (for main observations)
+  science_exposure_time: 5.0
+  
+  # Exposure time limits (in seconds)
+  min_exposure: 0.001    # 1ms for bias frames
+  max_exposure: 60.0     # 60s maximum
+  
+  # Exposure factors for extended range (0.5x, 1x, 2x, 4x science exposure)
+  exposure_factors: [0.5, 1.0, 2.0, 4.0]
+  
+  # Output directory for dark frames
+  output_dir: "darks"
+
+# =============================================================================
+# FLAT CAPTURE CONFIGURATION
+# =============================================================================
+flat_capture:
+  # Target count rate as fraction of maximum (0.5 = 50%)
+  target_count_rate: 0.5
+  
+  # Tolerance for count rate adjustment (0.1 = 10%)
+  count_tolerance: 0.1
+  
+  # Number of flat frames to capture
+  num_flats: 40
+  
+  # Exposure time limits (in seconds)
+  min_exposure: 0.001    # 1ms minimum
+  max_exposure: 10.0     # 10s maximum
+  
+  # Exposure adjustment factor (multiply/divide by this factor)
+  exposure_step_factor: 1.5
+  
+  # Maximum attempts to adjust exposure time
+  max_adjustment_attempts: 10
+  
+  # Output directory for flat frames
+  output_dir: "flats"
+
+# =============================================================================
+# MASTER FRAME CREATION CONFIGURATION
+# =============================================================================
+master_frames:
+  # Output directory for master frames
+  output_dir: "master_frames"
+  
+  # Frame combination settings
+  rejection_method: "sigma_clip"    # 'sigma_clip' or 'minmax'
+  sigma_threshold: 3.0              # Sigma threshold for rejection
+  normalization_method: "mean"      # 'mean', 'median', 'max'
+  
+  # Quality control settings
+  quality_control: true             # Enable quality control
+  save_individual_masters: true     # Save individual master frames
+  
+  # Master frame types to create
+  create_master_bias: true          # Create master bias frame
+  create_master_darks: true         # Create master dark frames
+  create_master_flats: true         # Create master flat frames
+  
+  # Automatic calibration settings
+  enable_calibration: true          # Enable automatic calibration of captured frames
+  auto_load_masters: true           # Auto-load master frames on startup
+  calibration_tolerance: 0.1        # 10% tolerance for exposure time matching
+
+# =============================================================================
+# VIDEO CONFIGURATION (Required for all calibration operations)
+# =============================================================================
+video:
+  video_enabled: true
+  camera_type: "ascom"  # or "opencv"
+  
+  # ASCOM camera settings
+  ascom:
+    camera_name: "QHY600M"
+    exposure_time: 5.0  # Starting exposure time
+    gain: 0
+    offset: 0
+
+# =============================================================================
+# OPTIONAL CONFIGURATIONS (for reference)
+# =============================================================================
+
+# Overlay configuration (disabled for calibration operations)
+overlay:
+  update:
+    update_interval: 30
+    max_retries: 3
+  use_timestamps: true
+  wait_for_plate_solve: false  # Disable for calibration
+
+# Plate solving configuration (disabled for calibration operations)
+plate_solve:
+  auto_solve: false  # Disable for calibration
+
+# =============================================================================
+# WORKFLOW EXAMPLES
+# =============================================================================
+# 
+# 1. CAPTURE DARKS:
+#    python dark_capture_runner.py --config config_calibration_frames.yaml
+# 
+# 2. CAPTURE FLATS:
+#    python flat_capture_runner.py --config config_calibration_frames.yaml
+# 
+# 3. CREATE MASTER FRAMES:
+#    python master_frame_runner.py --config config_calibration_frames.yaml
+# 
+# 4. COMPLETE CALIBRATION WORKFLOW:
+#    # Step 1: Capture darks
+#    python dark_capture_runner.py --config config_calibration_frames.yaml
+#    
+#    # Step 2: Capture flats
+#    python flat_capture_runner.py --config config_calibration_frames.yaml
+#    
+#    # Step 3: Create master frames
+#    python master_frame_runner.py --config config_calibration_frames.yaml
+# 
+# =============================================================================
+# CALIBRATION WORKFLOW EXPLANATION
+# =============================================================================
+# 
+# 1. DARK CAPTURE:
+#    - Captures bias frames (1ms exposure)
+#    - Captures darks for flat exposure time (auto-detected)
+#    - Captures darks for science exposure time (5.0s)
+#    - Captures darks for extended range (2.5s, 10s, 20s)
+# 
+# 2. FLAT CAPTURE:
+#    - Automatically adjusts exposure time to achieve 50% count rate
+#    - Captures 40 flat frames with optimized exposure
+#    - Saves flats to 'flats' directory
+# 
+# 3. MASTER FRAME CREATION:
+#    - Creates master bias from bias frames
+#    - Creates master darks for each exposure time
+#    - Creates master flats with dark subtraction and normalization
+#    - Applies sigma clipping or min/max rejection
+#    - Saves master frames to 'master_frames' directory
+# 
+# =============================================================================
+# OUTPUT DIRECTORY STRUCTURE
+# =============================================================================
+# 
+# After complete calibration workflow:
+# 
+# darks/
+# ├── exp_0.001s/           # Bias frames (1ms)
+# ├── exp_1.000s/           # Flat darks (1s - auto-detected)
+# ├── exp_2.500s/           # 0.5x science exposure (2.5s)
+# ├── exp_5.000s/           # Science exposure (5s)
+# ├── exp_10.000s/          # 2x science exposure (10s)
+# └── exp_20.000s/          # 4x science exposure (20s)
+# 
+# flats/
+# ├── flat_20250729_143022_001.fits
+# ├── flat_20250729_143022_002.fits
+# └── ... (40 flat frames)
+# 
+# master_frames/
+# ├── master_bias_20250729_143022.fits
+# ├── master_dark_0.001s_20250729_143022.fits
+# ├── master_dark_1.000s_20250729_143022.fits
+# ├── master_dark_2.500s_20250729_143022.fits
+# ├── master_dark_5.000s_20250729_143022.fits
+# ├── master_dark_10.000s_20250729_143022.fits
+# ├── master_dark_20.000s_20250729_143022.fits
+# └── master_flat_1.000s_20250729_143022.fits 

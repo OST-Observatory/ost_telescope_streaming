@@ -17,6 +17,7 @@ from config_manager import ConfigManager
 from exceptions import CameraError, FileError
 from status import CameraStatus, success_status, error_status, warning_status
 from ascom_camera import ASCOMCamera
+from calibration_applier import CalibrationApplier
 
 class VideoCapture:
     """Video capture class for telescope streaming."""
@@ -91,6 +92,9 @@ class VideoCapture:
         
         self.ascom_camera = None
         
+        # Initialize calibration applier
+        self.calibration_applier = CalibrationApplier(config=self.config, logger=self.logger)
+    
     def _calculate_field_of_view(self) -> tuple[float, float]:
         """Calculates the field of view (FOV) in degrees based on telescope and camera parameters.
         Returns:
@@ -375,18 +379,42 @@ class VideoCapture:
             if self.ascom_camera.is_color_camera():
                 debayer_status = self.ascom_camera.debayer(img_status.data)
                 if debayer_status.is_success:
-                    return success_status("Color frame captured and debayered", 
-                                        data=debayer_status.data, 
-                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
+                    frame_data = debayer_status.data
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
                 else:
                     self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
-                    return success_status("Color frame captured (raw)", 
-                                        data=img_status.data, 
-                                        details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
+                    frame_data = img_status.data
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
             else:
-                return success_status("Mono frame captured", 
-                                    data=img_status.data, 
-                                    details={'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}"})
+                frame_data = img_status.data
+                frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+            
+            # Apply calibration if enabled and master frames are available
+            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            
+            if calibration_status.is_success:
+                calibrated_frame = calibration_status.data
+                calibration_details = calibration_status.details
+                
+                # Update frame details with calibration information
+                frame_details.update(calibration_details)
+                
+                if calibration_details.get('calibration_applied', False):
+                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                    return success_status("Frame captured and calibrated", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+                else:
+                    self.logger.debug("Frame captured (no calibration applied)")
+                    return success_status("Frame captured", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+            else:
+                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                return success_status("Frame captured (calibration failed)", 
+                                    data=frame_data, 
+                                    details=frame_details)
                 
         except Exception as e:
             self.logger.error(f"Error capturing ASCOM frame: {e}")
