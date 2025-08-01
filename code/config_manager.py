@@ -271,25 +271,62 @@ class ConfigManager:
         """
         return self.config.get('telescope', {})
     
-    def get_camera_config(self) -> Dict[str, Any]:
-        """Get the camera configuration.
-        
-        Retrieves the configuration for the camera.
+    def get_camera_config(self) -> dict[str, Any]:
+        """Get camera configuration.
         
         Returns:
-            Dict[str, Any]: The camera configuration.
+            dict: Camera configuration settings
         """
-        return self.config.get('camera', {})
+        return self.config.get('camera', {
+            'sensor_width': 6.17,              # Sensor width in mm
+            'sensor_height': 4.55,             # Sensor height in mm
+            'pixel_size': 3.75,                # Pixel size in micrometers
+            'type': 'color',                   # Camera type (mono, color)
+            'bit_depth': 8,                    # Bit depth
+            'cooling': {                       # Cooling settings for ASCOM cameras
+                'enable_cooling': False,       # Enable camera cooling
+                'target_temperature': -10.0,   # Target temperature in Celsius
+                'auto_cooling': True,          # Auto-cooling mode
+                'cooling_timeout': 300,        # Cooling timeout in seconds
+                'temperature_tolerance': 1.0,  # Temperature tolerance in Celsius
+                'wait_for_cooling': True       # Wait for target temperature before capture
+            }
+        })
     
     def get_video_config(self) -> Dict[str, Any]:
         """Get the video configuration.
         
-        Retrieves the configuration for the video stream.
+        Retrieves the configuration for video capture.
         
         Returns:
             Dict[str, Any]: The video configuration.
         """
-        return self.config.get('video', {})
+        return self.config.get('video', {
+            'video_enabled': True,
+            'camera_type': 'opencv',
+            'opencv': {
+                'camera_index': 0,
+                'frame_width': 1920,
+                'frame_height': 1080,
+                'fps': 30,
+                'auto_exposure': True,
+                'exposure_time': 0.1,
+                'gain': 1.0
+            },
+            'ascom': {
+                'ascom_driver': 'ASCOM.ASICamera2.Camera',
+                'exposure_time': 1.0,
+                'gain': 1.0,
+                'offset': 0,                    # Offset setting (0-255 typically)
+                'readout_mode': 0,              # Readout mode (camera-specific)
+                'binning': 1,
+                'filter_wheel_driver': None     # Optional separate filter wheel
+            },
+            'use_timestamps': False,
+            'timestamp_format': '%Y%m%d_%H%M%S',
+            'use_capture_count': False,
+            'file_format': 'fits'
+        })
     
     def get_plate_solve_config(self) -> Dict[str, Any]:
         """Get the plate solving configuration.

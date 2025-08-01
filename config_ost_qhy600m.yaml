@@ -43,6 +43,14 @@ camera:
   type: "mono"
   # Bit depth
   bit_depth: 16
+  # Cooling settings for ASCOM cameras
+  cooling:
+    enable_cooling: true           # Enable camera cooling
+    target_temperature: -10.0      # Target temperature in Celsius
+    auto_cooling: true             # Auto-cooling mode
+    cooling_timeout: 300           # Cooling timeout in seconds
+    temperature_tolerance: 1.0     # Temperature tolerance in Celsius
+    wait_for_cooling: false         # Wait for target temperature before capture
 
 # Video Capture Settings
 # ---------------------
@@ -65,6 +73,8 @@ video:
     ascom_driver: "ASCOM.QHYCCD.Camera"  # ASCOM driver ID for astro cameras
     exposure_time: 2.0  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
+    offset: 0  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
     binning: 2  # Binning factor (1x1, 2x2, etc.)
     # Separate filter wheel driver for QHY cameras
     filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver

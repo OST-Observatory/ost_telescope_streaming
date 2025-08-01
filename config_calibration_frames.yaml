@@ -85,10 +85,40 @@ video:
   
   # ASCOM camera settings
   ascom:
-    camera_name: "QHY600M"
-    exposure_time: 5.0  # Starting exposure time
-    gain: 0
-    offset: 0
+    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
+    exposure_time: 5.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras)
+    # filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # Uncomment and set if needed
+
+  # Frame saving settings
+  use_timestamps: false  # Enable timestamps in frame filenames
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
+  use_capture_count: false  # Enable capture count in frame filenames
+  file_format: "fits"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+
+# =============================================================================
+# CAMERA CONFIGURATION (Required for cooling settings)
+# =============================================================================
+camera:
+  # Sensor parameters
+  sensor_width: 23.5    # Sensor width in mm
+  sensor_height: 15.7    # Sensor height in mm
+  pixel_size: 3.76      # Pixel size in micrometers
+  type: "color"          # Camera type (mono, color)
+  bit_depth: 16         # Bit depth
+  
+  # Cooling settings for ASCOM cameras
+  cooling:
+    enable_cooling: true           # Enable camera cooling
+    target_temperature: -10.0      # Target temperature in Celsius
+    auto_cooling: true             # Auto-cooling mode
+    cooling_timeout: 300           # Cooling timeout in seconds
+    temperature_tolerance: 1.0     # Temperature tolerance in Celsius
+    wait_for_cooling: true         # Wait for target temperature before capture
 
 # =============================================================================
 # OPTIONAL CONFIGURATIONS (for reference)

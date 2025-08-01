@@ -1,267 +1,346 @@
-# ASCOM Camera Integration Guide
+# ASCOM Camera Guide
 
 ## Overview
 
-The OST Telescope Streaming system now supports ASCOM-compatible astronomical cameras, including QHY and ZWO cameras. This integration provides access to advanced features like cooling, filter wheel control, and automatic debayering for color cameras.
+The OST Telescope Streaming system provides comprehensive support for ASCOM-compatible cameras, including advanced features like cooling, offset control, and readout mode selection.
 
 ## Features
 
-### Core Camera Control
-- **Connection Management**: Connect/disconnect to ASCOM camera drivers
-- **Exposure Control**: Take exposures with configurable time, gain, and binning
-- **Image Retrieval**: Download captured images from the camera
+### 1. Basic Camera Control
+- **Connection Management**: Automatic connection and disconnection
+- **Exposure Control**: Manual exposure time setting
+- **Gain Control**: Adjustable gain settings
+- **Binning**: Configurable binning factors
 
-### Advanced Features
-- **Cooling Control**: Set and monitor camera temperature (if supported)
-- **Filter Wheel Control**: Control filter wheel position and get filter names (if available)
-- **Automatic Debayering**: Process raw Bayer-pattern images from color cameras into RGB images
+### 2. Advanced Camera Features
+- **Cooling Control**: Automatic temperature regulation
+- **Offset Control**: Adjustable offset settings (0-255 typically)
+- **Readout Mode Selection**: Camera-specific readout modes
+- **Filter Wheel Support**: Integrated and separate filter wheel support
+
+### 3. Image Processing
+- **Debayering**: Automatic Bayer pattern detection and conversion
+- **FITS Support**: Native FITS file format with astronomical headers
+- **Calibration**: Automatic dark and flat frame correction
 
 ## Configuration
 
-### Basic Setup
-
-Add the following to your `config.yaml`:
+### ASCOM Camera Settings
 
 ```yaml
 video:
-  # Camera type: 'opencv' for regular video cameras, 'ascom' for astro cameras
   camera_type: "ascom"
-  # ASCOM driver ID for your camera
-  ascom_driver: "ASCOM.QHYCamera.Camera"  # or "ASCOM.ZWOCamera.Camera"
+  ascom:
+    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID
+    exposure_time: 5.0                       # Exposure time in seconds
+    gain: 1.0                                # Gain setting
+    offset: 0                                # Offset setting (0-255)
+    readout_mode: 0                          # Readout mode (camera-specific)
+    binning: 1                               # Binning factor
+    filter_wheel_driver: null                # Optional separate filter wheel
 ```
 
-### Common ASCOM Driver IDs
+### Configuration Options
 
-- **QHY Cameras**: `"ASCOM.QHYCamera.Camera"`
-- **ZWO Cameras**: `"ASCOM.ZWOCamera.Camera"`
-- **Other ASCOM Cameras**: Check your camera's documentation for the correct driver ID
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ascom_driver` | - | ASCOM driver program ID |
+| `exposure_time` | 1.0 | Exposure time in seconds |
+| `gain` | 1.0 | Gain setting |
+| `offset` | 0 | Offset setting (0-255 typically) |
+| `readout_mode` | 0 | Readout mode index |
+| `binning` | 1 | Binning factor (1x1, 2x2, etc.) |
+| `filter_wheel_driver` | null | Separate filter wheel driver ID |
 
 ## Usage Examples
 
-### Command Line Interface
+### 1. Basic Camera Setup
 
-The test scripts in the `tests/` directory provide comprehensive testing for ASCOM camera functionality:
-
-#### Basic Camera Test
-```bash
-cd tests
-python test_ascom_camera.py --config ../config_ost_qhy600m.yaml
-```
-
-#### Filter Wheel Test
-```bash
-cd tests
-python test_filter_wheel.py --config ../config_ost_qhy600m.yaml
-```
-
-#### Cooling Cache Test
-```bash
-cd tests
-python test_cooling_cache.py --config ../config_ost_qhy600m.yaml
-```
-
-#### Main Application
-```bash
-# Use the main application for continuous operation
-python overlay_runner.py --config config_ost_qhy600m.yaml
-```
-
-### Python API
-
-#### Basic Usage
 ```python
-from code.ascom_camera import ASCOMCamera
-from code.config_manager import config
+from code.video_capture import VideoCapture
+from code.config_manager import ConfigManager
 
-# Create camera instance
-camera = ASCOMCamera(driver_id="ASCOM.QHYCamera.Camera", config=config)
+# Load configuration
+config = ConfigManager('config.yaml')
 
-# Connect
-status = camera.connect()
+# Initialize camera
+video_capture = VideoCapture(config=config)
+
+# Connect to camera
+status = video_capture.connect()
 if status.is_success:
-    print("Camera connected")
+    print("Camera connected successfully")
     
-    # Take exposure
-    expose_status = camera.expose(5.0, gain=20)  # 5 seconds, gain=20
-    if expose_status.is_success:
-        # Get image
-        image_status = camera.get_image()
-        if image_status.is_success:
-            # Process image...
-            pass
-    
-    # Disconnect
-    camera.disconnect()
+    # Get camera information
+    camera_info = video_capture.get_camera_info()
+    print(f"Camera: {camera_info['driver_id']}")
+    print(f"Resolution: {camera_info['frame_width']}x{camera_info['frame_height']}")
 ```
 
-#### Cooling Control
+### 2. Advanced Camera Control
+
 ```python
-if camera.has_cooling():
-    # Set cooling temperature
-    cooling_status = camera.set_cooling(-10.0)  # -10°C
-    
-    # Get current temperature
-    temp_status = camera.get_temperature()
-    if temp_status.is_success:
-        print(f"Current temperature: {temp_status.data}°C")
+# Get camera capabilities
+capabilities = video_capture.ascom_camera.get_camera_capabilities()
+if capabilities.is_success:
+    caps = capabilities.data
+    print(f"Has cooling: {caps['has_cooling']}")
+    print(f"Has offset: {caps['has_offset']}")
+    print(f"Has readout mode: {caps['has_readout_mode']}")
+    print(f"Is color: {caps['is_color']}")
+
+# Set offset if supported
+if caps['has_offset']:
+    offset_status = video_capture.ascom_camera.set_offset(10)
+    if offset_status.is_success:
+        print(f"Offset set to: {offset_status.data['new_offset']}")
+
+# Set readout mode if supported
+if caps['has_readout_mode']:
+    readout_status = video_capture.ascom_camera.set_readout_mode(1)
+    if readout_status.is_success:
+        print(f"Readout mode set to: {readout_status.data['new_mode']}")
 ```
 
-#### Filter Wheel Control
+### 3. Capture with Advanced Settings
+
 ```python
-if camera.has_filter_wheel():
-    # Get available filters
-    filters_status = camera.get_filter_names()
+# Capture frame with all parameters
+status = video_capture.capture_single_frame_ascom(
+    exposure_time_s=5.0,
+    gain=100,
+    binning=2
+)
+
+if status.is_success:
+    frame_data = status.data
+    frame_details = status.details
+    print(f"Frame captured: {frame_details['dimensions']}")
+    print(f"Exposure: {frame_details['exposure_time_s']}s")
+    print(f"Gain: {frame_details['gain']}")
+    print(f"Offset: {frame_details['offset']}")
+    print(f"Readout mode: {frame_details['readout_mode']}")
+```
+
+## Camera-Specific Features
+
+### 1. Offset Control
+
+The offset parameter adjusts the baseline level of the camera's analog-to-digital converter:
+
+```python
+# Check if offset is supported
+if video_capture.ascom_camera.has_offset():
+    # Get current offset
+    offset_status = video_capture.ascom_camera.get_offset()
+    print(f"Current offset: {offset_status.data}")
+    
+    # Set new offset
+    set_status = video_capture.ascom_camera.set_offset(20)
+    if set_status.is_success:
+        print(f"Offset changed from {set_status.details['previous_offset']} to {set_status.details['new_offset']}")
+```
+
+**Offset Guidelines:**
+- **Typical Range**: 0-255 for most cameras
+- **Low Offset**: Reduces noise but may clip dark pixels
+- **High Offset**: Prevents clipping but increases noise
+- **Optimal Setting**: Depends on camera and imaging conditions
+
+### 2. Readout Mode Selection
+
+Readout modes control how the camera reads out the sensor data:
+
+```python
+# Check if readout mode is supported
+if video_capture.ascom_camera.has_readout_mode():
+    # Get available readout modes
+    modes_status = video_capture.ascom_camera.get_readout_modes()
+    if modes_status.is_success:
+        print(f"Available readout modes: {modes_status.data}")
+    
+    # Get current readout mode
+    current_status = video_capture.ascom_camera.get_readout_mode()
+    print(f"Current readout mode: {current_status.data}")
+    
+    # Set readout mode
+    set_status = video_capture.ascom_camera.set_readout_mode(1)
+    if set_status.is_success:
+        print(f"Readout mode changed from {set_status.details['previous_mode']} to {set_status.details['new_mode']}")
+```
+
+**Common Readout Modes:**
+- **Mode 0**: Standard readout (default)
+- **Mode 1**: High-speed readout
+- **Mode 2**: Low-noise readout
+- **Mode 3**: High-gain readout
+- **Mode 4**: Low-gain readout
+
+*Note: Available modes vary by camera model*
+
+### 3. Filter Wheel Support
+
+The system supports both integrated and separate filter wheels:
+
+```python
+# Check if filter wheel is available
+if video_capture.ascom_camera.has_filter_wheel():
+    # Get filter names
+    filters_status = video_capture.ascom_camera.get_filter_names()
     if filters_status.is_success:
         print(f"Available filters: {filters_status.data}")
     
+    # Get current filter position
+    position_status = video_capture.ascom_camera.get_filter_position()
+    print(f"Current filter position: {position_status.data}")
+    
     # Set filter position
-    filter_status = camera.set_filter_position(2)  # Position 2
+    set_status = video_capture.ascom_camera.set_filter_position(2)
+    if set_status.is_success:
+        print("Filter position set successfully")
+```
+
+## Camera Capabilities Detection
+
+The system automatically detects camera capabilities:
+
+```python
+# Get comprehensive camera capabilities
+capabilities = video_capture.ascom_camera.get_camera_capabilities()
+if capabilities.is_success:
+    caps = capabilities.data
     
-    # Get current position
-    pos_status = camera.get_filter_position()
-    if pos_status.is_success:
-        print(f"Current position: {pos_status.data}")
-```
-
-#### Debayering
-```python
-# Check if color camera
-if camera.is_color_camera():
-    # Take exposure
-    camera.expose(3.0, gain=15)
-    image_status = camera.get_image()
+    print("Camera Capabilities:")
+    print(f"  Cooling: {caps['has_cooling']}")
+    print(f"  Offset: {caps['has_offset']}")
+    print(f"  Readout Mode: {caps['has_readout_mode']}")
+    print(f"  Gain: {caps['has_gain']}")
+    print(f"  Binning: {caps['has_binning']}")
+    print(f"  Color: {caps['is_color']}")
+    print(f"  Filter Wheel: {caps['has_filter_wheel']}")
     
-    if image_status.is_success:
-        # Debayer the image
-        debayer_status = camera.debayer(image_status.data)
-        if debayer_status.is_success:
-            # debayer_status.data contains the RGB image
-            import cv2
-            cv2.imwrite("debayered.jpg", debayer_status.data)
+    # Show current values for supported features
+    if caps['has_offset']:
+        print(f"  Current Offset: {caps['current_offset']}")
+    
+    if caps['has_readout_mode']:
+        print(f"  Current Readout Mode: {caps['current_readout_mode']}")
+        print(f"  Available Readout Modes: {caps['available_readout_modes']}")
+    
+    if caps['has_gain']:
+        print(f"  Current Gain: {caps['current_gain']}")
+    
+    if caps['has_binning']:
+        print(f"  Current Binning: {caps['current_binning_x']}x{caps['current_binning_y']}")
 ```
-
-## API Reference
-
-### ASCOMCamera Class
-
-#### Constructor
-```python
-ASCOMCamera(driver_id: str, config=None, logger=None)
-```
-
-#### Methods
-
-##### Connection
-- `connect() -> CameraStatus`: Connect to the ASCOM camera
-- `disconnect() -> CameraStatus`: Disconnect from the camera
-
-##### Basic Control
-- `expose(exposure_time_s: float, gain: Optional[int] = None, binning: int = 1) -> CameraStatus`: Start exposure
-- `get_image() -> CameraStatus`: Retrieve captured image
-
-##### Cooling (if supported)
-- `has_cooling() -> bool`: Check if camera supports cooling
-- `set_cooling(target_temp: float) -> CameraStatus`: Set cooling temperature
-- `get_temperature() -> CameraStatus`: Get current temperature
-
-##### Filter Wheel (if available)
-- `has_filter_wheel() -> bool`: Check if camera has filter wheel
-- `get_filter_names() -> CameraStatus`: Get list of filter names
-- `set_filter_position(position: int) -> CameraStatus`: Set filter wheel position
-- `get_filter_position() -> CameraStatus`: Get current filter position
-
-##### Debayering
-- `is_color_camera() -> bool`: Check if camera is color
-- `debayer(img_array: Any, pattern: str = 'RGGB') -> CameraStatus`: Debayer raw image
-
-## Status Objects
-
-All methods return `CameraStatus` objects with the following structure:
-
-```python
-@dataclass
-class CameraStatus(Status[Any]):
-    level: StatusLevel  # SUCCESS, WARNING, ERROR, CRITICAL
-    message: str        # Human-readable message
-    data: Optional[Any] = None  # Return data (image, temperature, etc.)
-    details: Optional[Dict[str, Any]] = None  # Additional details
-```
-
-### Status Properties
-- `is_success`: True if level is SUCCESS
-- `is_warning`: True if level is WARNING
-- `is_error`: True if level is ERROR or CRITICAL
 
 ## Error Handling
 
-The system provides comprehensive error handling through status objects:
+The system provides comprehensive error handling:
 
 ```python
-status = camera.connect()
-if not status.is_success:
-    print(f"Connection failed: {status.message}")
-    if status.details:
-        print(f"Details: {status.details}")
-    return
+# Example: Setting unsupported parameter
+if not video_capture.ascom_camera.has_offset():
+    offset_status = video_capture.ascom_camera.set_offset(10)
+    if not offset_status.is_success:
+        print(f"Offset error: {offset_status.message}")
 
-# Check for warnings
-if status.is_warning:
-    print(f"Warning: {status.message}")
+# Example: Invalid parameter value
+readout_status = video_capture.ascom_camera.set_readout_mode(999)
+if not readout_status.is_success:
+    print(f"Readout mode error: {readout_status.message}")
 ```
 
-## Testing
+## Best Practices
 
-Run the ASCOM camera tests:
+### 1. Parameter Optimization
 
-```bash
-python tests/test_ascom_camera.py
+**Offset Settings:**
+- Start with default offset (usually 0)
+- Adjust based on dark frame analysis
+- Avoid clipping in dark areas
+- Consider camera temperature
+
+**Readout Mode Selection:**
+- Use standard mode for general imaging
+- Use high-speed mode for planetary imaging
+- Use low-noise mode for deep-sky imaging
+- Test different modes for your specific use case
+
+### 2. Configuration Management
+
+```yaml
+# Example: Optimized configuration for deep-sky imaging
+video:
+  ascom:
+    ascom_driver: "ASCOM.ASICamera2.Camera"
+    exposure_time: 300.0  # 5 minutes
+    gain: 139             # Unity gain for ASI2600MM Pro
+    offset: 21            # Optimized offset
+    readout_mode: 2       # Low-noise mode
+    binning: 1            # No binning for maximum resolution
 ```
 
-This will test:
-- Basic camera functionality
-- Method signatures
-- Status object returns
-- Configuration integration
-- CLI integration
+### 3. Performance Monitoring
+
+```python
+# Monitor camera performance during long sessions
+while imaging_session_active:
+    # Get current camera status
+    camera_info = video_capture.get_camera_info()
+    
+    # Log important parameters
+    print(f"Temperature: {camera_info.get('current_temperature', 'N/A')}°C")
+    print(f"Gain: {camera_info.get('gain', 'N/A')}")
+    print(f"Offset: {camera_info.get('offset', 'N/A')}")
+    print(f"Readout Mode: {camera_info.get('readout_mode', 'N/A')}")
+    
+    time.sleep(60)  # Check every minute
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Driver Not Found**: Ensure the ASCOM driver is properly installed and the driver ID is correct
-2. **Connection Failed**: Check that the camera is connected and the driver is running
-3. **Feature Not Supported**: Some features (cooling, filter wheel) may not be available on all cameras
-4. **Debayering Errors**: Ensure OpenCV is installed for debayering functionality
+1. **Parameter Not Supported**
+   ```python
+   if not video_capture.ascom_camera.has_offset():
+       print("This camera does not support offset control")
+   ```
 
-### Debug Mode
+2. **Invalid Parameter Values**
+   ```python
+   # Check parameter ranges
+   if offset < 0 or offset > 255:
+       print("Offset must be between 0 and 255")
+   ```
 
-Enable debug logging to see detailed information:
+3. **Driver Compatibility**
+   ```python
+   # Check driver version and capabilities
+   capabilities = video_capture.ascom_camera.get_camera_capabilities()
+   print(f"Driver supports advanced features: {capabilities.is_success}")
+   ```
+
+### Debug Information
+
+Enable debug logging for detailed information:
 
 ```python
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('ascom_camera').setLevel(logging.DEBUG)
 ```
 
-## Integration with VideoCapture
+This will show:
+- Parameter setting attempts
+- Driver interactions
+- Error details and diagnostics
+- Capability detection results
 
-The `VideoCapture` class automatically integrates ASCOM cameras when configured:
+## Future Enhancements
 
-```python
-from code.video_capture import VideoCapture
-
-# Configure for ASCOM camera
-config['video']['camera_type'] = 'ascom'
-config['video']['ascom_driver'] = 'ASCOM.QHYCamera.Camera'
-
-capture = VideoCapture(config=config)
-
-# Connect and capture
-capture.connect()
-status = capture.capture_single_frame_ascom(exposure_time_s=5.0, gain=20)
-if status.is_success:
-    capture.save_frame(status.data, "captured.jpg")
-```
-
-## Examples
-
-See `examples/ascom_camera_example.py` for a complete working example that demonstrates all features. 
+- **Parameter Validation**: Automatic validation of parameter ranges
+- **Camera Profiles**: Pre-configured settings for different imaging types
+- **Auto-Optimization**: Automatic parameter optimization based on conditions
+- **Multi-Camera Support**: Support for multiple cameras simultaneously
+- **Advanced Filtering**: Enhanced filter wheel control and automation 

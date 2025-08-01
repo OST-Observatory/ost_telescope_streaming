@@ -125,19 +125,213 @@ class ASCOMCamera:
         except Exception as e:
             return error_status(f"Failed to disconnect: {e}")
 
-    def expose(self, exposure_time_s: float, gain: Optional[int] = None, binning: int = 1) -> CameraStatus:
+    def expose(self, exposure_time_s: float, gain: Optional[int] = None, binning: int = 1, offset: Optional[int] = None, readout_mode: Optional[int] = None) -> CameraStatus:
         """Starte eine Belichtung mit der angegebenen Zeit in Sekunden."""
         try:
+            # Set binning
             self.camera.BinX = binning
             self.camera.BinY = binning
+            
+            # Set gain if provided and supported
             if gain is not None and hasattr(self.camera, 'Gain'):
                 self.camera.Gain = gain
+                self.logger.debug(f"Gain set to {gain}")
+            
+            # Set offset if provided and supported
+            if offset is not None and hasattr(self.camera, 'Offset'):
+                self.camera.Offset = offset
+                self.logger.debug(f"Offset set to {offset}")
+            
+            # Set readout mode if provided and supported
+            if readout_mode is not None and hasattr(self.camera, 'ReadoutMode'):
+                self.camera.ReadoutMode = readout_mode
+                self.logger.debug(f"Readout mode set to {readout_mode}")
+            
+            # Start exposure
             self.camera.StartExposure(exposure_time_s, False)
+            
+            # Wait for exposure to complete
             while not self.camera.ImageReady:
                 import time; time.sleep(0.1)
+            
             return success_status("Exposure complete")
         except Exception as e:
             return error_status(f"Exposure failed: {e}")
+
+    def has_offset(self) -> bool:
+        """Check if the camera supports offset control.
+        
+        Returns:
+            bool: True if offset is supported
+        """
+        return hasattr(self.camera, 'Offset')
+
+    def has_readout_mode(self) -> bool:
+        """Check if the camera supports readout mode selection.
+        
+        Returns:
+            bool: True if readout mode is supported
+        """
+        return hasattr(self.camera, 'ReadoutMode')
+
+    def get_offset(self) -> CameraStatus:
+        """Get the current offset setting.
+        
+        Returns:
+            CameraStatus: Status with current offset value
+        """
+        if not self.has_offset():
+            return error_status("Offset not supported by this camera")
+        try:
+            offset = self.camera.Offset
+            return success_status("Current offset read", data=offset)
+        except Exception as e:
+            return error_status(f"Failed to read offset: {e}")
+
+    def set_offset(self, offset: int) -> CameraStatus:
+        """Set the camera offset.
+        
+        Args:
+            offset: Offset value (typically 0-255)
+            
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_offset():
+            return error_status("Offset not supported by this camera")
+        try:
+            # Get current offset before setting
+            current_offset = self.camera.Offset
+            
+            # Set new offset
+            self.camera.Offset = offset
+            
+            # Verify the setting
+            new_offset = self.camera.Offset
+            
+            details = {
+                'previous_offset': current_offset,
+                'new_offset': new_offset,
+                'requested_offset': offset
+            }
+            
+            self.logger.info(f"Offset changed from {current_offset} to {new_offset}")
+            return success_status(f"Offset set to {new_offset}", details=details)
+        except Exception as e:
+            return error_status(f"Failed to set offset: {e}")
+
+    def get_readout_mode(self) -> CameraStatus:
+        """Get the current readout mode.
+        
+        Returns:
+            CameraStatus: Status with current readout mode
+        """
+        if not self.has_readout_mode():
+            return error_status("Readout mode not supported by this camera")
+        try:
+            readout_mode = self.camera.ReadoutMode
+            return success_status("Current readout mode read", data=readout_mode)
+        except Exception as e:
+            return error_status(f"Failed to read readout mode: {e}")
+
+    def set_readout_mode(self, readout_mode: int) -> CameraStatus:
+        """Set the camera readout mode.
+        
+        Args:
+            readout_mode: Readout mode index (camera-specific)
+            
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_readout_mode():
+            return error_status("Readout mode not supported by this camera")
+        try:
+            # Get current readout mode before setting
+            current_mode = self.camera.ReadoutMode
+            
+            # Set new readout mode
+            self.camera.ReadoutMode = readout_mode
+            
+            # Verify the setting
+            new_mode = self.camera.ReadoutMode
+            
+            details = {
+                'previous_mode': current_mode,
+                'new_mode': new_mode,
+                'requested_mode': readout_mode
+            }
+            
+            self.logger.info(f"Readout mode changed from {current_mode} to {new_mode}")
+            return success_status(f"Readout mode set to {new_mode}", details=details)
+        except Exception as e:
+            return error_status(f"Failed to set readout mode: {e}")
+
+    def get_readout_modes(self) -> CameraStatus:
+        """Get available readout modes for this camera.
+        
+        Returns:
+            CameraStatus: Status with list of available readout modes
+        """
+        if not self.has_readout_mode():
+            return error_status("Readout mode not supported by this camera")
+        try:
+            # Try to get readout mode names if available
+            if hasattr(self.camera, 'ReadoutModes'):
+                modes = list(self.camera.ReadoutModes)
+                self.logger.info(f"Available readout modes: {modes}")
+                return success_status("Readout modes retrieved", data=modes)
+            else:
+                # Fallback: return range of available modes
+                # This is a guess based on common camera implementations
+                modes = list(range(10))  # Assume 0-9 as common range
+                self.logger.info(f"Readout modes not available, assuming range 0-9")
+                return success_status("Readout modes estimated", data=modes)
+        except Exception as e:
+            return error_status(f"Failed to get readout modes: {e}")
+
+    def get_camera_capabilities(self) -> CameraStatus:
+        """Get comprehensive camera capabilities including offset and readout mode support.
+        
+        Returns:
+            CameraStatus: Status with camera capabilities
+        """
+        try:
+            capabilities = {
+                'has_cooling': self.has_cooling(),
+                'has_offset': self.has_offset(),
+                'has_readout_mode': self.has_readout_mode(),
+                'has_gain': hasattr(self.camera, 'Gain'),
+                'has_binning': hasattr(self.camera, 'BinX') and hasattr(self.camera, 'BinY'),
+                'is_color': self.is_color_camera(),
+                'has_filter_wheel': self.has_filter_wheel()
+            }
+            
+            # Get current values for supported features
+            if capabilities['has_offset']:
+                offset_status = self.get_offset()
+                if offset_status.is_success:
+                    capabilities['current_offset'] = offset_status.data
+            
+            if capabilities['has_readout_mode']:
+                readout_status = self.get_readout_mode()
+                if readout_status.is_success:
+                    capabilities['current_readout_mode'] = readout_status.data
+                
+                # Get available readout modes
+                modes_status = self.get_readout_modes()
+                if modes_status.is_success:
+                    capabilities['available_readout_modes'] = modes_status.data
+            
+            if capabilities['has_gain']:
+                capabilities['current_gain'] = self.camera.Gain
+            
+            if capabilities['has_binning']:
+                capabilities['current_binning_x'] = self.camera.BinX
+                capabilities['current_binning_y'] = self.camera.BinY
+            
+            return success_status("Camera capabilities retrieved", data=capabilities)
+        except Exception as e:
+            return error_status(f"Failed to get camera capabilities: {e}")
 
     def get_image(self) -> CameraStatus:
         try:

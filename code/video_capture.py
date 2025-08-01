@@ -67,6 +67,8 @@ class VideoCapture:
             self.ascom_driver = cam_cfg.get('ascom_driver', None)
             self.exposure_time = cam_cfg.get('exposure_time', 0.1)
             self.gain = cam_cfg.get('gain', 1.0)
+            self.offset = cam_cfg.get('offset', 0)                    # Offset setting
+            self.readout_mode = cam_cfg.get('readout_mode', 0)        # Readout mode
             # Set default values for ASCOM cameras
             self.camera_index = None  # ASCOM cameras don't use camera_index
             self.frame_width = 1920   # Will be updated from camera
@@ -94,6 +96,16 @@ class VideoCapture:
         
         # Initialize calibration applier
         self.calibration_applier = CalibrationApplier(config=self.config, logger=self.logger)
+        
+        # Initialize cooling settings
+        self.camera_config = self.config.get_camera_config()
+        self.cooling_config = self.camera_config.get('cooling', {})
+        self.enable_cooling = self.cooling_config.get('enable_cooling', False)
+        self.target_temperature = self.cooling_config.get('target_temperature', -10.0)
+        self.auto_cooling = self.cooling_config.get('auto_cooling', True)
+        self.cooling_timeout = self.cooling_config.get('cooling_timeout', 300)
+        self.temperature_tolerance = self.cooling_config.get('temperature_tolerance', 1.0)
+        self.wait_for_cooling = self.cooling_config.get('wait_for_cooling', True)
     
     def _calculate_field_of_view(self) -> tuple[float, float]:
         """Calculates the field of view (FOV) in degrees based on telescope and camera parameters.
@@ -166,6 +178,12 @@ class VideoCapture:
                     self.frame_height = 1080
                 
                 self.logger.info("ASCOM camera connected")
+                
+                # Initialize cooling system if supported and enabled
+                cooling_status = self.initialize_cooling()
+                if not cooling_status.is_success:
+                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
+                
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
                 self.ascom_camera = None
@@ -334,7 +352,7 @@ class VideoCapture:
         """Captures a single frame with ASCOM camera.
         Args:
             exposure_time_s: Exposure time in seconds
-            gain: Gain value (optional)
+            gain: Gain value (optional, uses config default if None)
             binning: Binning factor (default: 1)
         Returns:
             CameraStatus: Status object with frame or error.
@@ -365,8 +383,16 @@ class VideoCapture:
                 self.logger.warning(f"Could not update subframe: {e}")
                 self.logger.info("Using existing subframe settings")
             
-            # Start exposure
-            exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning)
+            # Use configuration defaults if not provided
+            if gain is None:
+                gain = self.gain
+            
+            # Get offset and readout mode from configuration
+            offset = self.offset
+            readout_mode = self.readout_mode
+            
+            # Start exposure with all parameters
+            exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
             if not exp_status.is_success:
                 return exp_status
             
@@ -380,14 +406,14 @@ class VideoCapture:
                 debayer_status = self.ascom_camera.debayer(img_status.data)
                 if debayer_status.is_success:
                     frame_data = debayer_status.data
-                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
                 else:
                     self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
                     frame_data = img_status.data
-                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
             else:
                 frame_data = img_status.data
-                frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+                frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
             
             # Apply calibration if enabled and master frames are available
             calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
@@ -832,56 +858,265 @@ class VideoCapture:
             return error_status(f"Failed to save FITS: {e}")
     
     def get_camera_info(self) -> dict[str, Any]:
-        """Returns camera information and settings."""
-        if self.camera_type == 'ascom':
-            if not self.ascom_camera:
-                return {"error": "ASCOM camera not connected"}
+        """Get comprehensive camera information.
+        
+        Returns:
+            dict: Camera information including cooling status
+        """
+        info = {
+            'camera_type': self.camera_type,
+            'connected': self.cap is not None or self.ascom_camera is not None,
+            'frame_width': self.frame_width,
+            'frame_height': self.frame_height,
+            'fps': self.fps,
+            'exposure_time': self.exposure_time,
+            'gain': self.gain,
+            'field_of_view': self.get_field_of_view(),
+            'sampling': self.get_sampling_arcsec_per_pixel()
+        }
+        
+        # Add ASCOM-specific information
+        if self.camera_type == 'ascom' and self.ascom_camera:
+            info.update({
+                'driver_id': self.ascom_camera.driver_id,
+                'has_cooling': self.has_cooling(),
+                'cooling_enabled': self.enable_cooling,
+                'target_temperature': self.target_temperature,
+                'auto_cooling': self.auto_cooling,
+                'has_offset': self.ascom_camera.has_offset(),
+                'has_readout_mode': self.ascom_camera.has_readout_mode(),
+                'offset': self.offset,
+                'readout_mode': self.readout_mode
+            })
             
-            try:
-                info = {
-                    "camera_type": "ascom",
-                    "driver": self.ascom_driver,
-                    "frame_width": self.frame_width,
-                    "frame_height": self.frame_height,
-                    "fov_width": self.fov_width,
-                    "fov_height": self.fov_height,
-                    "sampling_arcsec_per_pixel": self.get_sampling_arcsec_per_pixel(),
-                    "is_capturing": self.is_capturing,
-                    "capture_enabled": self.capture_enabled
+            # Get current cooling status if available
+            if self.has_cooling():
+                cooling_status = self.get_cooling_status()
+                info.update(cooling_status)
+        
+        return info
+    
+    def has_cooling(self) -> bool:
+        """Check if the camera supports cooling.
+        
+        Returns:
+            bool: True if cooling is supported
+        """
+        if self.camera_type == 'ascom' and self.ascom_camera:
+            return self.ascom_camera.has_cooling()
+        return False
+    
+    def enable_cooling_system(self) -> CameraStatus:
+        """Enable the camera cooling system.
+        
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        if not self.enable_cooling:
+            return error_status("Cooling is disabled in configuration")
+        
+        try:
+            # Turn on the cooler
+            cooler_status = self.ascom_camera.set_cooler_on(True)
+            if not cooler_status.is_success:
+                return cooler_status
+            
+            # Set target temperature
+            temp_status = self.ascom_camera.set_cooling(self.target_temperature)
+            if not temp_status.is_success:
+                return temp_status
+            
+            self.logger.info(f"Cooling system enabled, target temperature: {self.target_temperature}°C")
+            
+            # Wait for target temperature if configured
+            if self.wait_for_cooling:
+                return self.wait_for_target_temperature()
+            
+            return success_status(f"Cooling system enabled, target: {self.target_temperature}°C")
+            
+        except Exception as e:
+            self.logger.error(f"Error enabling cooling system: {e}")
+            return error_status(f"Failed to enable cooling system: {e}")
+    
+    def disable_cooling_system(self) -> CameraStatus:
+        """Disable the camera cooling system.
+        
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        try:
+            # Turn off the cooler
+            status = self.ascom_camera.turn_cooling_off()
+            if status.is_success:
+                self.logger.info("Cooling system disabled")
+            return status
+            
+        except Exception as e:
+            self.logger.error(f"Error disabling cooling system: {e}")
+            return error_status(f"Failed to disable cooling system: {e}")
+    
+    def set_target_temperature(self, temperature: float) -> CameraStatus:
+        """Set the target temperature for cooling.
+        
+        Args:
+            temperature: Target temperature in Celsius
+            
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        if not self.enable_cooling:
+            return error_status("Cooling is disabled in configuration")
+        
+        try:
+            status = self.ascom_camera.set_cooling(temperature)
+            if status.is_success:
+                self.target_temperature = temperature
+                self.logger.info(f"Target temperature set to {temperature}°C")
+            return status
+            
+        except Exception as e:
+            self.logger.error(f"Error setting target temperature: {e}")
+            return error_status(f"Failed to set target temperature: {e}")
+    
+    def get_cooling_status(self) -> dict[str, Any]:
+        """Get current cooling status.
+        
+        Returns:
+            dict: Cooling status information
+        """
+        if not self.has_cooling():
+            return {
+                'cooling_supported': False,
+                'cooling_enabled': False
+            }
+        
+        try:
+            # Get fresh cooling information
+            cooling_info = self.ascom_camera.get_smart_cooling_info()
+            
+            if cooling_info.is_success:
+                info = cooling_info.data
+                return {
+                    'cooling_supported': True,
+                    'cooling_enabled': self.enable_cooling,
+                    'current_temperature': info.get('temperature'),
+                    'target_temperature': info.get('target_temperature'),
+                    'cooler_power': info.get('cooler_power'),
+                    'cooler_on': info.get('cooler_on'),
+                    'temperature_stable': self._is_temperature_stable(info.get('temperature'), info.get('target_temperature'))
+                }
+            else:
+                return {
+                    'cooling_supported': True,
+                    'cooling_enabled': self.enable_cooling,
+                    'error': cooling_info.message
                 }
                 
-                # Add ASCOM-specific info if available
-                if hasattr(self.ascom_camera, 'camera'):
-                    try:
-                        info["native_width"] = self.ascom_camera.camera.CameraXSize
-                        info["native_height"] = self.ascom_camera.camera.CameraYSize
-                        info["is_connected"] = self.ascom_camera.camera.Connected
-                    except Exception as e:
-                        info["ascom_error"] = str(e)
-                
-                return info
-            except Exception as e:
-                return {"error": f"Error getting ASCOM camera info: {e}"}
-        else:
-            # OpenCV camera
-            if not self.cap or not self.cap.isOpened():
-                return {"error": "Camera not connected"}
-            
-            info = {
-                "camera_type": "opencv",
-                "camera_index": self.camera_index,
-                "frame_width": int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                "frame_height": int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                "fps": self.cap.get(cv2.CAP_PROP_FPS),
-                "fov_width": self.fov_width,
-                "fov_height": self.fov_height,
-                "sampling_arcsec_per_pixel": self.get_sampling_arcsec_per_pixel(),
-                "is_capturing": self.is_capturing,
-                "capture_enabled": self.capture_enabled
+        except Exception as e:
+            self.logger.error(f"Error getting cooling status: {e}")
+            return {
+                'cooling_supported': True,
+                'cooling_enabled': self.enable_cooling,
+                'error': str(e)
             }
+    
+    def wait_for_target_temperature(self) -> CameraStatus:
+        """Wait for the camera to reach the target temperature.
+        
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        if not self.wait_for_cooling:
+            return success_status("Waiting for cooling disabled in configuration")
+        
+        try:
+            import time
+            start_time = time.time()
             
-            return info 
-
+            self.logger.info(f"Waiting for target temperature: {self.target_temperature}°C")
+            
+            while time.time() - start_time < self.cooling_timeout:
+                cooling_status = self.get_cooling_status()
+                
+                if 'error' in cooling_status:
+                    return error_status(f"Error monitoring temperature: {cooling_status['error']}")
+                
+                current_temp = cooling_status.get('current_temperature')
+                target_temp = cooling_status.get('target_temperature')
+                
+                if current_temp is not None and target_temp is not None:
+                    temp_diff = abs(current_temp - target_temp)
+                    
+                    if temp_diff <= self.temperature_tolerance:
+                        self.logger.info(f"Target temperature reached: {current_temp:.1f}°C (target: {target_temp:.1f}°C)")
+                        return success_status(f"Target temperature reached: {current_temp:.1f}°C")
+                    
+                    self.logger.debug(f"Current: {current_temp:.1f}°C, Target: {target_temp:.1f}°C, Diff: {temp_diff:.1f}°C")
+                
+                time.sleep(2)  # Check every 2 seconds
+            
+            return error_status(f"Timeout waiting for target temperature after {self.cooling_timeout}s")
+            
+        except Exception as e:
+            self.logger.error(f"Error waiting for target temperature: {e}")
+            return error_status(f"Failed to wait for target temperature: {e}")
+    
+    def _is_temperature_stable(self, current_temp: Optional[float], target_temp: Optional[float]) -> bool:
+        """Check if the temperature is stable at the target.
+        
+        Args:
+            current_temp: Current temperature
+            target_temp: Target temperature
+            
+        Returns:
+            bool: True if temperature is stable
+        """
+        if current_temp is None or target_temp is None:
+            return False
+        
+        temp_diff = abs(current_temp - target_temp)
+        return temp_diff <= self.temperature_tolerance
+    
+    def initialize_cooling(self) -> CameraStatus:
+        """Initialize the cooling system during camera connection.
+        
+        Returns:
+            CameraStatus: Status of the operation
+        """
+        if not self.has_cooling():
+            self.logger.info("Camera does not support cooling")
+            return success_status("Cooling not supported")
+        
+        if not self.enable_cooling:
+            self.logger.info("Cooling disabled in configuration")
+            return success_status("Cooling disabled")
+        
+        self.logger.info("Initializing cooling system...")
+        
+        # Enable cooling system
+        cooling_status = self.enable_cooling_system()
+        if not cooling_status.is_success:
+            self.logger.warning(f"Failed to initialize cooling: {cooling_status.message}")
+            return cooling_status
+        
+        # Log cooling status
+        status_info = self.get_cooling_status()
+        self.logger.info(f"Cooling initialized: {status_info}")
+        
+        return success_status("Cooling system initialized successfully")
+    
     def _convert_ascom_to_opencv(self, ascom_image_data):
         """Convert ASCOM image data to OpenCV format with debayering.
         Supports both monochrome and color cameras with automatic Bayer pattern detection.
