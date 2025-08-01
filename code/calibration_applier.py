@@ -55,6 +55,7 @@ class CalibrationApplier:
         self.master_dir = master_config.get('output_dir', 'master_frames')
         
         # Cache for loaded master frames
+        self.master_bias_cache = None
         self.master_dark_cache = {}
         self.master_flat_cache = None
         
@@ -67,103 +68,254 @@ class CalibrationApplier:
         if self.auto_load_masters:
             self._load_master_frames()
     
-    def _load_master_frames(self) -> bool:
-        """Load all available master frames into cache.
-        
-        Returns:
-            bool: True if master frames loaded successfully
-        """
+    def _load_master_frames(self) -> None:
+        """Load master frames from the master frames directory."""
         try:
-            if not os.path.exists(self.master_dir):
-                self.logger.warning(f"Master frames directory not found: {self.master_dir}")
-                return False
+            master_config = self.config.get_master_config()
+            master_dir = Path(master_config.get('output_dir', 'master_frames'))
+            if not master_dir.exists():
+                self.logger.warning(f"Master frames directory does not exist: {master_dir}")
+                return
+            
+            self.logger.info(f"Loading master frames from {master_dir}")
+            
+            # Load master bias
+            bias_files = list(master_dir.glob('master_bias_*.fits'))
+            if bias_files:
+                latest_bias = max(bias_files, key=lambda f: f.stat().st_mtime)
+                bias_data = self._load_fits_file(latest_bias)
+                if bias_data is not None:
+                    self.master_bias_cache = {
+                        'data': bias_data,
+                        'file': str(latest_bias),
+                        'gain': self._extract_camera_setting(latest_bias, 'GAIN'),
+                        'offset': self._extract_camera_setting(latest_bias, 'OFFSET'),
+                        'readout_mode': self._extract_camera_setting(latest_bias, 'READOUT')
+                    }
+                    self.logger.info(f"Loaded master bias: {latest_bias.name}")
             
             # Load master darks
-            dark_files = glob.glob(os.path.join(self.master_dir, "master_dark_*.fits"))
+            dark_files = list(master_dir.glob('master_dark_*.fits'))
+            self.master_dark_cache = {}
+            
             for dark_file in dark_files:
-                exposure_time = self._extract_exposure_time(dark_file)
-                if exposure_time is not None:
-                    master_dark = self._load_fits_file(dark_file)
-                    if master_dark is not None:
+                try:
+                    # Extract exposure time from filename (e.g., master_dark_5.000s_20250729.fits)
+                    filename = dark_file.stem
+                    if '_' in filename:
+                        parts = filename.split('_')
+                        for part in parts:
+                            if part.endswith('s') and part[:-1].replace('.', '').isdigit():
+                                exposure_time = float(part[:-1])  # Remove 's' and convert to float
+                                break
+                        else:
+                            self.logger.warning(f"Could not extract exposure time from {dark_file.name}")
+                            continue
+                    else:
+                        self.logger.warning(f"Could not parse dark filename: {dark_file.name}")
+                        continue
+                    
+                    dark_data = self._load_fits_file(dark_file)
+                    if dark_data is not None:
                         self.master_dark_cache[exposure_time] = {
-                            'data': master_dark,
-                            'file': dark_file
+                            'data': dark_data,
+                            'file': str(dark_file),
+                            'exposure_time': exposure_time,
+                            'gain': self._extract_camera_setting(dark_file, 'GAIN'),
+                            'offset': self._extract_camera_setting(dark_file, 'OFFSET'),
+                            'readout_mode': self._extract_camera_setting(dark_file, 'READOUT')
                         }
-                        self.logger.debug(f"Loaded master dark: {exposure_time:.3f}s from {dark_file}")
+                        self.logger.info(f"Loaded master dark: {dark_file.name} "
+                                       f"(exp: {exposure_time:.3f}s, "
+                                       f"gain: {self.master_dark_cache[exposure_time]['gain']}, "
+                                       f"offset: {self.master_dark_cache[exposure_time]['offset']}, "
+                                       f"readout: {self.master_dark_cache[exposure_time]['readout_mode']})")
+                
+                except Exception as e:
+                    self.logger.warning(f"Failed to load master dark {dark_file.name}: {e}")
             
             # Load master flat
-            flat_files = glob.glob(os.path.join(self.master_dir, "master_flat_*.fits"))
+            flat_files = list(master_dir.glob('master_flat_*.fits'))
             if flat_files:
-                # Use the first master flat found
-                flat_file = flat_files[0]
-                master_flat = self._load_fits_file(flat_file)
-                if master_flat is not None:
+                latest_flat = max(flat_files, key=lambda f: f.stat().st_mtime)
+                flat_data = self._load_fits_file(latest_flat)
+                if flat_data is not None:
                     self.master_flat_cache = {
-                        'data': master_flat,
-                        'file': flat_file
+                        'data': flat_data,
+                        'file': str(latest_flat),
+                        'gain': self._extract_camera_setting(latest_flat, 'GAIN'),
+                        'offset': self._extract_camera_setting(latest_flat, 'OFFSET'),
+                        'readout_mode': self._extract_camera_setting(latest_flat, 'READOUT')
                     }
-                    self.logger.debug(f"Loaded master flat from {flat_file}")
+                    self.logger.info(f"Loaded master flat: {latest_flat.name} "
+                                   f"(gain: {self.master_flat_cache['gain']}, "
+                                   f"offset: {self.master_flat_cache['offset']}, "
+                                   f"readout: {self.master_flat_cache['readout_mode']})")
             
-            self.logger.info(f"Loaded {len(self.master_dark_cache)} master darks and "
-                           f"{'1' if self.master_flat_cache else '0'} master flat")
-            return True
+            total_masters = (1 if self.master_bias_cache else 0) + \
+                          len(self.master_dark_cache) + \
+                          (1 if self.master_flat_cache else 0)
+            
+            self.logger.info(f"Loaded {total_masters} master frames total")
             
         except Exception as e:
             self.logger.error(f"Error loading master frames: {e}")
-            return False
-    
-    def _extract_exposure_time(self, file_path: str) -> Optional[float]:
-        """Extract exposure time from master frame filename.
+
+    def _extract_camera_setting(self, fits_file: Path, keyword: str) -> Optional[Union[float, int]]:
+        """Extract camera setting from FITS header.
         
         Args:
-            file_path: Path to master frame file
+            fits_file: Path to FITS file
+            keyword: Header keyword to extract
             
         Returns:
-            Exposure time in seconds or None
+            Extracted value or None if not found
         """
-        # Extract from filename like "master_dark_1.000s_20250729_143022.fits"
-        match = re.search(r'master_dark_(\d+\.?\d*)s_', file_path)
-        if match:
-            return float(match.group(1))
-        
-        # Extract from filename like "master_flat_1.000s_20250729_143022.fits"
-        match = re.search(r'master_flat_(\d+\.?\d*)s_', file_path)
-        if match:
-            return float(match.group(1))
-        
-        return None
+        try:
+            import astropy.io.fits as fits
+            with fits.open(fits_file) as hdul:
+                header = hdul[0].header
+                if keyword in header:
+                    value = header[keyword]
+                    # Convert to appropriate type
+                    if isinstance(value, (int, float)):
+                        return value
+                    elif isinstance(value, str):
+                        try:
+                            return float(value)
+                        except ValueError:
+                            return None
+                    return None
+                return None
+        except Exception as e:
+            self.logger.debug(f"Could not extract {keyword} from {fits_file.name}: {e}")
+            return None
     
-    def _find_best_master_dark(self, exposure_time: float) -> Optional[Dict[str, Any]]:
-        """Find the best matching master dark for a given exposure time.
+    def _find_best_master_dark(self, exposure_time: float, gain: Optional[float] = None, 
+                              offset: Optional[int] = None, readout_mode: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Find the best matching master dark for the given exposure time and camera settings.
         
         Args:
             exposure_time: Frame exposure time in seconds
+            gain: Camera gain setting (optional)
+            offset: Camera offset setting (optional)
+            readout_mode: Camera readout mode (optional)
             
         Returns:
-            Master dark data and metadata or None
+            Dict with master dark data or None if no match found
         """
         if not self.master_dark_cache:
             return None
         
-        # Find exact match first
-        if exposure_time in self.master_dark_cache:
-            return self.master_dark_cache[exposure_time]
+        best_match = None
+        best_score = float('inf')
         
-        # Find closest match within tolerance
-        closest_dark = None
-        min_diff = float('inf')
-        tolerance = exposure_time * self.calibration_tolerance
+        for dark_info in self.master_dark_cache.values():
+            # Check exposure time match
+            exp_diff = abs(dark_info['exposure_time'] - exposure_time)
+            
+            # Check gain match (if both have gain info)
+            gain_diff = 0
+            if gain is not None and 'gain' in dark_info:
+                gain_diff = abs(dark_info['gain'] - gain)
+            elif gain is not None:
+                # If dark doesn't have gain info, use a high penalty
+                gain_diff = 1000
+            
+            # Check offset match (if both have offset info)
+            offset_diff = 0
+            if offset is not None and 'offset' in dark_info:
+                offset_diff = abs(dark_info['offset'] - offset)
+            elif offset is not None:
+                # If dark doesn't have offset info, use a high penalty
+                offset_diff = 1000
+            
+            # Check readout mode match (if both have readout mode info)
+            readout_diff = 0
+            if readout_mode is not None and 'readout_mode' in dark_info:
+                readout_diff = abs(dark_info['readout_mode'] - readout_mode)
+            elif readout_mode is not None:
+                # If dark doesn't have readout mode info, use a high penalty
+                readout_diff = 1000
+            
+            # Calculate weighted score (exposure time is most important)
+            score = (exp_diff * 10.0 +  # Exposure time weight: 10
+                    gain_diff * 1.0 +   # Gain weight: 1
+                    offset_diff * 1.0 + # Offset weight: 1
+                    readout_diff * 1.0) # Readout mode weight: 1
+            
+            # Check if within tolerance
+            tolerance = self.calibration_tolerance
+            exp_within_tolerance = exp_diff <= tolerance
+            
+            if exp_within_tolerance and score < best_score:
+                best_match = dark_info
+                best_score = score
         
-        for dark_exp_time, dark_data in self.master_dark_cache.items():
-            diff = abs(dark_exp_time - exposure_time)
-            if diff <= tolerance and diff < min_diff:
-                min_diff = diff
-                closest_dark = dark_data
+        if best_match:
+            self.logger.debug(f"Found master dark: {best_match['file']} "
+                            f"(exp: {best_match['exposure_time']:.3f}s, "
+                            f"gain: {best_match.get('gain', 'N/A')}, "
+                            f"offset: {best_match.get('offset', 'N/A')}, "
+                            f"readout: {best_match.get('readout_mode', 'N/A')})")
+        else:
+            self.logger.warning(f"No suitable master dark found for exp={exposure_time:.3f}s, "
+                              f"gain={gain}, offset={offset}, readout={readout_mode}")
         
-        if closest_dark:
-            self.logger.debug(f"Using master dark {min_diff:.3f}s different from frame exposure {exposure_time:.3f}s")
+        return best_match
+
+    def _find_best_master_flat(self, gain: Optional[float] = None, offset: Optional[int] = None, 
+                              readout_mode: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Find the best matching master flat for the given camera settings.
         
-        return closest_dark
+        Args:
+            gain: Camera gain setting (optional)
+            offset: Camera offset setting (optional)
+            readout_mode: Camera readout mode (optional)
+            
+        Returns:
+            Dict with master flat data or None if no match found
+        """
+        if not self.master_flat_cache:
+            return None
+        
+        flat_info = self.master_flat_cache
+        
+        # Check if flat has matching settings
+        gain_match = True
+        if gain is not None and 'gain' in flat_info:
+            gain_diff = abs(flat_info['gain'] - gain)
+            gain_match = gain_diff <= self.calibration_tolerance
+        elif gain is not None:
+            gain_match = False
+        
+        offset_match = True
+        if offset is not None and 'offset' in flat_info:
+            offset_diff = abs(flat_info['offset'] - offset)
+            offset_match = offset_diff <= self.calibration_tolerance
+        elif offset is not None:
+            offset_match = False
+        
+        readout_match = True
+        if readout_mode is not None and 'readout_mode' in flat_info:
+            readout_diff = abs(flat_info['readout_mode'] - readout_mode)
+            readout_match = readout_diff <= self.calibration_tolerance
+        elif readout_mode is not None:
+            readout_match = False
+        
+        if gain_match and offset_match and readout_match:
+            self.logger.debug(f"Using master flat: {flat_info['file']} "
+                            f"(gain: {flat_info.get('gain', 'N/A')}, "
+                            f"offset: {flat_info.get('offset', 'N/A')}, "
+                            f"readout: {flat_info.get('readout_mode', 'N/A')})")
+            return flat_info
+        else:
+            self.logger.warning(f"Master flat settings don't match: "
+                              f"flat(gain={flat_info.get('gain', 'N/A')}, "
+                              f"offset={flat_info.get('offset', 'N/A')}, "
+                              f"readout={flat_info.get('readout_mode', 'N/A')}) vs "
+                              f"frame(gain={gain}, offset={offset}, readout={readout_mode})")
+            return None
     
     def calibrate_frame(self, frame_data: np.ndarray, exposure_time: float, 
                        frame_info: Optional[Dict[str, Any]] = None) -> Status:
@@ -172,7 +324,7 @@ class CalibrationApplier:
         Args:
             frame_data: Raw frame data as numpy array
             exposure_time: Frame exposure time in seconds
-            frame_info: Additional frame information (optional)
+            frame_info: Additional frame information including gain, offset, readout_mode (optional)
             
         Returns:
             Status: Success or error status with calibrated frame data
@@ -194,39 +346,76 @@ class CalibrationApplier:
                     details={'calibration_applied': False, 'reason': 'no_master_frames'}
                 )
             
-            self.logger.debug(f"Calibrating frame with {exposure_time:.3f}s exposure")
+            # Extract camera settings from frame_info
+            gain = None
+            offset = None
+            readout_mode = None
+            
+            if frame_info:
+                gain = frame_info.get('gain')
+                offset = frame_info.get('offset')
+                readout_mode = frame_info.get('readout_mode')
+            
+            self.logger.debug(f"Calibrating frame with exp={exposure_time:.3f}s, "
+                            f"gain={gain}, offset={offset}, readout={readout_mode}")
             
             # Start with original frame
             calibrated_frame = frame_data.astype(np.float32)
             calibration_details = {
                 'original_exposure_time': exposure_time,
+                'original_gain': gain,
+                'original_offset': offset,
+                'original_readout_mode': readout_mode,
                 'dark_subtraction_applied': False,
                 'flat_correction_applied': False,
                 'master_dark_used': None,
-                'master_flat_used': None
+                'master_flat_used': None,
+                'master_dark_settings': None,
+                'master_flat_settings': None
             }
             
-            # Apply dark subtraction
-            master_dark = self._find_best_master_dark(exposure_time)
+            # Apply dark subtraction with matching settings
+            master_dark = self._find_best_master_dark(exposure_time, gain, offset, readout_mode)
             if master_dark:
                 calibrated_frame = calibrated_frame - master_dark['data'].astype(np.float32)
                 calibration_details['dark_subtraction_applied'] = True
                 calibration_details['master_dark_used'] = master_dark['file']
-                self.logger.debug(f"Applied dark subtraction using {master_dark['file']}")
+                calibration_details['master_dark_settings'] = {
+                    'exposure_time': master_dark['exposure_time'],
+                    'gain': master_dark.get('gain'),
+                    'offset': master_dark.get('offset'),
+                    'readout_mode': master_dark.get('readout_mode')
+                }
+                self.logger.debug(f"Applied dark subtraction using {master_dark['file']} "
+                                f"(exp: {master_dark['exposure_time']:.3f}s, "
+                                f"gain: {master_dark.get('gain', 'N/A')}, "
+                                f"offset: {master_dark.get('offset', 'N/A')}, "
+                                f"readout: {master_dark.get('readout_mode', 'N/A')})")
             else:
-                self.logger.warning(f"No suitable master dark found for {exposure_time:.3f}s exposure")
+                self.logger.warning(f"No suitable master dark found for exp={exposure_time:.3f}s, "
+                                  f"gain={gain}, offset={offset}, readout={readout_mode}")
             
-            # Apply flat correction
-            if self.master_flat_cache:
+            # Apply flat correction with matching settings
+            master_flat = self._find_best_master_flat(gain, offset, readout_mode)
+            if master_flat:
                 # Avoid division by zero
-                flat_data = self.master_flat_cache['data'].astype(np.float32)
+                flat_data = master_flat['data'].astype(np.float32)
                 flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
                 calibrated_frame = calibrated_frame / flat_data_safe
                 calibration_details['flat_correction_applied'] = True
-                calibration_details['master_flat_used'] = self.master_flat_cache['file']
-                self.logger.debug(f"Applied flat correction using {self.master_flat_cache['file']}")
+                calibration_details['master_flat_used'] = master_flat['file']
+                calibration_details['master_flat_settings'] = {
+                    'gain': master_flat.get('gain'),
+                    'offset': master_flat.get('offset'),
+                    'readout_mode': master_flat.get('readout_mode')
+                }
+                self.logger.debug(f"Applied flat correction using {master_flat['file']} "
+                                f"(gain: {master_flat.get('gain', 'N/A')}, "
+                                f"offset: {master_flat.get('offset', 'N/A')}, "
+                                f"readout: {master_flat.get('readout_mode', 'N/A')})")
             else:
-                self.logger.warning("No master flat available for flat correction")
+                self.logger.warning(f"No suitable master flat found for gain={gain}, "
+                                  f"offset={offset}, readout={readout_mode}")
             
             # Determine if calibration was applied
             calibration_applied = (calibration_details['dark_subtraction_applied'] or 
@@ -272,23 +461,35 @@ class CalibrationApplier:
             self.logger.error(f"Error calibrating frame from file {frame_file}: {e}")
             return error_status(f"Frame calibration from file failed: {e}")
     
-    def _load_fits_file(self, file_path: str) -> Optional[np.ndarray]:
+    def _load_fits_file(self, file_path: Union[str, Path]) -> Optional[np.ndarray]:
         """Load FITS file and return data as numpy array.
         
         Args:
-            file_path: Path to FITS file
+            file_path: Path to FITS file (string or Path object)
             
         Returns:
             Image data as numpy array or None
         """
         try:
-            # Simplified FITS loading - in real implementation use astropy.io.fits
-            # For now, create dummy data for demonstration
-            import numpy as np
-            # This is a placeholder - replace with actual FITS loading
-            dummy_data = np.random.normal(1000, 100, (2048, 2048)).astype(np.float32)
-            return dummy_data
+            import astropy.io.fits as fits
             
+            # Convert to string if Path object
+            file_path_str = str(file_path)
+            
+            with fits.open(file_path_str) as hdul:
+                # Get data from first HDU
+                data = hdul[0].data
+                
+                # Convert to float32 for processing
+                if data is not None:
+                    return data.astype(np.float32)
+                else:
+                    self.logger.warning(f"FITS file {file_path_str} contains no data")
+                    return None
+                    
+        except ImportError:
+            self.logger.warning("astropy not available, cannot load FITS files")
+            return None
         except Exception as e:
             self.logger.warning(f"Failed to load FITS file {file_path}: {e}")
             return None
@@ -303,18 +504,24 @@ class CalibrationApplier:
             self.logger.info("Reloading master frames...")
             
             # Clear existing cache
+            self.master_bias_cache = None
             self.master_dark_cache.clear()
             self.master_flat_cache = None
             
             # Reload master frames
-            success = self._load_master_frames()
+            self._load_master_frames()
             
-            if success:
-                self.logger.info("Master frames reloaded successfully")
+            # Check if any frames were loaded
+            total_masters = (1 if self.master_bias_cache else 0) + \
+                          len(self.master_dark_cache) + \
+                          (1 if self.master_flat_cache else 0)
+            
+            if total_masters > 0:
+                self.logger.info(f"Master frames reloaded successfully: {total_masters} frames")
+                return True
             else:
-                self.logger.warning("Failed to reload master frames")
-            
-            return success
+                self.logger.warning("No master frames found during reload")
+                return False
             
         except Exception as e:
             self.logger.error(f"Error reloading master frames: {e}")
@@ -326,14 +533,35 @@ class CalibrationApplier:
         Returns:
             Dict containing calibration status
         """
+        # Get master frame settings info
+        dark_settings = {}
+        for exp_time, dark_data in self.master_dark_cache.items():
+            dark_settings[f"{exp_time:.3f}s"] = {
+                'gain': dark_data.get('gain'),
+                'offset': dark_data.get('offset'),
+                'readout_mode': dark_data.get('readout_mode')
+            }
+        
+        flat_settings = None
+        if self.master_flat_cache:
+            flat_settings = {
+                'gain': self.master_flat_cache.get('gain'),
+                'offset': self.master_flat_cache.get('offset'),
+                'readout_mode': self.master_flat_cache.get('readout_mode')
+            }
+        
         return {
             'enable_calibration': self.enable_calibration,
             'auto_load_masters': self.auto_load_masters,
             'calibration_tolerance': self.calibration_tolerance,
             'master_directory': self.master_dir,
+            'master_bias_loaded': self.master_bias_cache is not None,
             'master_darks_loaded': len(self.master_dark_cache),
             'master_flat_loaded': self.master_flat_cache is not None,
-            'available_exposure_times': list(self.master_dark_cache.keys()) if self.master_dark_cache else []
+            'available_exposure_times': list(self.master_dark_cache.keys()) if self.master_dark_cache else [],
+            'dark_settings': dark_settings,
+            'flat_settings': flat_settings,
+            'settings_matching_enabled': True  # New feature
         }
     
     def get_master_frame_info(self) -> Dict[str, Any]:
@@ -347,7 +575,10 @@ class CalibrationApplier:
             dark_info[f"{exp_time:.3f}s"] = {
                 'file': dark_data['file'],
                 'shape': dark_data['data'].shape,
-                'dtype': str(dark_data['data'].dtype)
+                'dtype': str(dark_data['data'].dtype),
+                'gain': dark_data.get('gain'),
+                'offset': dark_data.get('offset'),
+                'readout_mode': dark_data.get('readout_mode')
             }
         
         flat_info = None
@@ -355,10 +586,25 @@ class CalibrationApplier:
             flat_info = {
                 'file': self.master_flat_cache['file'],
                 'shape': self.master_flat_cache['data'].shape,
-                'dtype': str(self.master_flat_cache['data'].dtype)
+                'dtype': str(self.master_flat_cache['data'].dtype),
+                'gain': self.master_flat_cache.get('gain'),
+                'offset': self.master_flat_cache.get('offset'),
+                'readout_mode': self.master_flat_cache.get('readout_mode')
+            }
+        
+        bias_info = None
+        if self.master_bias_cache:
+            bias_info = {
+                'file': self.master_bias_cache['file'],
+                'shape': self.master_bias_cache['data'].shape,
+                'dtype': str(self.master_bias_cache['data'].dtype),
+                'gain': self.master_bias_cache.get('gain'),
+                'offset': self.master_bias_cache.get('offset'),
+                'readout_mode': self.master_bias_cache.get('readout_mode')
             }
         
         return {
+            'master_bias': bias_info,
             'master_darks': dark_info,
             'master_flat': flat_info
         } 

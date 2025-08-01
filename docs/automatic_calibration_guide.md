@@ -2,298 +2,298 @@
 
 ## Overview
 
-The OST Telescope Streaming system now includes automatic calibration that applies dark and flat correction to every captured frame in real-time. This ensures that all frames are properly calibrated before further processing, providing the highest quality data for astronomical observations.
+The OST Telescope Streaming system now includes advanced automatic calibration that considers **camera settings matching** in addition to exposure time matching. This ensures that calibration frames are applied only when they were captured with the same camera settings as the science frames.
 
-## Features
+## Key Features
 
-### 1. Automatic Dark Subtraction
-- **Best Match Selection**: Automatically finds the master dark with the closest exposure time
-- **Tolerance Handling**: Uses configurable tolerance (default 10%) for exposure time matching
-- **Real-time Application**: Applies dark subtraction immediately after frame capture
+### 1. Camera Settings Matching
+- **Gain Matching**: Ensures master frames were captured with the same gain setting
+- **Offset Matching**: Ensures master frames were captured with the same offset setting  
+- **Readout Mode Matching**: Ensures master frames were captured with the same readout mode
+- **Exposure Time Matching**: Ensures master darks match the frame exposure time
 
-### 2. Automatic Flat Field Correction
-- **Master Flat Application**: Applies the loaded master flat to all frames
-- **Safe Division**: Handles division by zero and edge cases
-- **Consistent Correction**: Ensures uniform flat field correction across all frames
+### 2. Intelligent Frame Selection
+- **Weighted Scoring**: Exposure time has highest priority, followed by camera settings
+- **Tolerance Control**: Configurable tolerance for setting differences
+- **Fallback Handling**: Graceful degradation when exact matches aren't available
 
-### 3. Intelligent Frame Processing
-- **ASCOM Integration**: Seamlessly integrated with ASCOM camera capture
-- **Performance Optimized**: Efficient processing with minimal overhead
-- **Quality Monitoring**: Logs calibration status and quality metrics
-
-## How It Works
-
-### 1. Master Frame Loading
-
-```python
-# On system startup, master frames are automatically loaded
-calibration_applier = CalibrationApplier(config=config)
-calibration_applier._load_master_frames()
-
-# Available master darks are cached with their exposure times
-master_dark_cache = {
-    0.001: {'data': bias_frame, 'file': 'master_bias.fits'},
-    1.000: {'data': flat_dark, 'file': 'master_dark_1.000s.fits'},
-    5.000: {'data': science_dark, 'file': 'master_dark_5.000s.fits'},
-    10.000: {'data': long_dark, 'file': 'master_dark_10.000s.fits'}
-}
-```
-
-### 2. Frame Capture and Calibration
-
-```python
-# When a frame is captured with ASCOM camera
-def capture_single_frame_ascom(exposure_time_s):
-    # 1. Capture raw frame
-    frame_data = ascom_camera.capture_frame()
-    
-    # 2. Apply calibration
-    calibration_status = calibration_applier.calibrate_frame(
-        frame_data, exposure_time_s
-    )
-    
-    # 3. Return calibrated frame
-    return calibration_status.data
-```
-
-### 3. Best Match Selection
-
-```python
-def _find_best_master_dark(exposure_time):
-    # 1. Check for exact match
-    if exposure_time in master_dark_cache:
-        return master_dark_cache[exposure_time]
-    
-    # 2. Find closest match within tolerance
-    tolerance = exposure_time * calibration_tolerance  # 10% default
-    closest_dark = None
-    min_diff = float('inf')
-    
-    for dark_exp_time, dark_data in master_dark_cache.items():
-        diff = abs(dark_exp_time - exposure_time)
-        if diff <= tolerance and diff < min_diff:
-            min_diff = diff
-            closest_dark = dark_data
-    
-    return closest_dark
-```
-
-### 4. Calibration Application
-
-```python
-def calibrate_frame(frame_data, exposure_time):
-    calibrated_frame = frame_data.astype(np.float32)
-    
-    # 1. Dark subtraction
-    master_dark = find_best_master_dark(exposure_time)
-    if master_dark:
-        calibrated_frame = calibrated_frame - master_dark['data']
-    
-    # 2. Flat correction
-    if master_flat_cache:
-        flat_data = master_flat_cache['data']
-        flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
-        calibrated_frame = calibrated_frame / flat_data_safe
-    
-    return calibrated_frame
-```
+### 3. Comprehensive Logging
+- **Detailed Matching Info**: Shows which master frames are used and why
+- **Settings Comparison**: Logs the settings of both frame and master frames
+- **Warning Messages**: Alerts when no suitable master frames are found
 
 ## Configuration
 
-### Master Frame Settings
+### Calibration Settings
 
 ```yaml
 master_frames:
+  # Output directory for master frames
+  output_dir: "master_frames"
+  
   # Automatic calibration settings
   enable_calibration: true          # Enable automatic calibration
   auto_load_masters: true           # Auto-load master frames on startup
-  calibration_tolerance: 0.1        # 10% tolerance for exposure matching
-  
-  # Master frame creation settings
-  output_dir: "master_frames"
-  rejection_method: "sigma_clip"
-  normalization_method: "mean"
+  calibration_tolerance: 0.1        # 10% tolerance for matching
 ```
 
-### Configuration Options
+### Camera Settings in Frame Capture
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `enable_calibration` | true | Enable automatic calibration |
-| `auto_load_masters` | true | Auto-load master frames on startup |
-| `calibration_tolerance` | 0.1 | 10% tolerance for exposure time matching |
+```yaml
+video:
+  ascom:
+    ascom_driver: "ASCOM.ASICamera2.Camera"
+    exposure_time: 5.0              # Exposure time in seconds
+    gain: 100.0                     # Gain setting
+    offset: 50                      # Offset setting (0-255)
+    readout_mode: 0                 # Readout mode (camera-specific)
+    binning: 1                      # Binning factor
+```
+
+## How It Works
+
+### 1. Frame Information Extraction
+
+When a frame is captured, the system automatically extracts camera settings:
+
+```python
+# Frame information passed to calibration
+frame_info = {
+    'exposure_time': 5.0,
+    'gain': 100.0,
+    'offset': 50,
+    'readout_mode': 0,
+    'dimensions': '2048x2048',
+    'debayered': True
+}
+```
+
+### 2. Master Frame Matching Algorithm
+
+The system uses a weighted scoring algorithm to find the best matching master frames:
+
+```python
+# Weighted scoring (exposure time is most important)
+score = (exp_diff * 10.0 +      # Exposure time weight: 10
+        gain_diff * 1.0 +       # Gain weight: 1
+        offset_diff * 1.0 +     # Offset weight: 1
+        readout_diff * 1.0)     # Readout mode weight: 1
+```
+
+### 3. Master Dark Selection
+
+For master darks, the system considers:
+- **Exposure Time**: Must be within tolerance (default: 10%)
+- **Gain**: Should match exactly or be very close
+- **Offset**: Should match exactly or be very close
+- **Readout Mode**: Should match exactly
+
+### 4. Master Flat Selection
+
+For master flats, the system considers:
+- **Gain**: Must match exactly or be very close
+- **Offset**: Must match exactly or be very close
+- **Readout Mode**: Must match exactly
 
 ## Usage Examples
 
-### 1. Automatic Calibration (Default)
+### 1. Basic Calibration
 
 ```python
-# Frame capture automatically includes calibration
+from code.video_capture import VideoCapture
+from code.config_manager import ConfigManager
+
+# Initialize camera with calibration
+config = ConfigManager('config.yaml')
 video_capture = VideoCapture(config=config)
-video_capture.connect()
 
-# Capture frame - calibration is applied automatically
-result = video_capture.capture_single_frame_ascom(exposure_time=5.0)
-calibrated_frame = result.data
+# Capture frame (calibration applied automatically)
+status = video_capture.capture_single_frame_ascom(
+    exposure_time_s=300.0,  # 5 minutes
+    gain=139,               # Unity gain
+    binning=1               # No binning
+)
 
-# Calibration details are included in result
-calibration_details = result.details
-print(f"Dark subtraction: {calibration_details['dark_subtraction_applied']}")
-print(f"Flat correction: {calibration_details['flat_correction_applied']}")
+if status.is_success:
+    frame_data = status.data
+    frame_details = status.details
+    
+    # Check calibration details
+    if frame_details.get('calibration_applied', False):
+        print("Frame was calibrated successfully")
+        print(f"Dark subtraction: {frame_details['dark_subtraction_applied']}")
+        print(f"Flat correction: {frame_details['flat_correction_applied']}")
+        print(f"Master dark used: {frame_details['master_dark_used']}")
+        print(f"Master flat used: {frame_details['master_flat_used']}")
 ```
 
-### 2. Manual Calibration Control
+### 2. Calibration Status Monitoring
 
 ```python
-# Access calibration applier directly
-calibration_applier = video_capture.calibration_applier
+# Get calibration system status
+calibration_status = video_capture.calibration_applier.get_calibration_status()
 
-# Check calibration status
-status = calibration_applier.get_calibration_status()
-print(f"Master darks loaded: {status['master_darks_loaded']}")
-print(f"Master flat loaded: {status['master_flat_loaded']}")
+print("Calibration System Status:")
+print(f"  Enabled: {calibration_status['enable_calibration']}")
+print(f"  Auto-load: {calibration_status['auto_load_masters']}")
+print(f"  Tolerance: {calibration_status['calibration_tolerance']}")
+print(f"  Master darks loaded: {calibration_status['master_darks_loaded']}")
+print(f"  Master flat loaded: {calibration_status['master_flat_loaded']}")
+print(f"  Settings matching: {calibration_status['settings_matching_enabled']}")
 
-# Reload master frames if needed
-calibration_applier.reload_master_frames()
+# Show available master frames
+for exp_time, settings in calibration_status['dark_settings'].items():
+    print(f"  Dark {exp_time}: gain={settings['gain']}, offset={settings['offset']}, readout={settings['readout_mode']}")
+
+if calibration_status['flat_settings']:
+    flat = calibration_status['flat_settings']
+    print(f"  Flat: gain={flat['gain']}, offset={flat['offset']}, readout={flat['readout_mode']}")
 ```
 
-### 3. Calibration Quality Monitoring
+### 3. Manual Calibration Control
 
 ```python
+# Reload master frames
+success = video_capture.calibration_applier.reload_master_frames()
+if success:
+    print("Master frames reloaded successfully")
+else:
+    print("Failed to reload master frames")
+
 # Get detailed master frame information
-master_info = calibration_applier.get_master_frame_info()
+master_info = video_capture.calibration_applier.get_master_frame_info()
 
-print("Available master darks:")
-for exp_time, info in master_info['master_darks'].items():
-    print(f"  {exp_time}: {info['file']}")
+print("Master Frame Details:")
+for exp_time, dark_info in master_info['master_darks'].items():
+    print(f"  Dark {exp_time}:")
+    print(f"    File: {dark_info['file']}")
+    print(f"    Shape: {dark_info['shape']}")
+    print(f"    Settings: gain={dark_info['gain']}, offset={dark_info['offset']}, readout={dark_info['readout_mode']}")
 
 if master_info['master_flat']:
-    print(f"Master flat: {master_info['master_flat']['file']}")
+    flat = master_info['master_flat']
+    print(f"  Flat:")
+    print(f"    File: {flat['file']}")
+    print(f"    Shape: {flat['shape']}")
+    print(f"    Settings: gain={flat['gain']}, offset={flat['offset']}, readout={flat['readout_mode']}")
 ```
 
-## Workflow Integration
+## Master Frame Requirements
 
-### 1. Complete Calibration Workflow
+### 1. Master Dark Requirements
+
+Master darks must be captured with:
+- **Same Gain**: Identical gain setting as science frames
+- **Same Offset**: Identical offset setting as science frames
+- **Same Readout Mode**: Identical readout mode as science frames
+- **Matching Exposure Time**: Within tolerance of science frame exposure time
+- **Same Temperature**: Captured at the same sensor temperature
+
+### 2. Master Flat Requirements
+
+Master flats must be captured with:
+- **Same Gain**: Identical gain setting as science frames
+- **Same Offset**: Identical offset setting as science frames
+- **Same Readout Mode**: Identical readout mode as science frames
+- **Same Filter**: If using filter wheel
+- **Uniform Illumination**: Even illumination across the sensor
+
+### 3. Master Bias Requirements
+
+Master bias frames must be captured with:
+- **Same Gain**: Identical gain setting as science frames
+- **Same Offset**: Identical offset setting as science frames
+- **Same Readout Mode**: Identical readout mode as science frames
+- **Minimum Exposure**: Shortest possible exposure time
+
+## Best Practices
+
+### 1. Camera Settings Consistency
+
+```yaml
+# Example: Consistent settings for all calibration frames
+video:
+  ascom:
+    # Science frame settings
+    exposure_time: 300.0  # 5 minutes for science
+    gain: 139             # Unity gain
+    offset: 21            # Optimized offset
+    readout_mode: 2       # Low-noise mode
+    binning: 1            # No binning
+
+# Calibration frames should use the same gain, offset, and readout_mode
+# Only exposure time varies for darks
+```
+
+### 2. Calibration Workflow
 
 ```bash
-# Step 1: Create master frames
-python calibration_workflow.py --config config_calibration_frames.yaml
+# 1. Set camera settings for science imaging
+# 2. Capture bias frames (same settings, 0.001s exposure)
+python dark_capture_runner.py --bias-only
 
-# Step 2: Start observation with automatic calibration
-python overlay_runner.py --config config.yaml --enable-video
+# 3. Capture dark frames (same settings, various exposures)
+python dark_capture_runner.py
+
+# 4. Capture flat frames (same settings, optimized exposure)
+python flat_capture_runner.py
+
+# 5. Create master frames
+python master_frame_runner.py
+
+# 6. Start science imaging (automatic calibration applied)
+python overlay_runner.py
 ```
 
-### 2. Frame Processing Pipeline
-
-```
-Raw Frame Capture (ASCOM)
-           ↓
-    Automatic Calibration
-           ↓
-    Dark Subtraction (Best Match)
-           ↓
-    Flat Field Correction
-           ↓
-    Calibrated Frame Ready
-           ↓
-    Plate Solving / Overlay Generation
-```
-
-## Quality Control
-
-### 1. Calibration Validation
+### 3. Settings Validation
 
 ```python
-# Check if calibration was applied
-if result.details['dark_subtraction_applied']:
-    print("✅ Dark subtraction applied")
-else:
-    print("⚠️ No dark subtraction applied")
+# Validate camera settings before capturing calibration frames
+camera_info = video_capture.get_camera_info()
+print(f"Current camera settings:")
+print(f"  Gain: {camera_info['gain']}")
+print(f"  Offset: {camera_info['offset']}")
+print(f"  Readout Mode: {camera_info['readout_mode']}")
 
-if result.details['flat_correction_applied']:
-    print("✅ Flat correction applied")
-else:
-    print("⚠️ No flat correction applied")
+# Ensure settings are appropriate for calibration
+if camera_info['gain'] != 139:
+    print("Warning: Gain should be set to 139 for optimal calibration")
+if camera_info['offset'] != 21:
+    print("Warning: Offset should be set to 21 for optimal calibration")
 ```
-
-### 2. Master Frame Quality
-
-```python
-# Monitor master frame availability
-status = calibration_applier.get_calibration_status()
-
-if status['master_darks_loaded'] == 0:
-    print("❌ No master darks available")
-elif status['master_flat_loaded'] == False:
-    print("❌ No master flat available")
-else:
-    print("✅ Master frames available for calibration")
-```
-
-### 3. Exposure Time Matching
-
-```python
-# Check exposure time coverage
-available_times = status['available_exposure_times']
-print(f"Available master dark exposure times: {available_times}")
-
-# For a specific exposure time
-target_exposure = 5.0
-tolerance = target_exposure * 0.1  # 10%
-matching_darks = [t for t in available_times if abs(t - target_exposure) <= tolerance]
-print(f"Matching darks for {target_exposure}s: {matching_darks}")
-```
-
-## Performance Considerations
-
-### 1. Memory Usage
-
-- **Master Frame Caching**: Master frames are loaded once and cached in memory
-- **Efficient Processing**: Calibration uses optimized numpy operations
-- **Minimal Overhead**: Calibration adds <1% processing time to frame capture
-
-### 2. Processing Speed
-
-```python
-# Typical processing times (2048x2048 frame)
-# Raw capture: ~100ms
-# Dark subtraction: ~5ms
-# Flat correction: ~5ms
-# Total overhead: ~10ms (10% of capture time)
-```
-
-### 3. Storage Requirements
-
-- **Master Frames**: ~50MB for complete master frame set
-- **Calibrated Frames**: Same size as raw frames
-- **Logging**: Minimal additional storage for calibration logs
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **No Master Frames Available**
+1. **No Matching Master Frames**
    ```python
-   # Check master frame directory
-   if not os.path.exists("master_frames"):
-       print("Create master frames first")
-       # Run: python calibration_workflow.py
+   # Check available master frames
+   status = video_capture.calibration_applier.get_calibration_status()
+   print(f"Available exposure times: {status['available_exposure_times']}")
+   print(f"Dark settings: {status['dark_settings']}")
+   print(f"Flat settings: {status['flat_settings']}")
    ```
 
-2. **Exposure Time Mismatch**
+2. **Settings Mismatch**
    ```python
-   # Check available exposure times
-   status = calibration_applier.get_calibration_status()
-   print(f"Available: {status['available_exposure_times']}")
-   print(f"Required: {your_exposure_time}")
+   # Check frame settings vs master frame settings
+   frame_details = status.details
+   print(f"Frame settings: gain={frame_details['original_gain']}, "
+         f"offset={frame_details['original_offset']}, "
+         f"readout={frame_details['original_readout_mode']}")
+   print(f"Master dark settings: {frame_details['master_dark_settings']}")
+   print(f"Master flat settings: {frame_details['master_flat_settings']}")
    ```
 
 3. **Calibration Not Applied**
    ```python
-   # Check calibration settings
-   master_config = config.get_master_config()
-   print(f"Enable calibration: {master_config['enable_calibration']}")
-   print(f"Auto load masters: {master_config['auto_load_masters']}")
+   # Check calibration status
+   if not frame_details.get('calibration_applied', False):
+       print("Calibration not applied. Possible reasons:")
+       print(f"  - No master frames available")
+       print(f"  - Settings don't match")
+       print(f"  - Calibration disabled")
    ```
 
 ### Debug Information
@@ -307,36 +307,30 @@ logging.getLogger('calibration_applier').setLevel(logging.DEBUG)
 
 This will show:
 - Master frame loading details
-- Exposure time matching process
+- Settings matching process
+- Frame selection decisions
 - Calibration application steps
-- Quality metrics and statistics
 
-## Benefits
+## Performance Considerations
 
-### 1. Real-time Quality
-- **Immediate Calibration**: Every frame is calibrated as it's captured
-- **Consistent Quality**: Uniform calibration across all observations
-- **No Post-processing**: No need for separate calibration steps
+### 1. Memory Usage
+- Master frames are loaded into memory for fast access
+- Large master frames may consume significant memory
+- Consider reloading master frames periodically for long sessions
 
-### 2. Automatic Operation
-- **Best Match Selection**: Automatically finds appropriate master frames
-- **Tolerance Handling**: Handles exposure time variations gracefully
-- **Error Recovery**: Continues operation even if calibration fails
+### 2. Processing Time
+- Settings matching adds minimal overhead
+- Calibration application is optimized for speed
+- Real-time calibration is possible for most systems
 
-### 3. Quality Assurance
-- **Validation**: Checks calibration quality and logs results
-- **Monitoring**: Tracks calibration statistics over time
-- **Reporting**: Provides detailed calibration information
-
-### 4. Integration
-- **Seamless Operation**: Works transparently with existing workflows
-- **Performance Optimized**: Minimal impact on capture performance
-- **Configurable**: Easy to enable/disable and adjust settings
+### 3. Storage Requirements
+- Master frames include camera settings metadata
+- FITS headers store gain, offset, and readout mode information
+- Additional storage overhead is minimal
 
 ## Future Enhancements
 
-- **Temperature Tracking**: Temperature-dependent calibration
-- **Real-time Quality Metrics**: Live quality assessment during capture
-- **Advanced Matching**: More sophisticated exposure time matching
-- **Calibration Validation**: Automatic validation of calibration quality
-- **Performance Optimization**: Further optimization for high-speed capture 
+- **Adaptive Tolerance**: Automatic tolerance adjustment based on camera type
+- **Settings Interpolation**: Interpolate between master frames with different settings
+- **Quality Metrics**: Automatic quality assessment of calibration results
+- **Multi-Camera Support**: Support for different camera settings simultaneously 
