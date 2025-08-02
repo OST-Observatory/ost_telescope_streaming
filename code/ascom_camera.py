@@ -4,7 +4,7 @@ ASCOM Camera integration for QHY, ZWO and other ASCOM-compatible cameras.
 Provides methods to connect, configure, expose, and download images.
 """
 
-from status import CameraStatus, success_status, error_status
+from status import CameraStatus, success_status, error_status, warning_status
 from exceptions import CameraError
 from typing import Optional, Any
 
@@ -344,29 +344,65 @@ class ASCOMCamera:
         return hasattr(self.camera, 'CanSetCCDTemperature') and self.camera.CanSetCCDTemperature
 
     def set_cooling(self, target_temp: float) -> CameraStatus:
+        """Set the camera cooling target temperature.
+        
+        Args:
+            target_temp: Target temperature in Celsius
+            
+        Returns:
+            CameraStatus: Status of the operation
+        """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
+        
         try:
-            # Get current temperature before setting
+            self.logger.info(f"Setting cooling target temperature to {target_temp}°C")
+            
+            # Get current values before setting
             current_temp = self.camera.CCDTemperature
             current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
             current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
             
+            self.logger.debug(f"Before setting: temp={current_temp}°C, power={current_power}%, cooler_on={current_cooler_on}")
+            
             # First, turn on the cooler if it's not already on
-            if hasattr(self.camera, 'CoolerOn') and not self.camera.CoolerOn:
-                self.camera.CoolerOn = True
-                self.logger.info("Cooler turned on")
+            if hasattr(self.camera, 'CoolerOn'):
+                if not self.camera.CoolerOn:
+                    self.camera.CoolerOn = True
+                    self.logger.info("Cooler turned on")
+                else:
+                    self.logger.debug("Cooler was already on")
+            else:
+                self.logger.warning("Cooler on/off control not available")
             
             # Set target temperature
-            self.camera.SetCCDTemperature = target_temp
+            if hasattr(self.camera, 'SetCCDTemperature'):
+                self.camera.SetCCDTemperature = target_temp
+                self.logger.info(f"Target temperature set to {target_temp}°C")
+            else:
+                return error_status("Target temperature setting not available")
+            
+            # Add a small delay to allow the camera to process the setting
+            import time
+            time.sleep(0.5)
             
             # Get values after setting
             new_temp = self.camera.CCDTemperature
             new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
             new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
             
+            self.logger.debug(f"After setting: temp={new_temp}°C, power={new_power}%, cooler_on={new_cooler_on}")
+            
+            # Verify the target temperature was set correctly
+            actual_target = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
+            if actual_target is not None:
+                self.logger.debug(f"Actual target temperature: {actual_target}°C")
+                if abs(actual_target - target_temp) > 0.1:
+                    self.logger.warning(f"Target temperature mismatch: requested {target_temp}°C, actual {actual_target}°C")
+            
             details = {
                 'target_temp': target_temp,
+                'actual_target': actual_target,
                 'current_temp': current_temp,
                 'new_temp': new_temp,
                 'current_power': current_power,
@@ -383,8 +419,19 @@ class ASCOMCamera:
                 'target_temperature': target_temp
             })
             
-            return success_status(f"Cooling set to {target_temp}°C", details=details)
+            # Check if cooling is working
+            if new_cooler_on and new_power is not None and new_power > 0:
+                self.logger.info(f"Cooling set successfully: target={target_temp}°C, current={new_temp}°C, power={new_power}%")
+                return success_status(f"Cooling set to {target_temp}°C", details=details)
+            elif new_cooler_on:
+                self.logger.info(f"Cooling set: target={target_temp}°C, current={new_temp}°C, cooler on")
+                return success_status(f"Cooling set to {target_temp}°C", details=details)
+            else:
+                self.logger.warning(f"Cooling set but cooler appears to be off: target={target_temp}°C, current={new_temp}°C")
+                return warning_status(f"Cooling set to {target_temp}°C but cooler may not be active", details=details)
+                
         except Exception as e:
+            self.logger.error(f"Failed to set cooling: {e}")
             return error_status(f"Failed to set cooling: {e}")
 
     def set_cooler_on(self, on: bool = True) -> CameraStatus:
@@ -800,8 +847,67 @@ class ASCOMCamera:
             return error_status(f"Failed to get filter position from {device_type} filter wheel: {e}")
 
     def is_color_camera(self) -> bool:
-        # Heuristik: SensorType oder BayerPattern vorhanden
-        return hasattr(self.camera, 'SensorType') and 'color' in str(self.camera.SensorType).lower()
+        """Check if the camera is a color camera.
+        
+        Returns:
+            bool: True if color camera, False if monochrome
+        """
+        try:
+            if not self.camera or not self.camera.Connected:
+                return False
+            
+            # Method 1: Check SensorType property
+            if hasattr(self.camera, 'SensorType'):
+                sensor_type = self.camera.SensorType
+                self.logger.debug(f"Camera SensorType: {sensor_type}")
+                
+                # ASCOM SensorType enum values:
+                # 0 = Monochrome, 1 = Color, 2 = RgGg, 3 = RGGB, 4 = GRBG, 5 = GBRG, 6 = BGGR
+                if sensor_type in [1, 2, 3, 4, 5, 6]:  # All color types
+                    self.logger.info(f"Color camera detected via SensorType: {sensor_type}")
+                    return True
+                elif sensor_type == 0:  # Monochrome
+                    self.logger.info("Monochrome camera detected via SensorType: 0")
+                    return False
+            
+            # Method 2: Check IsColor property
+            if hasattr(self.camera, 'IsColor'):
+                is_color = self.camera.IsColor
+                self.logger.debug(f"Camera IsColor: {is_color}")
+                if is_color:
+                    self.logger.info("Color camera detected via IsColor property")
+                    return True
+                else:
+                    self.logger.info("Monochrome camera detected via IsColor property")
+                    return False
+            
+            # Method 3: Check driver name for common color cameras
+            driver_name = self.driver_id.lower()
+            color_indicators = ['color', 'rgb', 'bayer', 'asi2600mc', 'asi2600mmc', 'qhy600c', 'qhy600mc']
+            mono_indicators = ['mono', 'asi2600mm', 'asi2600mm-pro', 'qhy600m', 'qhy600mm']
+            
+            for indicator in color_indicators:
+                if indicator in driver_name:
+                    self.logger.info(f"Color camera detected via driver name: {indicator}")
+                    return True
+            
+            for indicator in mono_indicators:
+                if indicator in driver_name:
+                    self.logger.info(f"Monochrome camera detected via driver name: {indicator}")
+                    return False
+            
+            # Method 4: Check if Bayer pattern is available
+            if self.sensor_type is not None:
+                self.logger.info(f"Color camera detected via Bayer pattern: {self.sensor_type}")
+                return True
+            
+            # Default: assume monochrome if no clear indication
+            self.logger.warning("Could not determine camera type, assuming monochrome")
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Error detecting camera type: {e}")
+            return False
 
     def debayer(self, img_array: Any, pattern: Optional[str] = None) -> CameraStatus:
         """Debayer an image with automatic pattern detection.
