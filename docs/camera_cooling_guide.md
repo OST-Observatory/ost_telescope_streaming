@@ -301,10 +301,45 @@ python tests/test_video_capture.py --config config.yaml --action cooling --cooli
 
 ### Checking Cooling Status
 
+#### **Safe Status Check (Recommended)**
 ```bash
-# Check current cooling status without affecting it
+# Check status from cache without affecting cooling settings
+python tests/test_video_capture.py --config config.yaml --action cooling-status-cache
+```
+
+#### **Live Status Check (May Reset Settings)**
+```bash
+# Check live status - may reset cooling settings on some cameras
 python tests/test_video_capture.py --config config.yaml --action cooling-status
 ```
+
+### Status Check Methods
+
+#### **1. `cooling-status-cache` (Recommended)**
+- **✅ Safe**: Reads from cache, no camera connection
+- **✅ Non-intrusive**: Doesn't affect cooling settings
+- **✅ Fast**: No connection overhead
+- **⚠️ Cached data**: May not be real-time
+
+#### **2. `cooling-status` (Use with caution)**
+- **✅ Real-time**: Live camera connection
+- **✅ Accurate**: Current status from camera
+- **⚠️ May reset settings**: Some ASCOM drivers reset cooling on connect
+- **⚠️ Intrusive**: Creates new connection
+
+### When to Use Each Method
+
+#### **Use `cooling-status-cache` for:**
+- **✅ Regular monitoring** during live sessions
+- **✅ Quick status checks** without affecting cooling
+- **✅ Troubleshooting** cooling issues
+- **✅ Verifying** cooling persistence
+
+#### **Use `cooling-status` for:**
+- **✅ Initial setup** verification
+- **✅ Debugging** connection issues
+- **✅ When cache is outdated** or missing
+- **✅ Final verification** before imaging
 
 ### Stopping Cooling
 
