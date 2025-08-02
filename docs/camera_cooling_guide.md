@@ -119,6 +119,20 @@ if stabilization_status.is_success:
 python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0
 ```
 
+### Keep Cooling Active After Test
+
+```bash
+# Cooling will remain on after the test
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+```
+
+### Check Cooling Status Without Affecting It
+
+```bash
+# Only check status, don't change anything
+python tests/test_video_capture.py --config config.yaml --action cooling-status
+```
+
 ### Advanced Cooling Debug
 
 ```bash

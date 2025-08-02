@@ -49,9 +49,10 @@ def main():
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
-    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'cooling-off', 'filter', 'debayer'],
+    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'cooling-off', 'cooling-status', 'filter', 'debayer'],
                        default='capture', help="Action to perform")
     parser.add_argument("--cooling-temp", type=float, help="Target cooling temperature in °C")
+    parser.add_argument("--keep-cooling", action='store_true', help="Keep cooling on when disconnecting (cooling action only)")
     parser.add_argument("--filter-position", type=int, help="Filter wheel position")
     parser.add_argument("--bayer-pattern", default='RGGB', 
                        choices=['RGGB', 'GRBG', 'GBRG', 'BGGR'],
@@ -215,14 +216,18 @@ def main():
                             print(f"  Cooler power: {final_info.get('cooler_power')}%")
                             print(f"  Cooler on: {final_info.get('cooler_on')}")
                     
-                    camera.disconnect()
-                    print(f"✅ Disconnected from camera")
-                else:
-                    print(f"❌ Connection failed: {connect_status.message}")
-                    sys.exit(1)
-            else:
-                print("Cooling control requires ASCOM camera and --cooling-temp parameter")
-                sys.exit(1)
+                    # Handle cooling when disconnecting
+                    if args.keep_cooling:
+                        print(f"\n⚠️  Keeping cooling on when disconnecting...")
+                        print(f"   Note: Cooling will remain active after disconnect")
+                        # Disconnect without affecting cooling
+                        camera.disconnect()
+                        print(f"✅ Disconnected from camera (cooling kept on)")
+                    else:
+                        print(f"\n⚠️  Disconnecting will turn off cooling...")
+                        print(f"   Use --keep-cooling to maintain cooling after disconnect")
+                        camera.disconnect()
+                        print(f"✅ Disconnected from camera (cooling turned off)")
         
         elif args.action == 'cooling-off':
             if args.camera_type == 'ascom' and args.ascom_driver:
@@ -249,6 +254,30 @@ def main():
                     sys.exit(1)
             else:
                 print("Cooling off requires ASCOM camera")
+                sys.exit(1)
+        
+        elif args.action == 'cooling-status':
+            if args.camera_type == 'ascom' and args.ascom_driver:
+                from ascom_camera import ASCOMCamera
+                camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    cooling_info_status = camera.get_smart_cooling_info()
+                    if cooling_info_status.is_success:
+                        info = cooling_info_status.data
+                        print(f"Current cooling status:")
+                        print(f"  Temperature: {info['temperature']}°C")
+                        print(f"  Cooler power: {info['cooler_power']}%")
+                        print(f"  Cooler on: {info['cooler_on']}")
+                        print(f"  Target temperature: {info['target_temperature']}°C")
+                    else:
+                        print(f"Failed to get cooling status: {cooling_info_status.message}")
+                    camera.disconnect()
+                else:
+                    print(f"Connection failed: {connect_status.message}")
+                    sys.exit(1)
+            else:
+                print("Cooling status check requires ASCOM camera")
                 sys.exit(1)
         
         elif args.action == 'filter':
