@@ -2,8 +2,8 @@ import logging
 import sys
 from pathlib import Path
 
-# Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent / "code"))
+# Add the parent code directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from config_manager import ConfigManager
 from video_capture import VideoCapture
