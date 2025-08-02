@@ -1,318 +1,279 @@
 # Camera Cooling Guide
 
+This guide explains how to use the camera cooling features in the telescope streaming system.
+
 ## Overview
 
-The OST Telescope Streaming system now includes comprehensive camera cooling support for ASCOM-compatible cameras. This feature allows automatic temperature control to reduce thermal noise and improve image quality for astronomical observations.
+The camera cooling system provides automatic temperature control for astronomical cameras to reduce thermal noise and improve image quality. The system includes advanced features for reliable cooling status detection and stabilization monitoring.
 
 ## Features
 
-### 1. Automatic Cooling Control
-- **Temperature Setting**: Configure target temperature in Celsius
-- **Power Control**: Adjust cooling power percentage
-- **Auto-cooling Mode**: Automatic temperature regulation
-- **Timeout Handling**: Configurable cooling timeout
+### ✅ **Automatic Cooling Control**
+- Set target temperature via configuration
+- Automatic cooler activation
+- Temperature monitoring and logging
 
-### 2. Temperature Monitoring
-- **Real-time Monitoring**: Continuous temperature tracking
-- **Stability Detection**: Automatic detection of temperature stability
-- **Tolerance Control**: Configurable temperature tolerance
-- **Status Reporting**: Detailed cooling status information
+### ✅ **Advanced Status Detection**
+- **Force Refresh**: Solves ASCOM driver caching issues
+- **Stabilization Monitoring**: Waits for cooling to stabilize
+- **Power Consumption Tracking**: Monitors cooler power usage
+- **Temperature Change Monitoring**: Alternative verification method
 
-### 3. Integration
-- **ASCOM Integration**: Seamless integration with ASCOM camera drivers
-- **Automatic Initialization**: Cooling starts automatically on camera connection
-- **Configuration-based**: All settings controlled via configuration files
-- **Error Handling**: Robust error handling and recovery
+### ✅ **Robust Error Handling**
+- Graceful handling of unsupported cameras
+- Detailed logging and status reporting
+- Fallback mechanisms for different camera types
 
 ## Configuration
 
-### Camera Cooling Settings
+### Basic Cooling Settings
 
 ```yaml
 camera:
-  # Sensor parameters
-  sensor_width: 36.0    # Sensor width in mm
-  sensor_height: 24.0   # Sensor height in mm
-  pixel_size: 3.76      # Pixel size in micrometers
-  type: "mono"          # Camera type (mono, color)
-  bit_depth: 16         # Bit depth
-  
-  # Cooling settings for ASCOM cameras
   cooling:
-    enable_cooling: true           # Enable camera cooling
-    target_temperature: -10.0      # Target temperature in Celsius
-    auto_cooling: true             # Auto-cooling mode
-    cooling_timeout: 300           # Cooling timeout in seconds
-    temperature_tolerance: 1.0     # Temperature tolerance in Celsius
-    wait_for_cooling: true         # Wait for target temperature before capture
+    enable_cooling: true
+    target_temperature: -10.0
+    auto_cooling: true
+    cooling_timeout: 60
+    temperature_tolerance: 2.0
+    wait_for_cooling: true
 ```
 
 ### Configuration Options
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `enable_cooling` | false | Enable camera cooling system |
-| `target_temperature` | -10.0 | Target temperature in Celsius |
-| `auto_cooling` | true | Enable automatic cooling mode |
-| `cooling_timeout` | 300 | Cooling timeout in seconds |
-| `temperature_tolerance` | 1.0 | Temperature tolerance in Celsius |
-| `wait_for_cooling` | true | Wait for target temperature before capture |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable_cooling` | bool | `false` | Enable cooling system |
+| `target_temperature` | float | `20.0` | Target temperature in °C |
+| `auto_cooling` | bool | `true` | Automatic cooling control |
+| `cooling_timeout` | int | `60` | Timeout for cooling operations (seconds) |
+| `temperature_tolerance` | float | `2.0` | Temperature tolerance in °C |
+| `wait_for_cooling` | bool | `true` | Wait for cooling to stabilize |
 
-## Usage Examples
+## Usage
 
-### 1. Basic Cooling Setup
+### Automatic Initialization
+
+The cooling system is automatically initialized when connecting to an ASCOM camera:
 
 ```python
-# Camera automatically initializes cooling on connection
-video_capture = VideoCapture(config=config)
-video_capture.connect()
+from video_capture import VideoCapture
 
-# Check cooling status
-cooling_status = video_capture.get_cooling_status()
-print(f"Current temperature: {cooling_status['current_temperature']}°C")
-print(f"Target temperature: {cooling_status['target_temperature']}°C")
-print(f"Cooler on: {cooling_status['cooler_on']}")
+# Initialize with cooling enabled
+video_capture = VideoCapture(config=config)
+status = video_capture.connect()  # Cooling initialized automatically
 ```
 
-### 2. Manual Cooling Control
+### Manual Cooling Control
 
 ```python
 # Enable cooling system
 status = video_capture.enable_cooling_system()
 if status.is_success:
-    print("Cooling system enabled")
+    print(f"Cooling enabled: {status.message}")
 
-# Set specific target temperature
-status = video_capture.set_target_temperature(-15.0)
+# Set target temperature
+status = video_capture.set_target_temperature(-10.0)
 if status.is_success:
-    print("Target temperature set to -15°C")
+    print(f"Target temperature set: {status.message}")
 
-# Wait for target temperature
-status = video_capture.wait_for_target_temperature()
+# Get cooling status
+status = video_capture.get_cooling_status()
 if status.is_success:
-    print("Target temperature reached")
-
-# Disable cooling
-status = video_capture.disable_cooling_system()
-if status.is_success:
-    print("Cooling system disabled")
+    info = status.data
+    print(f"Temperature: {info['temperature']}°C")
+    print(f"Cooler power: {info['cooler_power']}%")
+    print(f"Cooler on: {info['cooler_on']}")
 ```
 
-### 3. Cooling Status Monitoring
+### Advanced Cooling Features
+
+#### Force Refresh Cooling Status
 
 ```python
-# Get comprehensive camera information including cooling
-camera_info = video_capture.get_camera_info()
-
-if camera_info['has_cooling']:
-    print("Camera supports cooling")
-    if camera_info['cooling_enabled']:
-        print(f"Cooling enabled, target: {camera_info['target_temperature']}°C")
-        
-        # Get detailed cooling status
-        cooling_status = video_capture.get_cooling_status()
-        print(f"Current temperature: {cooling_status['current_temperature']}°C")
-        print(f"Cooler power: {cooling_status['cooler_power']}%")
-        print(f"Temperature stable: {cooling_status['temperature_stable']}")
-else:
-    print("Camera does not support cooling")
+# Force refresh to solve ASCOM driver caching issues
+refresh_status = video_capture.ascom_camera.force_refresh_cooling_status()
+if refresh_status.is_success:
+    info = refresh_status.data
+    print(f"Refreshed: temp={info['temperature']}°C, power={info['cooler_power']}%")
 ```
 
-## How It Works
-
-### 1. Cooling Initialization
+#### Wait for Cooling Stabilization
 
 ```python
-def initialize_cooling(self):
-    # Check if cooling is supported
-    if not self.has_cooling():
-        return success_status("Cooling not supported")
-    
-    # Check if cooling is enabled in config
-    if not self.enable_cooling:
-        return success_status("Cooling disabled")
-    
-    # Enable cooling system
-    cooling_status = self.enable_cooling_system()
-    
-    # Wait for target temperature if configured
-    if self.wait_for_cooling:
-        return self.wait_for_target_temperature()
-    
-    return success_status("Cooling system initialized")
+# Wait for cooling to stabilize and show power consumption
+stabilization_status = video_capture.ascom_camera.wait_for_cooling_stabilization(
+    timeout=60, 
+    check_interval=2.0
+)
+if stabilization_status.is_success:
+    info = stabilization_status.data
+    print(f"Stabilized: temp={info['temperature']}°C, power={info['cooler_power']}%")
 ```
 
-### 2. Temperature Monitoring
+## Testing
 
-```python
-def wait_for_target_temperature(self):
-    start_time = time.time()
-    
-    while time.time() - start_time < self.cooling_timeout:
-        cooling_status = self.get_cooling_status()
-        current_temp = cooling_status['current_temperature']
-        target_temp = cooling_status['target_temperature']
-        
-        if current_temp and target_temp:
-            temp_diff = abs(current_temp - target_temp)
-            
-            if temp_diff <= self.temperature_tolerance:
-                return success_status("Target temperature reached")
-        
-        time.sleep(2)  # Check every 2 seconds
-    
-    return error_status("Cooling timeout")
+### Basic Cooling Test
+
+```bash
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0
 ```
 
-### 3. ASCOM Integration
+### Advanced Cooling Debug
 
-The cooling system integrates with ASCOM camera drivers:
-
-```python
-# ASCOM camera cooling methods
-camera.has_cooling()                    # Check if cooling supported
-camera.set_cooling(target_temp)         # Set target temperature
-camera.set_cooler_on(True/False)        # Turn cooler on/off
-camera.get_cooling_info()               # Get cooling status
-camera.turn_cooling_off()               # Turn off cooling
+```bash
+python tests/test_cooling_debug.py --config config.yaml --target-temp -10.0
 ```
 
-## Best Practices
+### Cooling Power Diagnosis
 
-### 1. Temperature Settings
-
-- **Target Temperature**: -10°C to -20°C is typical for most cameras
-- **Tolerance**: 1°C tolerance is usually sufficient
-- **Automatic Control**: Cooling power is automatically controlled by the camera
-- **Timeout**: 300 seconds (5 minutes) is usually adequate
-
-### 2. Initialization
-
-- **Enable on Connection**: Cooling automatically initializes when camera connects
-- **Wait for Stability**: Allow time for temperature to stabilize before capturing
-- **Monitor Status**: Check cooling status before important captures
-
-### 3. Power Management
-
-- **Auto-cooling**: Enable for automatic temperature regulation
-- **Automatic Power Control**: Camera automatically adjusts cooling power to maintain target temperature
-- **Ambient Temperature**: Consider ambient temperature when setting targets
-
-### 4. Error Handling
-
-- **Timeout Handling**: Set appropriate timeouts for your environment
-- **Error Recovery**: System continues operation even if cooling fails
-- **Status Monitoring**: Regularly check cooling status during long sessions
+```bash
+python tests/test_cooling_power.py --config config.yaml --target-temp -10.0
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Cooling Not Supported**
-   ```python
-   if not video_capture.has_cooling():
-       print("Camera does not support cooling")
-   ```
+#### 1. **Cooler Power Shows 0%**
+**Problem**: ASCOM driver caching or hardware delay
+**Solution**: Use force refresh method
+```python
+refresh_status = camera.force_refresh_cooling_status()
+```
 
-2. **Cooling Disabled**
-   ```python
-   # Check configuration
-   cooling_config = config.get_camera_config()['cooling']
-   print(f"Cooling enabled: {cooling_config['enable_cooling']}")
-   ```
+#### 2. **Temperature Not Dropping**
+**Problem**: Cooling system not active or hardware issue
+**Solution**: Check cooler status and wait for stabilization
+```python
+stabilization_status = camera.wait_for_cooling_stabilization(timeout=60)
+```
 
-3. **Temperature Not Reaching Target**
-   ```python
-   # Check cooling status
-   status = video_capture.get_cooling_status()
-   print(f"Current: {status['current_temperature']}°C")
-   print(f"Target: {status['target_temperature']}°C")
-   print(f"Cooler on: {status['cooler_on']}")
-   print(f"Cooler power: {status['cooler_power']}%")
-   ```
-
-4. **Cooling Timeout**
-   ```python
-   # Increase timeout in configuration
-   cooling:
-     cooling_timeout: 600  # 10 minutes instead of 5
-   ```
+#### 3. **Cooling Not Supported**
+**Problem**: Camera doesn't support cooling
+**Solution**: Check camera capabilities
+```python
+if camera.has_cooling():
+    # Use cooling features
+else:
+    # Cooling not available
+```
 
 ### Debug Information
 
-Enable debug logging for detailed cooling information:
+The system provides detailed logging for troubleshooting:
 
-```python
-import logging
-logging.getLogger('video_capture').setLevel(logging.DEBUG)
+```
+2025-08-02 21:46:31 - INFO - Setting cooling target temperature to -10.0°C
+2025-08-02 21:46:31 - INFO - Cooler turned on
+2025-08-02 21:46:32 - INFO - Target temperature set to -10.0°C
+2025-08-02 21:46:32 - INFO - Forcing cooling status refresh...
+2025-08-02 21:46:33 - INFO - Cooling status refreshed: temp=23.8°C, power=0.0%, on=True
+2025-08-02 21:46:42 - INFO - Cooling status refreshed: temp=23.1°C, power=1.0%, on=True
+2025-08-02 21:46:48 - INFO - Cooling status refreshed: temp=22.3°C, power=4.0%, on=True
+2025-08-02 21:46:54 - INFO - Cooling status refreshed: temp=21.4°C, power=5.0%, on=True
 ```
 
-This will show:
-- Cooling initialization steps
-- Temperature monitoring details
-- ASCOM driver interactions
-- Error details and diagnostics
+## Best Practices
 
-## Performance Considerations
+### 1. **Temperature Settings**
+- Set target temperature 10-20°C below ambient
+- Allow sufficient time for cooling stabilization
+- Monitor temperature changes for verification
 
-### 1. Cooling Time
+### 2. **Power Monitoring**
+- Use force refresh for accurate power readings
+- Wait for power to stabilize before imaging
+- Monitor power consumption for system health
 
-- **Initial Cooling**: 5-15 minutes to reach target temperature
-- **Temperature Stability**: 1-2 minutes after reaching target
-- **Recovery Time**: 2-5 minutes after temperature changes
+### 3. **Error Handling**
+- Always check cooling status before imaging
+- Handle unsupported cameras gracefully
+- Log cooling operations for troubleshooting
 
-### 2. Power Consumption
-
-- **Cooling Power**: 10-50W typical for cooled cameras
-- **Power Efficiency**: Lower temperatures require more power
-- **Ambient Temperature**: Higher ambient = more power needed
-
-### 3. Image Quality
-
-- **Thermal Noise**: Reduces significantly with cooling
-- **Dark Current**: Decreases exponentially with temperature
-- **Dynamic Range**: Improves with lower noise
+### 4. **Performance Optimization**
+- Enable cooling well before imaging sessions
+- Use stabilization monitoring for reliable results
+- Monitor temperature and power trends
 
 ## Integration with Other Systems
 
-### 1. Calibration Integration
-
-Cooling works seamlessly with the calibration system:
-
+### Calibration Frames
+Cooling is essential for dark frame capture:
 ```python
-# Cooling ensures consistent temperature for calibration frames
-# Master darks are created at the same temperature as science frames
-# This improves calibration quality and consistency
+# Cooling must be stable before capturing darks
+stabilization_status = camera.wait_for_cooling_stabilization(timeout=60)
+if stabilization_status.is_success:
+    # Proceed with dark frame capture
+    dark_capture.capture_darks()
 ```
 
-### 2. Observation Workflow
-
+### Live Imaging
+Cooling is automatically managed during live capture:
 ```python
-# 1. Connect camera (cooling initializes automatically)
-video_capture.connect()
-
-# 2. Wait for temperature stability
-video_capture.wait_for_target_temperature()
-
-# 3. Capture calibration frames
-# 4. Capture science frames
-# 5. All frames benefit from consistent cooling
+# Cooling is initialized and monitored automatically
+video_processor.start_capture()
 ```
 
-### 3. Long-term Monitoring
+## Technical Details
+
+### ASCOM Integration
+The system uses standard ASCOM cooling properties:
+- `CanSetCCDTemperature`: Check if cooling is supported
+- `CCDTemperature`: Current sensor temperature
+- `SetCCDTemperature`: Target temperature setting
+- `CoolerOn`: Cooler activation status
+- `CoolerPower`: Current cooler power consumption
+
+### Caching and Refresh
+ASCOM drivers may cache cooling values. The system includes:
+- **Force Refresh**: Multiple reads to update cached values
+- **Stabilization Monitoring**: Wait for consistent readings
+- **Temperature Monitoring**: Alternative verification method
+
+### Error Recovery
+The system includes robust error handling:
+- Graceful degradation for unsupported features
+- Detailed error reporting and logging
+- Automatic retry mechanisms for transient failures
+
+## Examples
+
+### Complete Cooling Workflow
 
 ```python
-# Monitor cooling during long observations
-while observation_running:
-    cooling_status = video_capture.get_cooling_status()
-    log_temperature(cooling_status['current_temperature'])
-    time.sleep(60)  # Check every minute
+from video_capture import VideoCapture
+from config_manager import ConfigManager
+
+# Load configuration
+config = ConfigManager("config.yaml")
+
+# Initialize video capture with cooling
+video_capture = VideoCapture(config=config)
+
+# Connect (cooling initialized automatically)
+status = video_capture.connect()
+if not status.is_success:
+    print(f"Connection failed: {status.message}")
+    exit(1)
+
+# Wait for cooling to stabilize
+stabilization_status = video_capture.ascom_camera.wait_for_cooling_stabilization(
+    timeout=60, 
+    check_interval=2.0
+)
+
+if stabilization_status.is_success:
+    info = stabilization_status.data
+    print(f"Cooling ready: temp={info['temperature']}°C, power={info['cooler_power']}%")
+    
+    # Start imaging
+    video_capture.start_capture()
+else:
+    print(f"Cooling stabilization failed: {stabilization_status.message}")
+
+# Disconnect
+video_capture.disconnect()
 ```
 
-## Future Enhancements
-
-- **Temperature Logging**: Automatic temperature logging over time
-- **Adaptive Cooling**: Automatic temperature adjustment based on conditions
-- **Power Optimization**: Intelligent power management
-- **Multi-camera Support**: Cooling control for multiple cameras
-- **Environmental Integration**: Consider ambient temperature and humidity 
+This guide covers all aspects of the camera cooling system, from basic usage to advanced troubleshooting and integration with other system components. 

@@ -1090,32 +1090,67 @@ class VideoCapture:
         return temp_diff <= self.temperature_tolerance
     
     def initialize_cooling(self) -> CameraStatus:
-        """Initialize the cooling system during camera connection.
-        
-        Returns:
-            CameraStatus: Status of the operation
-        """
+        """Initialize camera cooling system with improved status detection."""
         if not self.has_cooling():
-            self.logger.info("Camera does not support cooling")
-            return success_status("Cooling not supported")
+            return warning_status("Cooling not supported by this camera")
         
-        if not self.enable_cooling:
-            self.logger.info("Cooling disabled in configuration")
-            return success_status("Cooling disabled")
-        
-        self.logger.info("Initializing cooling system...")
-        
-        # Enable cooling system
-        cooling_status = self.enable_cooling_system()
-        if not cooling_status.is_success:
-            self.logger.warning(f"Failed to initialize cooling: {cooling_status.message}")
-            return cooling_status
-        
-        # Log cooling status
-        status_info = self.get_cooling_status()
-        self.logger.info(f"Cooling initialized: {status_info}")
-        
-        return success_status("Cooling system initialized successfully")
+        try:
+            self.logger.info("Initializing camera cooling system...")
+            
+            # Get current cooling status
+            cooling_info = self.ascom_camera.get_smart_cooling_info()
+            if not cooling_info.is_success:
+                return error_status(f"Failed to get cooling info: {cooling_info.message}")
+            
+            info = cooling_info.data
+            current_temp = info.get('temperature')
+            target_temp = info.get('target_temperature')
+            
+            self.logger.info(f"Current temperature: {current_temp}°C, Target: {target_temp}°C")
+            
+            # If cooling is enabled and target temperature is set
+            if self.enable_cooling and target_temp is not None:
+                self.logger.info(f"Setting target temperature to {target_temp}°C")
+                
+                # Set cooling with improved method
+                cooling_status = self.ascom_camera.set_cooling(target_temp)
+                if not cooling_status.is_success:
+                    return error_status(f"Failed to set cooling: {cooling_status.message}")
+                
+                self.logger.info(f"Cooling set successfully: {cooling_status.message}")
+                
+                # Force refresh cooling status to get accurate power readings
+                self.logger.info("Forcing cooling status refresh...")
+                refresh_status = self.ascom_camera.force_refresh_cooling_status()
+                if refresh_status.is_success:
+                    refresh_info = refresh_status.data
+                    self.logger.info(f"Cooling status refreshed: temp={refresh_info.get('temperature')}°C, "
+                                   f"power={refresh_info.get('cooler_power')}%")
+                
+                # Wait for cooling to stabilize if configured
+                if self.wait_for_cooling:
+                    self.logger.info(f"Waiting for cooling to stabilize (timeout: {self.cooling_timeout}s)...")
+                    stabilization_status = self.ascom_camera.wait_for_cooling_stabilization(
+                        timeout=self.cooling_timeout, 
+                        check_interval=2.0
+                    )
+                    
+                    if stabilization_status.is_success:
+                        final_info = stabilization_status.data
+                        self.logger.info(f"Cooling stabilized: temp={final_info.get('temperature')}°C, "
+                                       f"power={final_info.get('cooler_power')}%")
+                    else:
+                        self.logger.warning(f"Cooling stabilization: {stabilization_status.message}")
+                
+                return success_status("Camera cooling initialized successfully", data=cooling_status.data)
+            
+            else:
+                self.logger.info("Cooling initialization skipped (not enabled or no target temperature)")
+                return success_status("Cooling initialization skipped", data=info)
+                
+        except Exception as e:
+            self.logger.error(f"Error initializing cooling: {e}")
+            return error_status(f"Failed to initialize cooling: {e}")
     
     def _convert_ascom_to_opencv(self, ascom_image_data):
         """Convert ASCOM image data to OpenCV format with debayering.
