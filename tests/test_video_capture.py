@@ -85,28 +85,41 @@ def main():
                     
                     # Check cooling
                     if camera.has_cooling():
-                        # Use the smart method that automatically chooses the best approach
-                        cooling_info_status = camera.get_smart_cooling_info()
-                            
-                        if cooling_info_status.is_success:
-                            info = cooling_info_status.data
+                        print(f"Cooling supported: ✅")
+                        
+                        # Use force refresh for accurate readings
+                        print(f"Refreshing cooling status...")
+                        refresh_status = camera.force_refresh_cooling_status()
+                        
+                        if refresh_status.is_success:
+                            info = refresh_status.data
                             print(f"Current temperature: {info['temperature']}°C")
                             print(f"Cooler power: {info['cooler_power']}%")
+                            print(f"Cooler on: {info['cooler_on']}")
+                            print(f"Target temperature: {info['target_temperature']}°C")
+                            print(f"Can set cooler power: {info['can_set_cooler_power']}")
+                            print(f"Refresh attempts: {info['refresh_attempts']}")
                             
-                            if info['cooler_on'] is not None:
-                                print(f"Cooler on: {info['cooler_on']}")
-                            
-                            if info['target_temperature'] is not None:
-                                print(f"Target temperature: {info['target_temperature']}°C")
-                            
-                            if info['can_set_cooler_power']:
-                                print("Direct cooler power control: Available")
-                            else:
-                                print("Direct cooler power control: Not available")
+                            # Show cooling analysis
+                            if info['cooler_power'] == 0 and info['cooler_on']:
+                                print(f"⚠️  Cooler is on but power is 0% - may need time to start")
+                            elif info['cooler_power'] > 0:
+                                print(f"✅ Cooler is active with {info['cooler_power']}% power")
+                            elif not info['cooler_on']:
+                                print(f"ℹ️  Cooler is off")
                         else:
-                            print(f"Cooling info failed: {cooling_info_status.message}")
+                            print(f"❌ Cooling refresh failed: {refresh_status.message}")
+                            
+                            # Fallback to smart cooling info
+                            cooling_info_status = camera.get_smart_cooling_info()
+                            if cooling_info_status.is_success:
+                                info = cooling_info_status.data
+                                print(f"Current temperature: {info['temperature']}°C")
+                                print(f"Cooler power: {info['cooler_power']}%")
+                                print(f"Cooler on: {info['cooler_on']}")
+                                print(f"Target temperature: {info['target_temperature']}°C")
                     else:
-                        print("Cooling not supported")
+                        print(f"Cooling supported: ❌")
                     
                     # Check filter wheel
                     if camera.has_filter_wheel():
@@ -149,6 +162,10 @@ def main():
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:
+                    print(f"✅ Connected successfully")
+                    print(f"Setting target temperature to {args.cooling_temp}°C...")
+                    
+                    # Set cooling with improved method
                     cooling_status = camera.set_cooling(args.cooling_temp)
                     print(f"Cooling status: {cooling_status.level.value.upper()} - {cooling_status.message}")
                     
@@ -163,9 +180,45 @@ def main():
                         print(f"  Cooler on before: {details.get('current_cooler_on')}")
                         print(f"  Cooler on after: {details.get('new_cooler_on')}")
                     
+                    # Force refresh cooling status to get accurate power readings
+                    print(f"\nForcing cooling status refresh...")
+                    refresh_status = camera.force_refresh_cooling_status()
+                    if refresh_status.is_success:
+                        refresh_info = refresh_status.data
+                        print(f"✅ Cooling status refreshed successfully!")
+                        print(f"  Temperature: {refresh_info.get('temperature')}°C")
+                        print(f"  Cooler power: {refresh_info.get('cooler_power')}%")
+                        print(f"  Cooler on: {refresh_info.get('cooler_on')}")
+                        print(f"  Target temperature: {refresh_info.get('target_temperature')}°C")
+                        print(f"  Refresh attempts: {refresh_info.get('refresh_attempts')}")
+                    else:
+                        print(f"⚠️  Force refresh failed: {refresh_status.message}")
+                    
+                    # Wait for cooling to stabilize
+                    print(f"\nWaiting for cooling to stabilize (timeout: 30s)...")
+                    stabilization_status = camera.wait_for_cooling_stabilization(timeout=30, check_interval=2.0)
+                    
+                    if stabilization_status.is_success:
+                        final_info = stabilization_status.data
+                        print(f"✅ Cooling stabilized successfully!")
+                        print(f"Final status:")
+                        print(f"  Temperature: {final_info.get('temperature')}°C")
+                        print(f"  Cooler power: {final_info.get('cooler_power')}%")
+                        print(f"  Cooler on: {final_info.get('cooler_on')}")
+                        print(f"  Target temperature: {final_info.get('target_temperature')}°C")
+                    else:
+                        print(f"⚠️  Cooling stabilization: {stabilization_status.message}")
+                        if hasattr(stabilization_status, 'data') and stabilization_status.data:
+                            final_info = stabilization_status.data
+                            print(f"Final status (timeout):")
+                            print(f"  Temperature: {final_info.get('temperature')}°C")
+                            print(f"  Cooler power: {final_info.get('cooler_power')}%")
+                            print(f"  Cooler on: {final_info.get('cooler_on')}")
+                    
                     camera.disconnect()
+                    print(f"✅ Disconnected from camera")
                 else:
-                    print(f"Connection failed: {connect_status.message}")
+                    print(f"❌ Connection failed: {connect_status.message}")
                     sys.exit(1)
             else:
                 print("Cooling control requires ASCOM camera and --cooling-temp parameter")
