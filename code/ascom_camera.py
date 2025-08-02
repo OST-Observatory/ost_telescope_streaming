@@ -1025,3 +1025,139 @@ class ASCOMCamera:
             return success_status("Filter wheel disconnected")
         except Exception as e:
             return error_status(f"Failed to disconnect filter wheel: {e}") 
+
+    def force_refresh_cooling_status(self) -> CameraStatus:
+        """Force a refresh of the cooling status by reading multiple times.
+        This helps with ASCOM drivers that cache values.
+        
+        Returns:
+            CameraStatus: Status with refreshed cooling information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        try:
+            import time
+            
+            self.logger.info("Forcing cooling status refresh...")
+            
+            # Read multiple times to force driver to update
+            temperatures = []
+            powers = []
+            cooler_states = []
+            
+            for i in range(5):  # Read 5 times
+                try:
+                    # Read temperature
+                    temp = self.camera.CCDTemperature
+                    temperatures.append(temp)
+                    
+                    # Read cooler power
+                    if hasattr(self.camera, 'CoolerPower'):
+                        power = self.camera.CoolerPower
+                        powers.append(power)
+                    
+                    # Read cooler state
+                    if hasattr(self.camera, 'CoolerOn'):
+                        cooler_on = self.camera.CoolerOn
+                        cooler_states.append(cooler_on)
+                    
+                    # Small delay between reads
+                    time.sleep(0.2)
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error during refresh read {i+1}: {e}")
+            
+            # Use the last reading (most recent)
+            final_temp = temperatures[-1] if temperatures else None
+            final_power = powers[-1] if powers else None
+            final_cooler_on = cooler_states[-1] if cooler_states else None
+            
+            # Get target temperature
+            target_temp = None
+            if hasattr(self.camera, 'SetCCDTemperature'):
+                target_temp = self.camera.SetCCDTemperature
+            
+            info = {
+                'temperature': final_temp,
+                'cooler_power': final_power,
+                'cooler_on': final_cooler_on,
+                'target_temperature': target_temp,
+                'can_set_cooler_power': hasattr(self.camera, 'SetCoolerPower'),
+                'refresh_attempts': len(temperatures)
+            }
+            
+            # Update cache with fresh values
+            self.update_cooling_cache({
+                'temperature': final_temp,
+                'cooler_power': final_power,
+                'cooler_on': final_cooler_on,
+                'target_temperature': target_temp
+            })
+            
+            self.logger.info(f"Cooling status refreshed: temp={final_temp}°C, power={final_power}%, on={final_cooler_on}")
+            
+            return success_status("Cooling status refreshed", data=info)
+            
+        except Exception as e:
+            self.logger.error(f"Error forcing cooling refresh: {e}")
+            return error_status(f"Failed to refresh cooling status: {e}")
+
+    def wait_for_cooling_stabilization(self, timeout: int = 60, check_interval: float = 2.0) -> CameraStatus:
+        """Wait for cooling system to stabilize and show power consumption.
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+            check_interval: Interval between checks in seconds
+            
+        Returns:
+            CameraStatus: Status with stabilization information
+        """
+        if not self.has_cooling():
+            return error_status("Cooling not supported by this camera")
+        
+        try:
+            import time
+            
+            self.logger.info(f"Waiting for cooling stabilization (timeout: {timeout}s)...")
+            
+            start_time = time.time()
+            last_power = None
+            stable_count = 0
+            
+            while time.time() - start_time < timeout:
+                # Force refresh
+                refresh_status = self.force_refresh_cooling_status()
+                if not refresh_status.is_success:
+                    return refresh_status
+                
+                info = refresh_status.data
+                current_power = info.get('cooler_power')
+                current_temp = info.get('temperature')
+                cooler_on = info.get('cooler_on')
+                
+                self.logger.info(f"Status: temp={current_temp}°C, power={current_power}%, on={cooler_on}")
+                
+                # Check if power is changing
+                if current_power is not None:
+                    if last_power is not None and abs(current_power - last_power) < 1.0:
+                        stable_count += 1
+                    else:
+                        stable_count = 0
+                    
+                    last_power = current_power
+                    
+                    # If power is stable for 3 consecutive readings, consider it stabilized
+                    if stable_count >= 3:
+                        self.logger.info(f"Cooling stabilized: power={current_power}%, stable for {stable_count} readings")
+                        return success_status("Cooling stabilized", data=info)
+                
+                time.sleep(check_interval)
+            
+            # Timeout reached
+            final_info = self.get_smart_cooling_info().data if self.get_smart_cooling_info().is_success else {}
+            return warning_status(f"Cooling stabilization timeout after {timeout}s", data=final_info)
+            
+        except Exception as e:
+            self.logger.error(f"Error waiting for cooling stabilization: {e}")
+            return error_status(f"Failed to wait for cooling stabilization: {e}") 

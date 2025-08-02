@@ -178,6 +178,63 @@ def test_camera_type_detection(camera, logger):
         print(f"Error testing camera type detection: {e}")
         return False
 
+def test_cooling_stabilization(camera, logger, timeout=30):
+    """Test cooling stabilization and power consumption."""
+    print(f"\n=== COOLING STABILIZATION TEST (Timeout: {timeout}s) ===")
+    
+    try:
+        print("Waiting for cooling system to stabilize and show power consumption...")
+        stabilization_status = camera.wait_for_cooling_stabilization(timeout=timeout)
+        
+        if stabilization_status.is_success:
+            info = stabilization_status.data
+            print(f"✅ Cooling stabilized successfully!")
+            print(f"Final status:")
+            print(f"  Temperature: {info.get('temperature')}°C")
+            print(f"  Cooler power: {info.get('cooler_power')}%")
+            print(f"  Cooler on: {info.get('cooler_on')}")
+            print(f"  Target temperature: {info.get('target_temperature')}°C")
+            return True
+        else:
+            print(f"⚠️  Cooling stabilization: {stabilization_status.message}")
+            if hasattr(stabilization_status, 'data') and stabilization_status.data:
+                info = stabilization_status.data
+                print(f"Final status (timeout):")
+                print(f"  Temperature: {info.get('temperature')}°C")
+                print(f"  Cooler power: {info.get('cooler_power')}%")
+                print(f"  Cooler on: {info.get('cooler_on')}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error testing cooling stabilization: {e}")
+        return False
+
+def test_force_refresh(camera, logger):
+    """Test forced cooling status refresh."""
+    print("\n=== FORCE REFRESH TEST ===")
+    
+    try:
+        print("Forcing cooling status refresh...")
+        refresh_status = camera.force_refresh_cooling_status()
+        
+        if refresh_status.is_success:
+            info = refresh_status.data
+            print(f"✅ Cooling status refreshed successfully!")
+            print(f"Refresh results:")
+            print(f"  Temperature: {info.get('temperature')}°C")
+            print(f"  Cooler power: {info.get('cooler_power')}%")
+            print(f"  Cooler on: {info.get('cooler_on')}")
+            print(f"  Target temperature: {info.get('target_temperature')}°C")
+            print(f"  Refresh attempts: {info.get('refresh_attempts')}")
+            return True
+        else:
+            print(f"❌ Force refresh failed: {refresh_status.message}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error testing force refresh: {e}")
+        return False
+
 def main():
     """Main test function."""
     import argparse
@@ -229,6 +286,12 @@ def main():
             
             # Test cooling control
             test_cooling_control(camera, logger, args.target_temp)
+
+            # Test cooling stabilization
+            test_cooling_stabilization(camera, logger)
+
+            # Test force refresh
+            test_force_refresh(camera, logger)
         
         # Disconnect
         camera.disconnect()
