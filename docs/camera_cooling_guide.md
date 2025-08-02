@@ -123,7 +123,7 @@ python tests/test_video_capture.py --config config.yaml --action cooling --cooli
 
 ```bash
 # Cooling will remain on after the test
-python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 anke
 ```
 
 ### Check Cooling Status Without Affecting It
@@ -290,4 +290,62 @@ else:
 video_capture.disconnect()
 ```
 
-This guide covers all aspects of the camera cooling system, from basic usage to advanced troubleshooting and integration with other system components. 
+## Cooling Management
+
+### Starting Cooling
+
+```bash
+# Start cooling and keep it active after disconnect
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+```
+
+### Checking Cooling Status
+
+```bash
+# Check current cooling status without affecting it
+python tests/test_video_capture.py --config config.yaml --action cooling-status
+```
+
+### Stopping Cooling
+
+```bash
+# Explicitly turn off cooling and disconnect
+python tests/test_video_capture.py --config config.yaml --action cooling-off
+```
+
+### Cooling Workflow
+
+#### 1. **Start Cooling for Live Session:**
+```bash
+# Start cooling and keep it active
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+```
+
+#### 2. **Monitor Cooling During Session:**
+```bash
+# Check status periodically
+python tests/test_video_capture.py --config config.yaml --action cooling-status
+```
+
+#### 3. **Stop Cooling After Session:**
+```bash
+# Turn off cooling when done
+python tests/test_video_capture.py --config config.yaml --action cooling-off
+```
+
+### Important Notes
+
+#### **⚠️ Cooling Persistence:**
+- **With `--keep-cooling`**: Cooling remains active even after script ends
+- **Without `--keep-cooling`**: Cooling is turned off when disconnecting
+- **Always use `cooling-off`**: To explicitly turn off cooling when done
+
+#### **🔧 ASCOM Behavior:**
+- **Connection**: Cooling can be controlled
+- **Disconnect**: Cooling is automatically turned off (unless using `--keep-cooling`)
+- **Keep-Alive**: `--keep-cooling` prevents automatic cooling shutdown
+
+#### **📊 Status Monitoring:**
+- **`cooling-status`**: Safe status check, no changes
+- **`cooling`**: Changes cooling settings
+- **`cooling-off`**: Explicitly turns off cooling 
