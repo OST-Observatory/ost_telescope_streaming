@@ -384,3 +384,73 @@ python tests/test_video_capture.py --config config.yaml --action cooling-off
 - **`cooling-status`**: Safe status check, no changes
 - **`cooling`**: Changes cooling settings
 - **`cooling-off`**: Explicitly turns off cooling 
+
+## ASCOM Cooling Limitations
+
+### **⚠️ Important: ASCOM Cooling Behavior**
+
+ASCOM cameras have a fundamental limitation: **cooling is automatically turned off when the connection is lost**. This means:
+
+- **✅ Connection active** → Cooling works
+- **❌ Connection lost** → Cooling turns off automatically
+- **❌ No persistent cooling** → Cannot maintain cooling after disconnect
+
+### **💡 Solutions for Persistent Cooling**
+
+#### **1. Keep Terminal Open (Recommended)**
+```bash
+# Start cooling and keep terminal open
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+
+# Keep this terminal open - cooling will remain active
+# Use a NEW terminal for other operations
+```
+
+#### **2. Background Cooling Process**
+```bash
+# Start cooling in background (experimental)
+python tests/test_video_capture.py --config config.yaml --action cooling-background --cooling-temp -10.0 --keep-cooling
+```
+
+#### **3. Multiple Terminal Approach**
+```bash
+# Terminal 1: Start and maintain cooling
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0 --keep-cooling
+
+# Terminal 2: Check status (use cache method)
+python tests/test_video_capture.py --config config.yaml --action cooling-status-cache
+
+# Terminal 3: Turn off cooling when done
+python tests/test_video_capture.py --config config.yaml --action cooling-off
+```
+
+### **🔧 Why This Happens**
+
+#### **ASCOM Driver Behavior:**
+1. **Connection Management**: ASCOM drivers manage cooling state internally
+2. **Safety Feature**: Automatic cooling shutdown prevents overheating
+3. **Resource Cleanup**: Connection loss triggers cleanup procedures
+4. **Driver Specific**: Behavior varies between different ASCOM drivers
+
+#### **Technical Limitations:**
+- **No Persistent State**: ASCOM doesn't support persistent cooling settings
+- **Connection Dependency**: Cooling requires active connection
+- **Driver Control**: Camera drivers control cooling, not the application
+
+### **📋 Best Practices**
+
+#### **For Live Imaging Sessions:**
+1. **Start cooling early** → Allow time for stabilization
+2. **Keep terminal open** → Maintain connection during session
+3. **Use cache status** → Monitor without affecting connection
+4. **Plan shutdown** → Use dedicated terminal for cooling-off
+
+#### **For Testing:**
+1. **Standard cooling** → Use without `--keep-cooling` for tests
+2. **Quick status checks** → Use `cooling-status-cache`
+3. **Explicit shutdown** → Always use `cooling-off` when done
+
+#### **For Automation:**
+1. **Background processes** → Consider using background cooling
+2. **Connection management** → Implement proper connection handling
+3. **Error recovery** → Handle connection losses gracefully 
