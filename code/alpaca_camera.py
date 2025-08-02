@@ -64,7 +64,10 @@ class AlpycaCameraWrapper:
         """
         try:
             self.logger.info(f"Connecting to Alpyca camera at {self.host}:{self.port}, device {self.device_id}")
-            self.camera = AlpycaCamera(self.host, self.port, self.device_id)
+            
+            # Create connection string in the correct format
+            connection_string = f"{self.host}:{self.port}"
+            self.camera = AlpycaCamera(connection_string, self.device_id)
             self.camera.Connected = True
             
             # Load existing cache

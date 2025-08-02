@@ -29,11 +29,37 @@ def test_connection():
     print("\n=== CONNECTION TEST ===")
     
     try:
+        # Load configuration if provided
+        config = None
+        host = "localhost"
+        port = 11111
+        device_id = 0
+        
+        if len(sys.argv) > 2 and sys.argv[1] == '--config':
+            config_file = sys.argv[2]
+            print(f"Loading configuration from: {config_file}")
+            try:
+                config = ConfigManager(config_file)
+                video_config = config.get_video_config()
+                alpaca_config = video_config.get('alpaca', {})
+                
+                host = alpaca_config.get('host', 'localhost')
+                port = alpaca_config.get('port', 11111)
+                device_id = alpaca_config.get('device_id', 0)
+                
+                print(f"Using config: host={host}, port={port}, device_id={device_id}")
+            except Exception as e:
+                print(f"⚠️  Failed to load configuration: {e}")
+                print("Using default configuration")
+        else:
+            print("Using default configuration")
+        
         # Create camera instance
         camera = AlpycaCameraWrapper(
-            host="localhost",
-            port=11111,
-            device_id=0,
+            host=host,
+            port=port,
+            device_id=device_id,
+            config=config,
             logger=setup_logging()
         )
         
@@ -375,6 +401,29 @@ def main():
     print("Make sure an Alpaca server is running on localhost:11111")
     print()
     
+    # Load configuration if provided
+    config = None
+    host = "localhost"
+    port = 11111
+    device_id = 0
+    
+    if len(sys.argv) > 2 and sys.argv[1] == '--config':
+        config_file = sys.argv[2]
+        print(f"Loading configuration from: {config_file}")
+        try:
+            config = ConfigManager(config_file)
+            video_config = config.get_video_config()
+            alpaca_config = video_config.get('alpaca', {})
+            
+            host = alpaca_config.get('host', 'localhost')
+            port = alpaca_config.get('port', 11111)
+            device_id = alpaca_config.get('device_id', 0)
+            
+            print(f"Configuration loaded: host={host}, port={port}, device_id={device_id}")
+        except Exception as e:
+            print(f"⚠️  Failed to load configuration: {e}")
+            print("Using default configuration")
+    
     # Test connection first
     if not test_connection():
         print("\n❌ Connection test failed. Cannot proceed with other tests.")
@@ -386,9 +435,10 @@ def main():
     
     # Create camera instance for other tests
     camera = AlpycaCameraWrapper(
-        host="localhost",
-        port=11111,
-        device_id=0,
+        host=host,
+        port=port,
+        device_id=device_id,
+        config=config,
         logger=setup_logging()
     )
     
