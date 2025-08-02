@@ -78,4 +78,9 @@ class ConnectionError(TelescopeStreamingError):
 
 class FileError(TelescopeStreamingError):
     """Raised when file operations fail."""
+    pass
+
+
+class CalibrationError(TelescopeStreamingError):
+    """Raised when calibration operations fail."""
     pass 
