@@ -17,6 +17,7 @@ from config_manager import ConfigManager
 from exceptions import CameraError, FileError
 from status import CameraStatus, success_status, error_status, warning_status
 from ascom_camera import ASCOMCamera
+from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
 
 class VideoCapture:
@@ -75,6 +76,19 @@ class VideoCapture:
             self.frame_height = 1080  # Will be updated from camera
             self.fps = 1              # ASCOM cameras typically use 1 FPS for long exposures
             self.auto_exposure = False # ASCOM cameras use manual exposure
+        elif self.camera_type == 'alpaca':
+            cam_cfg = self.video_config.get('alpaca', {})
+            self.alpaca_host = cam_cfg.get('host', 'localhost')
+            self.alpaca_port = cam_cfg.get('port', 11111)
+            self.alpaca_camera_name = cam_cfg.get('camera_name', 'Camera')
+            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
+            self.gain = cam_cfg.get('gain', 1.0)
+            self.offset = cam_cfg.get('offset', 0)
+            self.readout_mode = cam_cfg.get('readout_mode', 0)
+            self.frame_width = 1920 # Default for Alpaca
+            self.frame_height = 1080 # Default for Alpaca
+            self.fps = 30 # Default for Alpaca
+            self.auto_exposure = False # Alpaca cameras typically use manual exposure
         # Remove any remaining German comments and ensure all are in English
         
         # Telescope parameters for FOV calculation
@@ -93,6 +107,7 @@ class VideoCapture:
         # Logger is already set up above
         
         self.ascom_camera = None
+        self.alpaca_camera = None
         
         # Initialize calibration applier
         self.calibration_applier = CalibrationApplier(config=self.config, logger=self.logger)
@@ -189,6 +204,10 @@ class VideoCapture:
                 self.ascom_camera = None
                 self.logger.error(f"ASCOM camera connection failed: {status.message}")
                 return error_status(f"ASCOM camera connection failed: {status.message}", details={'driver': self.ascom_driver})
+        elif self.camera_type == 'alpaca' and self.alpaca_camera:
+            # Alpaca camera is already connected in __init__ if config is provided
+            self.logger.info("Alpaca camera already connected")
+            return success_status("Alpaca camera already connected")
         try:
             self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
@@ -231,6 +250,10 @@ class VideoCapture:
             if self.ascom_camera:
                 self.ascom_camera.disconnect()
                 self.ascom_camera = None
+        elif self.camera_type == 'alpaca':
+            if self.alpaca_camera:
+                self.alpaca_camera.disconnect()
+                self.alpaca_camera = None
         else:
             if self.cap:
                 self.cap.release()
@@ -249,6 +272,12 @@ class VideoCapture:
                 connect_status = self.connect()
                 if not connect_status.is_success:
                     return error_status("Failed to connect to ASCOM camera", details={'driver': self.ascom_driver})
+        elif self.camera_type == 'alpaca':
+            # For Alpaca cameras, just ensure connection
+            if not self.alpaca_camera:
+                connect_status = self.connect()
+                if not connect_status.is_success:
+                    return error_status("Failed to connect to Alpaca camera", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
         else:
             # For OpenCV cameras, check cap object
             if not self.cap or not self.cap.isOpened():
@@ -313,6 +342,32 @@ class VideoCapture:
                     else:
                         self.logger.warning("ASCOM camera not available")
                         time.sleep(0.1)
+                elif self.camera_type == 'alpaca':
+                    # Alpaca camera logic
+                    if self.alpaca_camera:
+                        # Get settings from config
+                        alpaca_config = self.video_config.get('alpaca', {})
+                        exposure_time = alpaca_config.get('exposure_time', 1.0)
+                        gain = alpaca_config.get('gain', None)
+                        binning = alpaca_config.get('binning', 1)
+                        
+                        # Use the existing capture_single_frame_alpaca method
+                        status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
+                        if status.is_success:
+                            # Convert Alpaca image to OpenCV format
+                            frame = self._convert_alpaca_to_opencv(status.data)
+                            if frame is not None:
+                                with self.frame_lock:
+                                    self.current_frame = frame.copy()
+                            else:
+                                self.logger.warning("Failed to convert Alpaca image")
+                                time.sleep(0.1)
+                        else:
+                            self.logger.warning(f"Failed to capture frame from Alpaca camera: {status.message}")
+                            time.sleep(0.1)
+                    else:
+                        self.logger.warning("Alpaca camera not available")
+                        time.sleep(0.1)
                         
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
@@ -337,6 +392,16 @@ class VideoCapture:
             if not exp_status.is_success:
                 return exp_status
             img_status = self.ascom_camera.get_image()
+            return img_status
+        elif self.camera_type == 'alpaca' and self.alpaca_camera:
+            # Use exposure time in seconds
+            exposure_time = self.camera_config.get('exposure_time', 1.0)  # seconds
+            gain = self.camera_config.get('gain', None)
+            binning = self.camera_config.get('binning', 1)
+            exp_status = self.alpaca_camera.expose(exposure_time, gain, binning)
+            if not exp_status.is_success:
+                return exp_status
+            img_status = self.alpaca_camera.get_image()
             return img_status
         if not self.cap or not self.cap.isOpened():
             if not self.connect():
@@ -446,6 +511,104 @@ class VideoCapture:
             self.logger.error(f"Error capturing ASCOM frame: {e}")
             return error_status(f"Error capturing ASCOM frame: {e}")
     
+    def capture_single_frame_alpaca(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
+        """Captures a single frame with Alpaca camera.
+        Args:
+            exposure_time_s: Exposure time in seconds
+            gain: Gain value (optional, uses config default if None)
+            binning: Binning factor (default: 1)
+        Returns:
+            CameraStatus: Status object with frame or error.
+        """
+        if not self.alpaca_camera:
+            return error_status("Alpaca camera not connected")
+        
+        try:
+            # Use the already set dimensions from connect()
+            effective_width = self.frame_width
+            effective_height = self.frame_height
+            
+            # Only set subframe if dimensions have changed
+            try:
+                current_numx = self.alpaca_camera.camera.NumX
+                current_numy = self.alpaca_camera.camera.NumY
+                
+                if current_numx != effective_width or current_numy != effective_height:
+                    self.logger.debug(f"Updating subframe: {current_numx}x{current_numy} -> {effective_width}x{effective_height}")
+                    self.alpaca_camera.camera.NumX = effective_width
+                    self.alpaca_camera.camera.NumY = effective_height
+                    self.alpaca_camera.camera.StartX = 0
+                    self.alpaca_camera.camera.StartY = 0
+                else:
+                    self.logger.debug(f"Subframe already set correctly: {effective_width}x{effective_height}")
+                    
+            except Exception as e:
+                self.logger.warning(f"Could not update subframe: {e}")
+                self.logger.info("Using existing subframe settings")
+            
+            # Use configuration defaults if not provided
+            if gain is None:
+                gain = self.gain
+            
+            # Get offset and readout mode from configuration
+            offset = self.offset
+            readout_mode = self.readout_mode
+            
+            # Start exposure with all parameters
+            exp_status = self.alpaca_camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
+            if not exp_status.is_success:
+                return exp_status
+            
+            # Get image
+            img_status = self.alpaca_camera.get_image()
+            if not img_status.is_success:
+                return img_status
+            
+            # Check if debayering is needed
+            if self.alpaca_camera.is_color_camera():
+                debayer_status = self.alpaca_camera.debayer(img_status.data)
+                if debayer_status.is_success:
+                    frame_data = debayer_status.data
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
+                else:
+                    self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
+                    frame_data = img_status.data
+                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+            else:
+                frame_data = img_status.data
+                frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+            
+            # Apply calibration if enabled and master frames are available
+            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            
+            if calibration_status.is_success:
+                calibrated_frame = calibration_status.data
+                calibration_details = calibration_status.details
+                
+                # Update frame details with calibration information
+                frame_details.update(calibration_details)
+                
+                if calibration_details.get('calibration_applied', False):
+                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                    return success_status("Frame captured and calibrated", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+                else:
+                    self.logger.debug("Frame captured (no calibration applied)")
+                    return success_status("Frame captured", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+            else:
+                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                return success_status("Frame captured (calibration failed)", 
+                                    data=frame_data, 
+                                    details=frame_details)
+                
+        except Exception as e:
+            self.logger.error(f"Error capturing Alpaca frame: {e}")
+            return error_status(f"Error capturing Alpaca frame: {e}")
+    
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         """Saves a frame as a file.
         Args:
@@ -463,12 +626,12 @@ class VideoCapture:
                 # Save original ASCOM data as FITS
                 return self._save_ascom_fits(frame, str(output_path))
             
-            # Convert frame to proper OpenCV format if needed
-            if self.camera_type == 'ascom' and self.ascom_camera:
-                # Convert ASCOM image data to OpenCV format
-                frame = self._convert_ascom_to_opencv(frame)
+            # For Alpaca cameras, save as a generic image file
+            if self.camera_type == 'alpaca' and self.alpaca_camera:
+                # Convert Alpaca image data to OpenCV format
+                frame = self._convert_alpaca_to_opencv(frame)
                 if frame is None:
-                    return error_status("Failed to convert ASCOM image to OpenCV format")
+                    return error_status("Failed to convert Alpaca image to OpenCV format")
             
             # Ensure frame is a numpy array
             if not isinstance(frame, np.ndarray):
@@ -865,7 +1028,7 @@ class VideoCapture:
         """
         info = {
             'camera_type': self.camera_type,
-            'connected': self.cap is not None or self.ascom_camera is not None,
+            'connected': self.cap is not None or self.ascom_camera is not None or self.alpaca_camera is not None,
             'frame_width': self.frame_width,
             'frame_height': self.frame_height,
             'fps': self.fps,
@@ -894,6 +1057,23 @@ class VideoCapture:
                 cooling_status = self.get_cooling_status()
                 info.update(cooling_status)
         
+        # Add Alpaca-specific information
+        if self.camera_type == 'alpaca' and self.alpaca_camera:
+            info.update({
+                'host': self.alpaca_host,
+                'port': self.alpaca_port,
+                'camera_name': self.alpaca_camera_name,
+                'is_color': self.alpaca_camera.is_color_camera(),
+                'has_cooling': self.alpaca_camera.has_cooling(),
+                'has_offset': self.alpaca_camera.has_offset(),
+                'has_readout_mode': self.alpaca_camera.has_readout_mode(),
+                'offset': self.offset,
+                'readout_mode': self.readout_mode
+            })
+            if self.alpaca_camera.has_cooling():
+                cooling_status = self.alpaca_camera.get_cooling_status()
+                info.update(cooling_status)
+        
         return info
     
     def has_cooling(self) -> bool:
@@ -904,6 +1084,8 @@ class VideoCapture:
         """
         if self.camera_type == 'ascom' and self.ascom_camera:
             return self.ascom_camera.has_cooling()
+        elif self.camera_type == 'alpaca' and self.alpaca_camera:
+            return self.alpaca_camera.has_cooling()
         return False
     
     def enable_cooling_system(self) -> CameraStatus:
@@ -920,12 +1102,12 @@ class VideoCapture:
         
         try:
             # Turn on the cooler
-            cooler_status = self.ascom_camera.set_cooler_on(True)
+            cooler_status = self.ascom_camera.set_cooler_on(True) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooler_on(True)
             if not cooler_status.is_success:
                 return cooler_status
             
             # Set target temperature
-            temp_status = self.ascom_camera.set_cooling(self.target_temperature)
+            temp_status = self.ascom_camera.set_cooling(self.target_temperature) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(self.target_temperature)
             if not temp_status.is_success:
                 return temp_status
             
@@ -952,7 +1134,7 @@ class VideoCapture:
         
         try:
             # Turn off the cooler
-            status = self.ascom_camera.turn_cooling_off()
+            status = self.ascom_camera.turn_cooling_off() if self.camera_type == 'ascom' else self.alpaca_camera.turn_cooling_off()
             if status.is_success:
                 self.logger.info("Cooling system disabled")
             return status
@@ -977,7 +1159,7 @@ class VideoCapture:
             return error_status("Cooling is disabled in configuration")
         
         try:
-            status = self.ascom_camera.set_cooling(temperature)
+            status = self.ascom_camera.set_cooling(temperature) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(temperature)
             if status.is_success:
                 self.target_temperature = temperature
                 self.logger.info(f"Target temperature set to {temperature}°C")
@@ -1001,7 +1183,10 @@ class VideoCapture:
         
         try:
             # Get fresh cooling information
-            cooling_info = self.ascom_camera.get_smart_cooling_info()
+            if self.camera_type == 'ascom':
+                cooling_info = self.ascom_camera.get_smart_cooling_info()
+            elif self.camera_type == 'alpaca':
+                cooling_info = self.alpaca_camera.get_cooling_status()
             
             if cooling_info.is_success:
                 info = cooling_info.data
@@ -1098,7 +1283,11 @@ class VideoCapture:
             self.logger.info("Initializing camera cooling system...")
             
             # Get current cooling status
-            cooling_info = self.ascom_camera.get_smart_cooling_info()
+            if self.camera_type == 'ascom':
+                cooling_info = self.ascom_camera.get_smart_cooling_info()
+            elif self.camera_type == 'alpaca':
+                cooling_info = self.alpaca_camera.get_cooling_status()
+            
             if not cooling_info.is_success:
                 return error_status(f"Failed to get cooling info: {cooling_info.message}")
             
@@ -1113,7 +1302,7 @@ class VideoCapture:
                 self.logger.info(f"Setting target temperature to {target_temp}°C")
                 
                 # Set cooling with improved method
-                cooling_status = self.ascom_camera.set_cooling(target_temp)
+                cooling_status = self.ascom_camera.set_cooling(target_temp) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(target_temp)
                 if not cooling_status.is_success:
                     return error_status(f"Failed to set cooling: {cooling_status.message}")
                 
@@ -1121,7 +1310,7 @@ class VideoCapture:
                 
                 # Force refresh cooling status to get accurate power readings
                 self.logger.info("Forcing cooling status refresh...")
-                refresh_status = self.ascom_camera.force_refresh_cooling_status()
+                refresh_status = self.ascom_camera.force_refresh_cooling_status() if self.camera_type == 'ascom' else self.alpaca_camera.force_refresh_cooling_status()
                 if refresh_status.is_success:
                     refresh_info = refresh_status.data
                     self.logger.info(f"Cooling status refreshed: temp={refresh_info.get('temperature')}°C, "
@@ -1131,6 +1320,9 @@ class VideoCapture:
                 if self.wait_for_cooling:
                     self.logger.info(f"Waiting for cooling to stabilize (timeout: {self.cooling_timeout}s)...")
                     stabilization_status = self.ascom_camera.wait_for_cooling_stabilization(
+                        timeout=self.cooling_timeout, 
+                        check_interval=2.0
+                    ) if self.camera_type == 'ascom' else self.alpaca_camera.wait_for_cooling_stabilization(
                         timeout=self.cooling_timeout, 
                         check_interval=2.0
                     )
@@ -1270,6 +1462,74 @@ class VideoCapture:
             
         except Exception as e:
             self.logger.error(f"Error converting ASCOM image: {e}")
+            return None 
+
+    def _convert_alpaca_to_opencv(self, alpaca_image_data):
+        """Convert Alpaca image data to OpenCV format.
+        Args:
+            alpaca_image_data: Raw image data from Alpaca camera
+        Returns:
+            numpy.ndarray: OpenCV-compatible image array or None if conversion fails
+        """
+        try:
+            # Check if image data is None or empty
+            if alpaca_image_data is None:
+                self.logger.error("Alpaca image data is None")
+                return None
+            
+            # Convert Alpaca image array to numpy array
+            image_array = np.array(alpaca_image_data)
+            
+            # Check if array is empty or has invalid shape
+            if image_array.size == 0:
+                self.logger.error("Alpaca image array is empty")
+                return None
+            
+            # Log the original data type and shape for debugging
+            self.logger.debug(f"Alpaca image data type: {image_array.dtype}, shape: {image_array.shape}")
+            
+            # Ensure it's a numpy array
+            if not isinstance(image_array, np.ndarray):
+                image_array = np.array(image_array)
+            
+            # Convert to uint8 if needed
+            if image_array.dtype != np.uint8:
+                if image_array.dtype == np.float32 or image_array.dtype == np.float64:
+                    # Normalize to 0-255 range
+                    image_array = ((image_array - image_array.min()) / (image_array.max() - image_array.min()) * 255).astype(np.uint8)
+                else:
+                    image_array = image_array.astype(np.uint8)
+            
+            # Ensure it's 3-channel (OpenCV expects BGR)
+            if len(image_array.shape) == 2:
+                self.logger.debug("Converting monochrome Alpaca image to 3-channel")
+                result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            elif len(image_array.shape) == 3:
+                # If it's already 3-channel (e.g., RGBA), convert to BGR
+                if image_array.shape[2] == 4:
+                    self.logger.debug("Converting RGBA to BGR")
+                    result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
+                else:
+                    # Assume it's RGB and convert to BGR
+                    self.logger.debug("Converting RGB to BGR")
+                    result_image = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+            else:
+                # Fallback: assume monochrome and convert
+                self.logger.debug("Fallback: converting to 3-channel grayscale")
+                result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            
+            # Apply orientation correction if needed (Alpaca images are typically landscape)
+            original_shape = result_image.shape
+            if self._needs_rotation(result_image.shape):
+                result_image = np.transpose(result_image, (1, 0, 2)) # Transpose spatial dimensions
+                self.logger.info(f"Alpaca image orientation corrected: {original_shape} -> {result_image.shape}")
+            else:
+                self.logger.debug(f"Alpaca image already in correct orientation: {original_shape}, no rotation needed")
+            
+            return result_image
+            
+        except Exception as e:
+            self.logger.error(f"Error converting Alpaca image: {e}")
             return None 
 
     def _needs_rotation(self, image_shape: tuple) -> bool:

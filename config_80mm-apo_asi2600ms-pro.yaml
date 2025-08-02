@@ -56,7 +56,7 @@ camera:
 # ---------------------
 video:
   video_enabled: true
-  camera_type: "ascom"  # or "ascom"
+  camera_type: "alpaca"  # or "ascom"
 
   # Settings only for OpenCV cameras
   opencv:
@@ -67,6 +67,16 @@ video:
     auto_exposure: true  # Enable auto exposure
     exposure_time: 0.1  # Manual exposure time in seconds
     gain: 1.0  # Gain setting
+
+  # Settings only for Alpyca cameras
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 10.0
+    gain: 100.0
+    offset: 50.0
+    binning: 1
 
   # Settings only for ASCOM cameras
   ascom:

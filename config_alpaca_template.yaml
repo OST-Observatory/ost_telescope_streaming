@@ -1,0 +1,114 @@
+# Alpyca Camera Configuration Template
+# This template shows how to configure the system to use Alpyca (Python-native ASCOM API)
+
+video:
+  camera_type: alpaca  # Use Alpyca instead of classic ASCOM or OpenCV
+  alpaca:
+    host: "localhost"      # Alpaca server host (usually localhost)
+    port: 11111           # Alpaca server port (default: 11111)
+    device_id: 0          # Camera device ID (usually 0 for first camera)
+    exposure_time: 1.0    # Default exposure time in seconds
+    gain: 100.0           # Default gain setting
+    offset: 50.0          # Default offset setting
+    binning: 1            # Default binning (1x1, 2x2, etc.)
+    use_timestamps: true  # Use timestamps in filenames
+    timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format
+    file_format: "fits"   # Image file format (fits, tiff, jpg)
+
+# Camera cooling configuration
+camera:
+  cooling:
+    enable_cooling: true           # Enable camera cooling
+    target_temperature: -10.0      # Target temperature in °C
+    auto_cooling: true             # Automatic cooling control
+    cooling_timeout: 60            # Cooling operation timeout in seconds
+    temperature_tolerance: 2.0     # Temperature tolerance in °C
+    wait_for_cooling: true         # Wait for cooling to stabilize
+
+# Camera sensor information (for reference)
+  sensor:
+    width: 6248           # Sensor width in pixels
+    height: 4176          # Sensor height in pixels
+    pixel_size: 3.76      # Pixel size in microns
+    type: "CMOS"          # Sensor type
+    bit_depth: 16         # Bit depth
+
+# Plate solving configuration
+plate_solve:
+  enabled: true
+  solver: "platesolve2"
+  timeout: 30
+  search_radius: 15
+  max_stars: 500
+  min_star_size: 3
+  max_star_size: 50
+
+# Overlay configuration
+overlay:
+  enabled: true
+  image_size: [6248, 4176]  # Image size for overlay generation
+  mag_limit: 12.0           # Magnitude limit for stars
+  show_stars: true
+  show_dso: true
+  show_constellations: true
+  show_grid: true
+
+# Output configuration
+output:
+  directory: "captured_frames"
+  filename_pattern: "capture_{timestamp}"
+  save_original: true
+  save_overlay: true
+  save_combined: true
+
+# Logging configuration
+logging:
+  level: "INFO"
+  file: "alpaca_camera.log"
+  console: true
+  file_handler: true
+
+# Example configurations for different camera types:
+
+# ZWO ASI Camera via Alpyca
+# video:
+#   camera_type: alpaca
+#   alpaca:
+#     host: "localhost"
+#     port: 11111
+#     device_id: 0
+#     exposure_time: 1.0
+#     gain: 100.0
+#     offset: 50.0
+#     binning: 1
+
+# QHY Camera via Alpyca
+# video:
+#   camera_type: alpaca
+#   alpaca:
+#     host: "192.168.1.100"  # Remote Alpaca server
+#     port: 11111
+#     device_id: 0
+#     exposure_time: 2.0
+#     gain: 200.0
+#     offset: 30.0
+#     binning: 2
+
+# SBIG Camera via Alpyca
+# video:
+#   camera_type: alpaca
+#   alpaca:
+#     host: "localhost"
+#     port: 11111
+#     device_id: 0
+#     exposure_time: 5.0
+#     gain: 50.0
+#     offset: 100.0
+#     binning: 1
+
+# Notes:
+# - Alpyca requires an Alpaca server to be running
+# - The Alpaca server can be local or remote
+# - Device ID is usually 0 for the first camera, 1 for second, etc.
+# - All ASCOM-compatible cameras should work with Alpyca
+# - Cooling, gain, offset, and binning support depends on the camera 

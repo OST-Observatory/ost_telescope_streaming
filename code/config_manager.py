@@ -293,40 +293,55 @@ class ConfigManager:
             }
         })
     
-    def get_video_config(self) -> Dict[str, Any]:
-        """Get the video configuration.
+    def get_video_config(self):
+        """Get video configuration with support for all camera types."""
+        video_config = self.config.get('video', {})
         
-        Retrieves the configuration for video capture.
-        
-        Returns:
-            Dict[str, Any]: The video configuration.
-        """
-        return self.config.get('video', {
-            'video_enabled': True,
-            'camera_type': 'opencv',
-            'opencv': {
+        # Add OpenCV defaults
+        if 'opencv' not in video_config:
+            video_config['opencv'] = {
                 'camera_index': 0,
                 'frame_width': 1920,
                 'frame_height': 1080,
                 'fps': 30,
-                'auto_exposure': True,
-                'exposure_time': 0.1,
-                'gain': 1.0
-            },
-            'ascom': {
+                'exposure_time': 0.1
+            }
+        
+        # Add ASCOM defaults
+        if 'ascom' not in video_config:
+            video_config['ascom'] = {
                 'ascom_driver': 'ASCOM.ASICamera2.Camera',
                 'exposure_time': 1.0,
-                'gain': 1.0,
-                'offset': 0,                    # Offset setting (0-255 typically)
-                'readout_mode': 0,              # Readout mode (camera-specific)
+                'gain': 100.0,
+                'offset': 50.0,
                 'binning': 1,
-                'filter_wheel_driver': None     # Optional separate filter wheel
-            },
-            'use_timestamps': False,
-            'timestamp_format': '%Y%m%d_%H%M%S',
-            'use_capture_count': False,
-            'file_format': 'fits'
-        })
+                'filter_wheel_driver': None,
+                'use_timestamps': True,
+                'timestamp_format': '%Y%m%d_%H%M%S',
+                'use_capture_count': False,
+                'file_format': 'fits'
+            }
+        
+        # Add Alpyca defaults
+        if 'alpaca' not in video_config:
+            video_config['alpaca'] = {
+                'host': 'localhost',
+                'port': 11111,
+                'device_id': 0,
+                'exposure_time': 1.0,
+                'gain': 100.0,
+                'offset': 50.0,
+                'binning': 1,
+                'use_timestamps': True,
+                'timestamp_format': '%Y%m%d_%H%M%S',
+                'file_format': 'fits'
+            }
+        
+        # Set default camera type if not specified
+        if 'camera_type' not in video_config:
+            video_config['camera_type'] = 'opencv'
+        
+        return video_config
     
     def get_plate_solve_config(self) -> Dict[str, Any]:
         """Get the plate solving configuration.
