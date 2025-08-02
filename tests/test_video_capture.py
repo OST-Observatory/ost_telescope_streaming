@@ -49,7 +49,7 @@ def main():
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
-    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'cooling-off', 'cooling-status', 'cooling-status-cache', 'cooling-background', 'filter', 'debayer'],
+    parser.add_argument("--action", choices=['capture', 'info', 'cooling', 'cooling-off', 'cooling-status', 'cooling-status-cache', 'cooling-background', 'cooling-clear-cache', 'filter', 'debayer'],
                        default='capture', help="Action to perform")
     parser.add_argument("--cooling-temp", type=float, help="Target cooling temperature in °C")
     parser.add_argument("--keep-cooling", action='store_true', help="Keep cooling on when disconnecting (cooling action only)")
@@ -376,23 +376,53 @@ def main():
                 # Extract cooling status from the cache
                 if cache_data:
                     print(f"Current cooling status from cache:")
-                    print(f"  Temperature: {cache_data.get('temperature')}°C")
-                    print(f"  Cooler power: {cache_data.get('cooler_power')}%")
-                    print(f"  Cooler on: {cache_data.get('cooler_on')}")
-                    print(f"  Target temperature: {cache_data.get('target_temperature')}°C")
                     
-                    # Provide analysis of the status
-                    if cache_data.get('cooler_on') and cache_data.get('cooler_power', 0) > 0:
-                        print(f"✅ Cooling is active and working (from cache)")
-                    elif cache_data.get('cooler_on') and cache_data.get('cooler_power', 0) == 0:
-                        print(f"⚠️  Cooler is on but power is 0% - may be at target temperature (from cache)")
-                    elif not cache_data.get('cooler_on'):
-                        print(f"ℹ️  Cooler is off (from cache)")
+                    # Check if we have valid cooling data
+                    temperature = cache_data.get('temperature')
+                    cooler_power = cache_data.get('cooler_power')
+                    cooler_on = cache_data.get('cooler_on')
+                    target_temperature = cache_data.get('target_temperature')
+                    
+                    # Validate the data
+                    valid_data = all(v is not None for v in [temperature, cooler_power, cooler_on, target_temperature])
+                    
+                    if valid_data:
+                        print(f"  Temperature: {temperature}°C")
+                        print(f"  Cooler power: {cooler_power}%")
+                        print(f"  Cooler on: {cooler_on}")
+                        print(f"  Target temperature: {target_temperature}°C")
                         
-                    # Check if target temperature is set
-                    if cache_data.get('target_temperature') is not None and cache_data.get('temperature') is not None:
-                        temp_diff = cache_data['temperature'] - cache_data['target_temperature']
-                        print(f"  Temperature difference: {temp_diff:+.1f}°C (from cache)")
+                        # Provide analysis of the status
+                        if cooler_on and cooler_power > 0:
+                            print(f"✅ Cooling is active and working (from cache)")
+                        elif cooler_on and cooler_power == 0:
+                            print(f"⚠️  Cooler is on but power is 0% - may be at target temperature (from cache)")
+                        elif not cooler_on:
+                            print(f"ℹ️  Cooler is off (from cache)")
+                            
+                        # Check if target temperature is set
+                        if target_temperature is not None and temperature is not None:
+                            temp_diff = temperature - target_temperature
+                            print(f"  Temperature difference: {temp_diff:+.1f}°C (from cache)")
+                    else:
+                        print(f"⚠️  Cache contains invalid data:")
+                        print(f"  Temperature: {temperature}°C")
+                        print(f"  Cooler power: {cooler_power}%")
+                        print(f"  Cooler on: {cooler_on}")
+                        print(f"  Target temperature: {target_temperature}°C")
+                        print(f"")
+                        print(f"💡 This may indicate:")
+                        print(f"   - Cooling was not properly initialized")
+                        print(f"   - Camera connection was lost")
+                        print(f"   - Cache file is corrupted")
+                        print(f"")
+                        print(f"🔧 Try these solutions:")
+                        print(f"   1. Start cooling again:")
+                        print(f"      python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0")
+                        print(f"   2. Check live status (may reset cooling):")
+                        print(f"      python tests/test_video_capture.py --config config.yaml --action cooling-status")
+                        print(f"   3. Use detailed debug:")
+                        print(f"      python tests/test_cooling_debug.py --config config.yaml --target-temp -10.0")
                         
                     # Show cache age if available
                     if 'timestamp' in cache_data:
@@ -504,6 +534,52 @@ def main():
                     sys.exit(1)
             else:
                 print("Cooling background requires ASCOM camera")
+                sys.exit(1)
+        
+        elif args.action == 'cooling-clear-cache':
+            if args.camera_type == 'ascom' and args.ascom_driver:
+                from ascom_camera import ASCOMCamera
+                camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    print(f"✅ Connected successfully")
+                    print(f"Clearing cooling cache...")
+                    
+                    # Construct the cache file path based on the driver ID
+                    driver_id = args.ascom_driver.replace('.', '_').replace(':', '_')
+                    cache_filename = f"cooling_cache_{driver_id}.json"
+                    cache_path = Path("cache") / cache_filename
+                    
+                    if cache_path.exists():
+                        try:
+                            cache_path.unlink()
+                            print(f"✅ Cache file deleted: {cache_path}")
+                        except OSError as e:
+                            print(f"❌ Error deleting cache file {cache_path}: {e}")
+                            sys.exit(1)
+                    else:
+                        print(f"❌ Cache file not found: {cache_path}")
+                        print(f"   No cache to clear.")
+                    
+                    # Force refresh cooling status to ensure it's off
+                    print(f"\nForcing cooling status refresh to confirm off...")
+                    refresh_status = camera.force_refresh_cooling_status()
+                    if refresh_status.is_success:
+                        refresh_info = refresh_status.data
+                        print(f"✅ Cooling status confirmed off after clearing cache.")
+                        print(f"  Temperature: {refresh_info.get('temperature')}°C")
+                        print(f"  Cooler power: {refresh_info.get('cooler_power')}%")
+                        print(f"  Cooler on: {refresh_info.get('cooler_on')}")
+                    else:
+                        print(f"⚠️  Force refresh failed after clearing cache: {refresh_status.message}")
+                    
+                    camera.disconnect()
+                    print(f"✅ Disconnected from camera (cooling turned off)")
+                else:
+                    print(f"❌ Connection failed: {connect_status.message}")
+                    sys.exit(1)
+            else:
+                print("Cooling cache clear requires ASCOM camera")
                 sys.exit(1)
         
         elif args.action == 'filter':

@@ -454,3 +454,62 @@ python tests/test_video_capture.py --config config.yaml --action cooling-off
 1. **Background processes** → Consider using background cooling
 2. **Connection management** → Implement proper connection handling
 3. **Error recovery** → Handle connection losses gracefully 
+
+### Troubleshooting Cache Issues
+
+#### **Cache Contains None Values**
+If you see `None` values in the cache output:
+```
+Temperature: None°C
+Cooler power: None%
+Cooler on: None
+Target temperature: None°C
+```
+
+This indicates:
+- **❌ Cooling was not properly initialized**
+- **❌ Camera connection was lost**
+- **❌ Cache file is corrupted**
+
+#### **Solutions:**
+
+##### **1. Clear and Reinitialize Cache**
+```bash
+# Clear the corrupted cache
+python tests/test_video_capture.py --config config.yaml --action cooling-clear-cache
+
+# Start cooling again
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0
+```
+
+##### **2. Check Live Status (May Reset Cooling)**
+```bash
+# Get live status (may reset cooling settings)
+python tests/test_video_capture.py --config config.yaml --action cooling-status
+```
+
+##### **3. Use Detailed Debug**
+```bash
+# Comprehensive cooling analysis
+python tests/test_cooling_debug.py --config config.yaml --target-temp -10.0
+```
+
+#### **Cache Management Commands**
+
+##### **Clear Cache**
+```bash
+# Remove corrupted cache file
+python tests/test_video_capture.py --config config.yaml --action cooling-clear-cache
+```
+
+##### **Check Cache Status**
+```bash
+# Safe cache reading (recommended)
+python tests/test_video_capture.py --config config.yaml --action cooling-status-cache
+```
+
+##### **Force Cache Refresh**
+```bash
+# Start cooling to refresh cache
+python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0
+``` 
