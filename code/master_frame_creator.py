@@ -52,6 +52,9 @@ class MasterFrameCreator:
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
         
+        # Create output directories
+        self._create_output_directories()
+        
         # Load configurations
         dark_config = self.config.get_dark_config()
         flat_config = self.config.get_flat_config()
@@ -77,6 +80,23 @@ class MasterFrameCreator:
         # Ensure output directory exists
         os.makedirs(self.master_output_dir, exist_ok=True)
         
+    def _create_output_directories(self):
+        """Create necessary output directories."""
+        try:
+            # Create master frames directory
+            master_config = self.config.get_master_config()
+            output_dir = Path(master_config.get('output_directory', 'master_frames'))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Master frames directory ready: {output_dir}")
+            
+            # Create subdirectories
+            darks_dir = output_dir / 'darks'
+            darks_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Master darks directory ready: {darks_dir}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to create master output directories: {e}")
+    
     def create_all_master_frames(self) -> Status:
         """Create all master frames (darks and flats).
         

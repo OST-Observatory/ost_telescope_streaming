@@ -53,6 +53,9 @@ class FlatCapture:
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
         
+        # Create output directories
+        self._create_output_directories()
+        
         # Load flat capture configuration
         flat_config = self.config.get_flat_config()
         self.target_count_rate = flat_config.get('target_count_rate', 0.5)  # 50% of max
@@ -71,6 +74,18 @@ class FlatCapture:
         self.current_exposure = None
         self.is_running = False
         
+    def _create_output_directories(self):
+        """Create necessary output directories."""
+        try:
+            # Create flat frames directory
+            flat_config = self.config.get_flat_config()
+            output_dir = Path(flat_config.get('output_directory', 'flat_frames'))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Flat frames directory ready: {output_dir}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to create flat output directories: {e}")
+    
     def initialize(self, video_capture: VideoCapture) -> bool:
         """Initialize the flat capture system with video capture.
         

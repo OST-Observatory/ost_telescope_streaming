@@ -80,15 +80,17 @@ class VideoCapture:
             cam_cfg = self.video_config.get('alpaca', {})
             self.alpaca_host = cam_cfg.get('host', 'localhost')
             self.alpaca_port = cam_cfg.get('port', 11111)
-            self.alpaca_camera_name = cam_cfg.get('camera_name', 'Camera')
+            self.alpaca_device_id = cam_cfg.get('device_id', 0)
             self.exposure_time = cam_cfg.get('exposure_time', 0.1)
             self.gain = cam_cfg.get('gain', 1.0)
             self.offset = cam_cfg.get('offset', 0)
             self.readout_mode = cam_cfg.get('readout_mode', 0)
+            # Set default values for Alpyca cameras
+            self.camera_index = None  # Alpyca cameras don't use camera_index
             self.frame_width = 1920 # Default for Alpaca
             self.frame_height = 1080 # Default for Alpaca
             self.fps = 30 # Default for Alpaca
-            self.auto_exposure = False # Alpaca cameras typically use manual exposure
+            self.auto_exposure = False # Alpyca cameras typically use manual exposure
         # Remove any remaining German comments and ensure all are in English
         
         # Telescope parameters for FOV calculation
@@ -121,6 +123,25 @@ class VideoCapture:
         self.cooling_timeout = self.cooling_config.get('cooling_timeout', 300)
         self.temperature_tolerance = self.cooling_config.get('temperature_tolerance', 1.0)
         self.wait_for_cooling = self.cooling_config.get('wait_for_cooling', True)
+        
+        # Create output directories
+        self._create_output_directories()
+    
+    def _create_output_directories(self):
+        """Create necessary output directories."""
+        try:
+            # Create captured frames directory
+            output_dir = Path(self.video_config.get('output_directory', 'captured_frames'))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Output directory ready: {output_dir}")
+            
+            # Create cache directory
+            cache_dir = Path("cache")
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Cache directory ready: {cache_dir}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to create output directories: {e}")
     
     def _calculate_field_of_view(self) -> tuple[float, float]:
         """Calculates the field of view (FOV) in degrees based on telescope and camera parameters.

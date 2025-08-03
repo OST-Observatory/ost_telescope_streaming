@@ -73,85 +73,73 @@ class CalibrationApplier:
         try:
             master_config = self.config.get_master_config()
             master_dir = Path(master_config.get('output_dir', 'master_frames'))
+            
+            # Create master frames directory if it doesn't exist
+            if not master_dir.exists():
+                self.logger.info(f"Creating master frames directory: {master_dir}")
+                master_dir.mkdir(parents=True, exist_ok=True)
+            
             if not master_dir.exists():
                 self.logger.warning(f"Master frames directory does not exist: {master_dir}")
                 return
             
-            self.logger.info(f"Loading master frames from {master_dir}")
+            self.logger.info(f"Loading master frames from: {master_dir}")
             
             # Load master bias
-            bias_files = list(master_dir.glob('master_bias_*.fits'))
-            if bias_files:
-                latest_bias = max(bias_files, key=lambda f: f.stat().st_mtime)
-                bias_data = self._load_fits_file(latest_bias)
-                if bias_data is not None:
-                    self.master_bias_cache = {
-                        'data': bias_data,
-                        'file': str(latest_bias),
-                        'gain': self._extract_camera_setting(latest_bias, 'GAIN'),
-                        'offset': self._extract_camera_setting(latest_bias, 'OFFSET'),
-                        'readout_mode': self._extract_camera_setting(latest_bias, 'READOUT')
-                    }
-                    self.logger.info(f"Loaded master bias: {latest_bias.name}")
+            bias_path = master_dir / master_config.get('master_bias_filename', 'master_bias.fits')
+            if bias_path.exists():
+                self.master_bias_cache = {
+                    'data': self._load_fits_file(bias_path),
+                    'file': str(bias_path),
+                    'gain': self._extract_camera_setting(bias_path, 'GAIN'),
+                    'offset': self._extract_camera_setting(bias_path, 'OFFSET'),
+                    'readout_mode': self._extract_camera_setting(bias_path, 'READOUT')
+                }
+                self.logger.info(f"Loaded master bias: {bias_path}")
+            else:
+                self.logger.info(f"Master bias not found: {bias_path}")
             
-            # Load master darks
-            dark_files = list(master_dir.glob('master_dark_*.fits'))
-            self.master_dark_cache = {}
-            
-            for dark_file in dark_files:
-                try:
-                    # Extract exposure time from filename (e.g., master_dark_5.000s_20250729.fits)
-                    filename = dark_file.stem
-                    if '_' in filename:
-                        parts = filename.split('_')
-                        for part in parts:
-                            if part.endswith('s') and part[:-1].replace('.', '').isdigit():
-                                exposure_time = float(part[:-1])  # Remove 's' and convert to float
-                                break
-                        else:
-                            self.logger.warning(f"Could not extract exposure time from {dark_file.name}")
-                            continue
-                    else:
-                        self.logger.warning(f"Could not parse dark filename: {dark_file.name}")
-                        continue
-                    
-                    dark_data = self._load_fits_file(dark_file)
-                    if dark_data is not None:
-                        self.master_dark_cache[exposure_time] = {
-                            'data': dark_data,
-                            'file': str(dark_file),
-                            'exposure_time': exposure_time,
-                            'gain': self._extract_camera_setting(dark_file, 'GAIN'),
-                            'offset': self._extract_camera_setting(dark_file, 'OFFSET'),
-                            'readout_mode': self._extract_camera_setting(dark_file, 'READOUT')
-                        }
-                        self.logger.info(f"Loaded master dark: {dark_file.name} "
-                                       f"(exp: {exposure_time:.3f}s, "
-                                       f"gain: {self.master_dark_cache[exposure_time]['gain']}, "
-                                       f"offset: {self.master_dark_cache[exposure_time]['offset']}, "
-                                       f"readout: {self.master_dark_cache[exposure_time]['readout_mode']})")
-                
-                except Exception as e:
-                    self.logger.warning(f"Failed to load master dark {dark_file.name}: {e}")
+            # Load master darks (by exposure time)
+            dark_dir = master_dir / 'darks'
+            if dark_dir.exists():
+                self.master_dark_cache = {}
+                for dark_file in dark_dir.glob('master_dark_*.fits'):
+                    try:
+                        # Extract exposure time from filename
+                        # Expected format: master_dark_1.0s.fits
+                        filename = dark_file.stem
+                        if 'master_dark_' in filename:
+                            exposure_str = filename.replace('master_dark_', '').replace('s', '')
+                            try:
+                                exposure_time = float(exposure_str)
+                                self.master_dark_cache[exposure_time] = {
+                                    'data': self._load_fits_file(dark_file),
+                                    'file': str(dark_file),
+                                    'exposure_time': exposure_time,
+                                    'gain': self._extract_camera_setting(dark_file, 'GAIN'),
+                                    'offset': self._extract_camera_setting(dark_file, 'OFFSET'),
+                                    'readout_mode': self._extract_camera_setting(dark_file, 'READOUT')
+                                }
+                                self.logger.info(f"Loaded master dark for {exposure_time}s: {dark_file}")
+                            except ValueError:
+                                self.logger.warning(f"Could not parse exposure time from filename: {dark_file}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to load master dark {dark_file}: {e}")
             
             # Load master flat
-            flat_files = list(master_dir.glob('master_flat_*.fits'))
-            if flat_files:
-                latest_flat = max(flat_files, key=lambda f: f.stat().st_mtime)
-                flat_data = self._load_fits_file(latest_flat)
-                if flat_data is not None:
-                    self.master_flat_cache = {
-                        'data': flat_data,
-                        'file': str(latest_flat),
-                        'gain': self._extract_camera_setting(latest_flat, 'GAIN'),
-                        'offset': self._extract_camera_setting(latest_flat, 'OFFSET'),
-                        'readout_mode': self._extract_camera_setting(latest_flat, 'READOUT')
-                    }
-                    self.logger.info(f"Loaded master flat: {latest_flat.name} "
-                                   f"(gain: {self.master_flat_cache['gain']}, "
-                                   f"offset: {self.master_flat_cache['offset']}, "
-                                   f"readout: {self.master_flat_cache['readout_mode']})")
-            
+            flat_path = master_dir / master_config.get('master_flat_filename', 'master_flat.fits')
+            if flat_path.exists():
+                self.master_flat_cache = {
+                    'data': self._load_fits_file(flat_path),
+                    'file': str(flat_path),
+                    'gain': self._extract_camera_setting(flat_path, 'GAIN'),
+                    'offset': self._extract_camera_setting(flat_path, 'OFFSET'),
+                    'readout_mode': self._extract_camera_setting(flat_path, 'READOUT')
+                }
+                self.logger.info(f"Loaded master flat: {flat_path}")
+            else:
+                self.logger.info(f"Master flat not found: {flat_path}")
+                
             total_masters = (1 if self.master_bias_cache else 0) + \
                           len(self.master_dark_cache) + \
                           (1 if self.master_flat_cache else 0)
@@ -160,6 +148,7 @@ class CalibrationApplier:
             
         except Exception as e:
             self.logger.error(f"Error loading master frames: {e}")
+            raise CalibrationError(f"Error loading master frames: {e}")
 
     def _extract_camera_setting(self, fits_file: Path, keyword: str) -> Optional[Union[float, int]]:
         """Extract camera setting from FITS header.

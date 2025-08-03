@@ -53,6 +53,9 @@ class DarkCapture:
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
         
+        # Create output directories
+        self._create_output_directories()
+        
         # Load dark capture configuration
         dark_config = self.config.get_dark_config()
         self.num_darks = dark_config.get('num_darks', 20)
@@ -69,6 +72,24 @@ class DarkCapture:
         self.video_capture = None
         self.is_running = False
         
+    def _create_output_directories(self):
+        """Create necessary output directories."""
+        try:
+            # Create dark frames directory
+            dark_config = self.config.get_dark_config()
+            output_dir = Path(dark_config.get('output_directory', 'dark_frames'))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Dark frames directory ready: {output_dir}")
+            
+            # Create subdirectories for different exposure times
+            for exposure_time in dark_config.get('science_exposure_factors', [1.0]):
+                subdir = output_dir / f"{exposure_time}s"
+                subdir.mkdir(parents=True, exist_ok=True)
+                self.logger.debug(f"Dark subdirectory ready: {subdir}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to create dark output directories: {e}")
+    
     def initialize(self, video_capture: VideoCapture) -> bool:
         """Initialize the dark capture system with video capture.
         
