@@ -365,29 +365,46 @@ class AlpycaCameraWrapper:
     @property
     def set_ccd_temperature(self):
         """Get target CCD temperature."""
-        return self.camera.SetCCDTemperature if self.camera else None
+        try:
+            return self.camera.SetCCDTemperature if self.camera else None
+        except Exception:
+            return None
     
     @set_ccd_temperature.setter
     def set_ccd_temperature(self, value):
         """Set target CCD temperature."""
-        if self.camera:
-            self.camera.SetCCDTemperature = value
+        try:
+            if self.camera:
+                self.camera.SetCCDTemperature = value
+                self.logger.debug(f"SetCCDTemperature set to {value}°C")
+        except Exception as e:
+            self.logger.warning(f"Failed to set SetCCDTemperature: {e}")
     
     @property
     def cooler_on(self):
         """Get cooler on/off state."""
-        return self.camera.CoolerOn if self.camera else None
+        try:
+            return self.camera.CoolerOn if self.camera else None
+        except Exception:
+            return None
     
     @cooler_on.setter
     def cooler_on(self, value):
         """Set cooler on/off state."""
-        if self.camera:
-            self.camera.CoolerOn = value
+        try:
+            if self.camera:
+                self.camera.CoolerOn = value
+                self.logger.debug(f"CoolerOn set to {value}")
+        except Exception as e:
+            self.logger.warning(f"Failed to set CoolerOn: {e}")
     
     @property
     def cooler_power(self):
         """Get cooler power percentage."""
-        return self.camera.CoolerPower if self.camera else None
+        try:
+            return self.camera.CoolerPower if self.camera else None
+        except Exception:
+            return None
     
     @property
     def heat_sink_temperature(self):
@@ -569,17 +586,48 @@ class AlpycaCameraWrapper:
             
             self.logger.info(f"Setting cooling target temperature to {target_temp}°C")
             
-            # Set target temperature
+            # Get current status before setting
+            current_temp = self.ccd_temperature
+            current_power = self.cooler_power
+            current_cooler_on = self.cooler_on
+            
+            self.logger.info(f"Current status - Temp: {current_temp}°C, Power: {current_power}%, Cooler on: {current_cooler_on}")
+            
+            # Set target temperature first
             self.set_ccd_temperature = target_temp
+            self.logger.info(f"Target temperature set to {target_temp}°C")
             
             # Turn on cooler
             self.cooler_on = True
+            self.logger.info("Cooler turned on")
+            
+            # Wait a moment for the settings to take effect
+            import time
+            time.sleep(0.5)
+            
+            # Get new status after setting
+            new_temp = self.ccd_temperature
+            new_power = self.cooler_power
+            new_cooler_on = self.cooler_on
+            
+            self.logger.info(f"New status - Temp: {new_temp}°C, Power: {new_power}%, Cooler on: {new_cooler_on}")
             
             # Update cache
             self._update_cooling_cache()
             
+            # Create detailed response
+            details = {
+                'target_temp': target_temp,
+                'current_temp': current_temp,
+                'new_temp': new_temp,
+                'current_power': current_power,
+                'new_power': new_power,
+                'current_cooler_on': current_cooler_on,
+                'new_cooler_on': new_cooler_on
+            }
+            
             self.logger.info(f"Cooling set successfully to {target_temp}°C")
-            return success_status(f"Cooling set to {target_temp}°C")
+            return success_status(f"Cooling set to {target_temp}°C", details=details)
         except Exception as e:
             self.logger.error(f"Failed to set cooling: {e}")
             return error_status(f"Failed to set cooling: {e}")
