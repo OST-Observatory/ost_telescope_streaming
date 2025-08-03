@@ -747,12 +747,12 @@ def main():
         
         else:  # capture
             # Regular capture
-            status = capture.connect()
-            if status.is_success:
-                print(f"Camera connected: {status.message}")
-                
-                # For ASCOM cameras, use exposure time in seconds
-                if args.camera_type == 'ascom':
+            if args.camera_type == 'ascom':
+                # ASCOM camera capture
+                status = capture.connect()
+                if status.is_success:
+                    print(f"ASCOM camera connected: {status.message}")
+                    
                     # Get binning from CLI argument or config
                     binning = args.binning if hasattr(args, 'binning') else video_config['ascom']['binning']
                     
@@ -762,26 +762,105 @@ def main():
                         gain=args.gain,
                         binning=binning
                     )
-                else:
-                    capture_status = capture.capture_single_frame()
-                
-                if capture_status.is_success:
-                    # Extract frame data from capture status
-                    frame_data = capture_status.data
-                    save_status = capture.save_frame(frame_data, args.output)
-                    if save_status.is_success:
-                        print(f"Frame captured and saved to: {save_status.data}")
+                    
+                    if capture_status.is_success:
+                        # Extract frame data from capture status
+                        frame_data = capture_status.data
+                        save_status = capture.save_frame(frame_data, args.output)
+                        if save_status.is_success:
+                            print(f"Frame captured and saved to: {save_status.data}")
+                        else:
+                            print(f"Save failed: {save_status.message}")
+                            sys.exit(1)
                     else:
-                        print(f"Save failed: {save_status.message}")
+                        print(f"Capture failed: {capture_status.message}")
                         sys.exit(1)
+                    
+                    capture.disconnect()
                 else:
-                    print(f"Capture failed: {capture_status.message}")
+                    print(f"Connection failed: {status.message}")
                     sys.exit(1)
+                    
+            elif args.camera_type == 'alpaca':
+                # Alpyca camera capture
+                from alpaca_camera import AlpycaCameraWrapper
+                camera = AlpycaCameraWrapper(
+                    host=args.alpaca_host,
+                    port=args.alpaca_port,
+                    device_id=args.alpaca_device_id,
+                    config=config,
+                    logger=logger
+                )
                 
-                capture.disconnect()
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    print(f"Alpyca camera connected: {connect_status.message}")
+                    
+                    # Start exposure
+                    exposure_status = camera.start_exposure(args.exposure, True)
+                    if exposure_status.is_success:
+                        print(f"Exposure started: {exposure_status.message}")
+                        
+                        # Wait for exposure to complete
+                        print("Waiting for exposure to complete...")
+                        while not camera.image_ready:
+                            import time
+                            time.sleep(0.1)
+                            if camera.percent_completed:
+                                print(f"  Progress: {camera.percent_completed}%")
+                        
+                        print("Exposure completed")
+                        
+                        # Get image array
+                        image_status = camera.get_image_array()
+                        if image_status.is_success:
+                            image_array = image_status.data
+                            print(f"Image captured successfully: {type(image_array)}")
+                            
+                            # Save image using VideoCapture's save method
+                            save_status = capture.save_frame(image_array, args.output)
+                            if save_status.is_success:
+                                print(f"Frame captured and saved to: {save_status.data}")
+                            else:
+                                print(f"Save failed: {save_status.message}")
+                                sys.exit(1)
+                        else:
+                            print(f"Failed to get image: {image_status.message}")
+                            sys.exit(1)
+                    else:
+                        print(f"Exposure failed: {exposure_status.message}")
+                        sys.exit(1)
+                    
+                    camera.disconnect()
+                else:
+                    print(f"Connection failed: {connect_status.message}")
+                    sys.exit(1)
+                    
             else:
-                print(f"Connection failed: {status.message}")
-                sys.exit(1)
+                # OpenCV camera capture
+                status = capture.connect()
+                if status.is_success:
+                    print(f"OpenCV camera connected: {status.message}")
+                    
+                    capture_status = capture.capture_single_frame()
+                    
+                    if capture_status.is_success:
+                        # Extract frame data from capture status
+                        frame_data = capture_status.data
+                        save_status = capture.save_frame(frame_data, args.output)
+                        if save_status.is_success:
+                            print(f"Frame captured and saved to: {save_status.data}")
+                        else:
+                            print(f"Save failed: {save_status.message}")
+                            sys.exit(1)
+                    else:
+                        print(f"Capture failed: {capture_status.message}")
+                        sys.exit(1)
+                    
+                    capture.disconnect()
+                else:
+                    print(f"Connection failed: {status.message}")
+                    sys.exit(1)
                 
     except Exception as e:
         print(f"Error: {e}")
