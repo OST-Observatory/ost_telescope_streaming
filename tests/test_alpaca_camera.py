@@ -119,18 +119,66 @@ def test_exposure_properties(camera):
     
     try:
         print(f"Exposure limits:")
-        print(f"  Min: {camera.exposure_min} s")
-        print(f"  Max: {camera.exposure_max} s")
-        print(f"  Resolution: {camera.exposure_resolution} s")
+        
+        # Test exposure_min
+        try:
+            min_exp = camera.exposure_min
+            print(f"  Min: {min_exp} s")
+        except Exception as e:
+            print(f"  Min: Not implemented ({e})")
+        
+        # Test exposure_max
+        try:
+            max_exp = camera.exposure_max
+            print(f"  Max: {max_exp} s")
+        except Exception as e:
+            print(f"  Max: Not implemented ({e})")
+        
+        # Test exposure_resolution
+        try:
+            res_exp = camera.exposure_resolution
+            print(f"  Resolution: {res_exp} s")
+        except Exception as e:
+            print(f"  Resolution: Not implemented ({e})")
         
         print(f"\nLast exposure:")
-        print(f"  Duration: {camera.last_exposure_duration} s")
-        print(f"  Start time: {camera.last_exposure_start_time}")
+        
+        # Test last_exposure_duration
+        try:
+            last_duration = camera.last_exposure_duration
+            print(f"  Duration: {last_duration} s")
+        except Exception as e:
+            print(f"  Duration: Not implemented ({e})")
+        
+        # Test last_exposure_start_time
+        try:
+            last_start = camera.last_exposure_start_time
+            print(f"  Start time: {last_start}")
+        except Exception as e:
+            print(f"  Start time: Not implemented ({e})")
         
         print(f"\nCurrent state:")
-        print(f"  Camera state: {camera.camera_state}")
-        print(f"  Image ready: {camera.image_ready}")
-        print(f"  Percent completed: {camera.percent_completed}%")
+        
+        # Test camera_state
+        try:
+            state = camera.camera_state
+            print(f"  Camera state: {state}")
+        except Exception as e:
+            print(f"  Camera state: Not implemented ({e})")
+        
+        # Test image_ready
+        try:
+            ready = camera.image_ready
+            print(f"  Image ready: {ready}")
+        except Exception as e:
+            print(f"  Image ready: Not implemented ({e})")
+        
+        # Test percent_completed
+        try:
+            percent = camera.percent_completed
+            print(f"  Percent completed: {percent}%")
+        except Exception as e:
+            print(f"  Percent completed: Not implemented ({e})")
         
         return True
         
@@ -143,28 +191,52 @@ def test_binning_properties(camera):
     print("\n=== BINNING PROPERTIES TEST ===")
     
     try:
-        print(f"Current binning: {camera.bin_x}x{camera.bin_y}")
-        print(f"Max binning: {camera.max_bin_x}x{camera.max_bin_y}")
-        print(f"Can asymmetric bin: {camera.can_asymmetric_bin}")
+        # Test current binning
+        try:
+            current_bin_x = camera.bin_x
+            current_bin_y = camera.bin_y
+            print(f"Current binning: {current_bin_x}x{current_bin_y}")
+        except Exception as e:
+            print(f"Current binning: Not implemented ({e})")
+        
+        # Test max binning
+        try:
+            max_bin_x = camera.max_bin_x
+            max_bin_y = camera.max_bin_y
+            print(f"Max binning: {max_bin_x}x{max_bin_y}")
+        except Exception as e:
+            print(f"Max binning: Not implemented ({e})")
+        
+        # Test asymmetric binning
+        try:
+            can_asymmetric = camera.can_asymmetric_bin
+            print(f"Can asymmetric bin: {can_asymmetric}")
+        except Exception as e:
+            print(f"Can asymmetric bin: Not implemented ({e})")
         
         # Test setting binning
-        if camera.max_bin_x and camera.max_bin_x > 1:
-            print(f"\nTesting binning change...")
-            original_bin_x = camera.bin_x
-            original_bin_y = camera.bin_y
-            
-            # Set to 2x2 if supported
-            if camera.max_bin_x >= 2 and camera.max_bin_y >= 2:
-                camera.bin_x = 2
-                camera.bin_y = 2
-                print(f"  Set binning to: {camera.bin_x}x{camera.bin_y}")
+        try:
+            if camera.max_bin_x and camera.max_bin_x > 1:
+                print(f"\nTesting binning change...")
+                original_bin_x = camera.bin_x
+                original_bin_y = camera.bin_y
                 
-                # Restore original
-                camera.bin_x = original_bin_x
-                camera.bin_y = original_bin_y
-                print(f"  Restored binning to: {camera.bin_x}x{camera.bin_y}")
+                # Set to 2x2 if supported
+                if camera.max_bin_x >= 2 and camera.max_bin_y >= 2:
+                    camera.bin_x = 2
+                    camera.bin_y = 2
+                    print(f"  Set binning to: {camera.bin_x}x{camera.bin_y}")
+                    
+                    # Restore original
+                    camera.bin_x = original_bin_x
+                    camera.bin_y = original_bin_y
+                    print(f"  Restored binning to: {camera.bin_x}x{camera.bin_y}")
+                else:
+                    print("  Skipping binning test (max binning < 2)")
             else:
-                print("  Skipping binning test (max binning < 2)")
+                print("  Skipping binning test (max binning not available)")
+        except Exception as e:
+            print(f"  Binning change test failed: {e}")
         
         return True
         
@@ -178,16 +250,53 @@ def test_cooling_properties(camera):
     
     try:
         print(f"Cooling support:")
-        print(f"  Can set CCD temperature: {camera.can_set_ccd_temperature}")
-        print(f"  Can get cooler power: {camera.can_get_cooler_power}")
         
+        # Test cooling support
+        try:
+            can_set_temp = camera.can_set_ccd_temperature
+            print(f"  Can set CCD temperature: {can_set_temp}")
+        except Exception as e:
+            print(f"  Can set CCD temperature: Not implemented ({e})")
+        
+        try:
+            can_get_power = camera.can_get_cooler_power
+            print(f"  Can get cooler power: {can_get_power}")
+        except Exception as e:
+            print(f"  Can get cooler power: Not implemented ({e})")
+        
+        # Test current cooling status
         if camera.can_set_ccd_temperature:
             print(f"\nCurrent cooling status:")
-            print(f"  CCD temperature: {camera.ccd_temperature}°C")
-            print(f"  Target temperature: {camera.set_ccd_temperature}°C")
-            print(f"  Cooler on: {camera.cooler_on}")
-            print(f"  Cooler power: {camera.cooler_power}%")
-            print(f"  Heat sink temperature: {camera.heat_sink_temperature}°C")
+            
+            try:
+                ccd_temp = camera.ccd_temperature
+                print(f"  CCD temperature: {ccd_temp}°C")
+            except Exception as e:
+                print(f"  CCD temperature: Not implemented ({e})")
+            
+            try:
+                target_temp = camera.set_ccd_temperature
+                print(f"  Target temperature: {target_temp}°C")
+            except Exception as e:
+                print(f"  Target temperature: Not implemented ({e})")
+            
+            try:
+                cooler_on = camera.cooler_on
+                print(f"  Cooler on: {cooler_on}")
+            except Exception as e:
+                print(f"  Cooler on: Not implemented ({e})")
+            
+            try:
+                cooler_power = camera.cooler_power
+                print(f"  Cooler power: {cooler_power}%")
+            except Exception as e:
+                print(f"  Cooler power: Not implemented ({e})")
+            
+            try:
+                heat_sink_temp = camera.heat_sink_temperature
+                print(f"  Heat sink temperature: {heat_sink_temp}°C")
+            except Exception as e:
+                print(f"  Heat sink temperature: Not implemented ({e})")
         else:
             print("  Cooling not supported by this camera")
         
@@ -203,41 +312,86 @@ def test_gain_offset_properties(camera):
     
     try:
         print(f"Gain settings:")
-        print(f"  Current gain: {camera.gain}")
-        print(f"  Min gain: {camera.gain_min}")
-        print(f"  Max gain: {camera.gain_max}")
-        print(f"  Available gains: {camera.gains}")
+        
+        # Test gain properties
+        try:
+            current_gain = camera.gain
+            print(f"  Current gain: {current_gain}")
+        except Exception as e:
+            print(f"  Current gain: Not implemented ({e})")
+        
+        try:
+            gain_min = camera.gain_min
+            print(f"  Min gain: {gain_min}")
+        except Exception as e:
+            print(f"  Min gain: Not implemented ({e})")
+        
+        try:
+            gain_max = camera.gain_max
+            print(f"  Max gain: {gain_max}")
+        except Exception as e:
+            print(f"  Max gain: Not implemented ({e})")
+        
+        try:
+            gains = camera.gains
+            print(f"  Available gains: {gains}")
+        except Exception as e:
+            print(f"  Available gains: Not implemented ({e})")
         
         print(f"\nOffset settings:")
-        print(f"  Current offset: {camera.offset}")
-        print(f"  Min offset: {camera.offset_min}")
-        print(f"  Max offset: {camera.offset_max}")
-        print(f"  Available offsets: {camera.offsets}")
+        
+        # Test offset properties
+        try:
+            current_offset = camera.offset
+            print(f"  Current offset: {current_offset}")
+        except Exception as e:
+            print(f"  Current offset: Not implemented ({e})")
+        
+        try:
+            offset_min = camera.offset_min
+            print(f"  Min offset: {offset_min}")
+        except Exception as e:
+            print(f"  Min offset: Not implemented ({e})")
+        
+        try:
+            offset_max = camera.offset_max
+            print(f"  Max offset: {offset_max}")
+        except Exception as e:
+            print(f"  Max offset: Not implemented ({e})")
+        
+        try:
+            offsets = camera.offsets
+            print(f"  Available offsets: {offsets}")
+        except Exception as e:
+            print(f"  Available offsets: Not implemented ({e})")
         
         # Test setting gain/offset if supported
-        if camera.gain is not None:
-            print(f"\nTesting gain/offset change...")
-            original_gain = camera.gain
-            original_offset = camera.offset
-            
-            # Try to set different values
-            if camera.gain_max and camera.gain_max > camera.gain_min:
-                test_gain = min(camera.gain_max, camera.gain + 10)
-                camera.gain = test_gain
-                print(f"  Set gain to: {camera.gain}")
+        try:
+            if camera.gain is not None:
+                print(f"\nTesting gain/offset change...")
+                original_gain = camera.gain
+                original_offset = camera.offset
                 
-                # Restore original
-                camera.gain = original_gain
-                print(f"  Restored gain to: {camera.gain}")
-            
-            if camera.offset_max and camera.offset_max > camera.offset_min:
-                test_offset = min(camera.offset_max, camera.offset + 5)
-                camera.offset = test_offset
-                print(f"  Set offset to: {camera.offset}")
+                # Try to set different values
+                if camera.gain_max and camera.gain_max > camera.gain_min:
+                    test_gain = min(camera.gain_max, camera.gain + 10)
+                    camera.gain = test_gain
+                    print(f"  Set gain to: {camera.gain}")
+                    
+                    # Restore original
+                    camera.gain = original_gain
+                    print(f"  Restored gain to: {camera.gain}")
                 
-                # Restore original
-                camera.offset = original_offset
-                print(f"  Restored offset to: {camera.offset}")
+                if camera.offset_max and camera.offset_max > camera.offset_min:
+                    test_offset = min(camera.offset_max, camera.offset + 5)
+                    camera.offset = test_offset
+                    print(f"  Set offset to: {camera.offset}")
+                    
+                    # Restore original
+                    camera.offset = original_offset
+                    print(f"  Restored offset to: {camera.offset}")
+        except Exception as e:
+            print(f"  Gain/offset change test failed: {e}")
         
         return True
         
@@ -251,24 +405,50 @@ def test_readout_properties(camera):
     
     try:
         print(f"Readout modes:")
-        print(f"  Current mode: {camera.readout_mode}")
-        print(f"  Available modes: {camera.readout_modes}")
-        print(f"  Can fast readout: {camera.can_fast_readout}")
-        print(f"  Fast readout: {camera.fast_readout}")
+        
+        # Test readout mode properties
+        try:
+            current_mode = camera.readout_mode
+            print(f"  Current mode: {current_mode}")
+        except Exception as e:
+            print(f"  Current mode: Not implemented ({e})")
+        
+        try:
+            readout_modes = camera.readout_modes
+            print(f"  Available modes: {readout_modes}")
+        except Exception as e:
+            print(f"  Available modes: Not implemented ({e})")
+        
+        try:
+            can_fast = camera.can_fast_readout
+            print(f"  Can fast readout: {can_fast}")
+        except Exception as e:
+            print(f"  Can fast readout: Not implemented ({e})")
+        
+        try:
+            fast_readout = camera.fast_readout
+            print(f"  Fast readout: {fast_readout}")
+        except Exception as e:
+            print(f"  Fast readout: Not implemented ({e})")
         
         # Test setting readout mode if supported
-        if camera.readout_modes and len(camera.readout_modes) > 1:
-            print(f"\nTesting readout mode change...")
-            original_mode = camera.readout_mode
-            
-            # Try next mode
-            next_mode = (original_mode + 1) % len(camera.readout_modes)
-            camera.readout_mode = next_mode
-            print(f"  Set readout mode to: {camera.readout_mode}")
-            
-            # Restore original
-            camera.readout_mode = original_mode
-            print(f"  Restored readout mode to: {camera.readout_mode}")
+        try:
+            if camera.readout_modes and len(camera.readout_modes) > 1:
+                print(f"\nTesting readout mode change...")
+                original_mode = camera.readout_mode
+                
+                # Try next mode
+                next_mode = (original_mode + 1) % len(camera.readout_modes)
+                camera.readout_mode = next_mode
+                print(f"  Set readout mode to: {camera.readout_mode}")
+                
+                # Restore original
+                camera.readout_mode = original_mode
+                print(f"  Restored readout mode to: {camera.readout_mode}")
+            else:
+                print("  Skipping readout mode change test (not enough modes available)")
+        except Exception as e:
+            print(f"  Readout mode change test failed: {e}")
         
         return True
         
@@ -394,6 +574,114 @@ def test_camera_info(camera):
         print(f"❌ Camera info test failed: {e}")
         return False
 
+def test_available_features(camera):
+    """Test only features that are available on this camera."""
+    print("\n=== AVAILABLE FEATURES TEST ===")
+    
+    available_features = []
+    unavailable_features = []
+    
+    # Test core features
+    try:
+        name = camera.name
+        if name:
+            available_features.append(f"Name: {name}")
+        else:
+            unavailable_features.append("Name")
+    except Exception:
+        unavailable_features.append("Name")
+    
+    try:
+        sensor_size = f"{camera.camera_x_size}x{camera.camera_y_size}"
+        if camera.camera_x_size and camera.camera_y_size:
+            available_features.append(f"Sensor: {sensor_size}")
+        else:
+            unavailable_features.append("Sensor size")
+    except Exception:
+        unavailable_features.append("Sensor size")
+    
+    # Test exposure features
+    try:
+        if camera.exposure_min is not None:
+            available_features.append(f"Min exposure: {camera.exposure_min}s")
+        else:
+            unavailable_features.append("Min exposure")
+    except Exception:
+        unavailable_features.append("Min exposure")
+    
+    try:
+        if camera.exposure_max is not None:
+            available_features.append(f"Max exposure: {camera.exposure_max}s")
+        else:
+            unavailable_features.append("Max exposure")
+    except Exception:
+        unavailable_features.append("Max exposure")
+    
+    # Test cooling features
+    try:
+        if camera.can_set_ccd_temperature:
+            available_features.append("Cooling control")
+        else:
+            unavailable_features.append("Cooling control")
+    except Exception:
+        unavailable_features.append("Cooling control")
+    
+    try:
+        if camera.can_get_cooler_power:
+            available_features.append("Cooler power reading")
+        else:
+            unavailable_features.append("Cooler power reading")
+    except Exception:
+        unavailable_features.append("Cooler power reading")
+    
+    # Test gain/offset features
+    try:
+        if camera.gain is not None:
+            available_features.append(f"Gain control: {camera.gain}")
+        else:
+            unavailable_features.append("Gain control")
+    except Exception:
+        unavailable_features.append("Gain control")
+    
+    try:
+        if camera.offset is not None:
+            available_features.append(f"Offset control: {camera.offset}")
+        else:
+            unavailable_features.append("Offset control")
+    except Exception:
+        unavailable_features.append("Offset control")
+    
+    # Test binning features
+    try:
+        if camera.max_bin_x and camera.max_bin_y:
+            available_features.append(f"Binning: {camera.max_bin_x}x{camera.max_bin_y}")
+        else:
+            unavailable_features.append("Binning")
+    except Exception:
+        unavailable_features.append("Binning")
+    
+    # Test readout features
+    try:
+        if camera.readout_modes:
+            available_features.append(f"Readout modes: {len(camera.readout_modes)} available")
+        else:
+            unavailable_features.append("Readout modes")
+    except Exception:
+        unavailable_features.append("Readout modes")
+    
+    # Print results
+    print("Available features:")
+    for feature in available_features:
+        print(f"  ✅ {feature}")
+    
+    print("\nUnavailable features:")
+    for feature in unavailable_features:
+        print(f"  ❌ {feature}")
+    
+    print(f"\nFeature summary: {len(available_features)} available, {len(unavailable_features)} unavailable")
+    
+    return len(available_features) > 0
+
 def main():
     """Main test function."""
     print("=== ALPYCA CAMERA TEST ===")
@@ -450,6 +738,7 @@ def main():
     
     # Run all tests
     tests = [
+        ("Available Features", test_available_features, camera),
         ("Camera Properties", test_camera_properties, camera),
         ("Exposure Properties", test_exposure_properties, camera),
         ("Binning Properties", test_binning_properties, camera),

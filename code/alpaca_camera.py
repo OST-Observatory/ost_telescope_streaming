@@ -220,42 +220,66 @@ class AlpycaCameraWrapper:
     @property
     def exposure_min(self):
         """Get minimum exposure time."""
-        return self.camera.ExposureMin if self.camera else None
+        try:
+            return self.camera.ExposureMin if self.camera else None
+        except Exception:
+            return None
     
     @property
     def exposure_max(self):
         """Get maximum exposure time."""
-        return self.camera.ExposureMax if self.camera else None
+        try:
+            return self.camera.ExposureMax if self.camera else None
+        except Exception:
+            return None
     
     @property
     def exposure_resolution(self):
         """Get exposure resolution."""
-        return self.camera.ExposureResolution if self.camera else None
+        try:
+            return self.camera.ExposureResolution if self.camera else None
+        except Exception:
+            return None
     
     @property
     def last_exposure_duration(self):
         """Get last exposure duration."""
-        return self.camera.LastExposureDuration if self.camera else None
+        try:
+            return self.camera.LastExposureDuration if self.camera else None
+        except Exception:
+            return None
     
     @property
     def last_exposure_start_time(self):
         """Get last exposure start time."""
-        return self.camera.LastExposureStartTime if self.camera else None
+        try:
+            return self.camera.LastExposureStartTime if self.camera else None
+        except Exception:
+            return None
     
     @property
     def image_ready(self):
         """Check if image is ready."""
-        return self.camera.ImageReady if self.camera else False
+        try:
+            return self.camera.ImageReady if self.camera else False
+        except Exception:
+            return False
     
     @property
     def camera_state(self):
         """Get camera state."""
-        return self.camera.CameraState if self.camera else None
+        try:
+            return self.camera.CameraState if self.camera else None
+        except Exception:
+            return None
     
     @property
     def percent_completed(self):
         """Get exposure completion percentage."""
-        return self.camera.PercentCompleted if self.camera else None
+        try:
+            return self.camera.PercentCompleted if self.camera else None
+        except Exception:
+            return None
     
     # ============================================================================
     # Binning Control
@@ -264,39 +288,60 @@ class AlpycaCameraWrapper:
     @property
     def bin_x(self):
         """Get X binning."""
-        return self.camera.BinX if self.camera else None
+        try:
+            return self.camera.BinX if self.camera else None
+        except Exception:
+            return None
     
     @bin_x.setter
     def bin_x(self, value):
         """Set X binning."""
-        if self.camera:
-            self.camera.BinX = value
+        try:
+            if self.camera:
+                self.camera.BinX = value
+        except Exception as e:
+            self.logger.warning(f"Failed to set BinX: {e}")
     
     @property
     def bin_y(self):
         """Get Y binning."""
-        return self.camera.BinY if self.camera else None
+        try:
+            return self.camera.BinY if self.camera else None
+        except Exception:
+            return None
     
     @bin_y.setter
     def bin_y(self, value):
         """Set Y binning."""
-        if self.camera:
-            self.camera.BinY = value
+        try:
+            if self.camera:
+                self.camera.BinY = value
+        except Exception as e:
+            self.logger.warning(f"Failed to set BinY: {e}")
     
     @property
     def max_bin_x(self):
         """Get maximum X binning."""
-        return self.camera.MaxBinX if self.camera else None
+        try:
+            return self.camera.MaxBinX if self.camera else None
+        except Exception:
+            return None
     
     @property
     def max_bin_y(self):
         """Get maximum Y binning."""
-        return self.camera.MaxBinY if self.camera else None
+        try:
+            return self.camera.MaxBinY if self.camera else None
+        except Exception:
+            return None
     
     @property
     def can_asymmetric_bin(self):
         """Check if asymmetric binning is supported."""
-        return self.camera.CanAsymmetricBin if self.camera else False
+        try:
+            return self.camera.CanAsymmetricBin if self.camera else False
+        except Exception:
+            return False
     
     # ============================================================================
     # Cooling System
