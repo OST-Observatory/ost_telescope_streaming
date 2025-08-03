@@ -11,7 +11,7 @@ import argparse
 import sys
 
 def main():
-    parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
+    parser = argparse.ArgumentParser(description="Video capture with ASCOM/Alpyca camera support")
     parser.add_argument("--config", type=str, help="Path to configuration file")
     
     # Parse config argument first to load the right configuration
@@ -26,15 +26,21 @@ def main():
     video_config = config.get_video_config()
     
     # Recreate parser with the loaded configuration defaults
-    parser = argparse.ArgumentParser(description="Video capture with ASCOM camera support")
+    parser = argparse.ArgumentParser(description="Video capture with ASCOM/Alpyca camera support")
     parser.add_argument("--config", type=str, help="Path to configuration file")
     parser.add_argument("--camera-index", type=int, default=video_config['opencv']['camera_index'],
                        help="Camera device index (OpenCV)")
-    parser.add_argument("--camera-type", choices=['opencv', 'ascom'], 
+    parser.add_argument("--camera-type", choices=['opencv', 'ascom', 'alpaca'], 
                        default=video_config['camera_type'],
-                       help="Camera type: opencv for regular cameras, ascom for astro cameras")
+                       help="Camera type: opencv for regular cameras, ascom for classic ASCOM, alpaca for Alpyca")
     parser.add_argument("--ascom-driver", default=video_config['ascom']['ascom_driver'],
                        help="ASCOM driver ID (astro cameras)")
+    parser.add_argument("--alpaca-host", default=video_config['alpaca']['host'],
+                       help="Alpaca server host")
+    parser.add_argument("--alpaca-port", type=int, default=video_config['alpaca']['port'],
+                       help="Alpaca server port")
+    parser.add_argument("--alpaca-device-id", type=int, default=video_config['alpaca']['device_id'],
+                       help="Alpaca camera device ID")
     parser.add_argument("--width", type=int, default=video_config['opencv']['frame_width'],
                        help="Frame width")
     parser.add_argument("--height", type=int, default=video_config['opencv']['frame_height'],
@@ -44,7 +50,11 @@ def main():
     parser.add_argument("--exposure", type=float, default=video_config['opencv']['exposure_time'],
                        help="Exposure time in seconds")
     parser.add_argument("--gain", type=float, default=video_config['ascom']['gain'],
-                       help="Gain setting (ASCOM cameras)")
+                       help="Gain setting (ASCOM/Alpyca cameras)")
+    parser.add_argument("--offset", type=float, default=video_config['ascom']['offset'],
+                       help="Offset setting (ASCOM/Alpyca cameras)")
+    parser.add_argument("--readout-mode", type=int, default=video_config['ascom']['readout_mode'],
+                       help="Readout mode (ASCOM/Alpyca cameras)")
     parser.add_argument("--binning", type=int, default=video_config['ascom']['binning'],
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
@@ -68,6 +78,9 @@ def main():
         video_config['camera_type'] = args.camera_type
         video_config['opencv']['camera_index'] = args.camera_index
         video_config['ascom']['ascom_driver'] = args.ascom_driver
+        video_config['alpaca']['host'] = args.alpaca_host
+        video_config['alpaca']['port'] = args.alpaca_port
+        video_config['alpaca']['device_id'] = args.alpaca_device_id
         
         capture = VideoCapture(config=config, logger=logger)
         
@@ -98,64 +111,77 @@ def main():
                             print(f"Cooler power: {info['cooler_power']}%")
                             print(f"Cooler on: {info['cooler_on']}")
                             print(f"Target temperature: {info['target_temperature']}°C")
-                            print(f"Can set cooler power: {info['can_set_cooler_power']}")
-                            print(f"Refresh attempts: {info['refresh_attempts']}")
                             
-                            # Show cooling analysis
-                            if info['cooler_power'] == 0 and info['cooler_on']:
-                                print(f"⚠️  Cooler is on but power is 0% - may need time to start")
-                            elif info['cooler_power'] > 0:
-                                print(f"✅ Cooler is active with {info['cooler_power']}% power")
-                            elif not info['cooler_on']:
-                                print(f"ℹ️  Cooler is off")
-                        else:
-                            print(f"❌ Cooling refresh failed: {refresh_status.message}")
+                            # Check camera type
+                            is_color = camera.is_color_camera()
+                            print(f"Camera type: {'Color' if is_color else 'Monochrome'}")
                             
-                            # Fallback to smart cooling info
-                            cooling_info_status = camera.get_smart_cooling_info()
-                            if cooling_info_status.is_success:
-                                info = cooling_info_status.data
-                                print(f"Current temperature: {info['temperature']}°C")
-                                print(f"Cooler power: {info['cooler_power']}%")
-                                print(f"Cooler on: {info['cooler_on']}")
-                                print(f"Target temperature: {info['target_temperature']}°C")
-                    else:
-                        print(f"Cooling supported: ❌")
-                    
-                    # Check filter wheel
-                    if camera.has_filter_wheel():
-                        filter_names_status = camera.get_filter_names()
-                        if filter_names_status.is_success:
-                            print(f"Available filters: {filter_names_status.data}")
+                            # Show camera capabilities
+                            capabilities = camera.get_camera_capabilities()
+                            print(f"Camera capabilities: {capabilities}")
                         else:
-                            print(f"Filter names failed: {filter_names_status.message}")
-                        
-                        filter_pos_status = camera.get_filter_position()
-                        if filter_pos_status.is_success:
-                            print(f"Current filter position: {filter_pos_status.data}")
-                        else:
-                            print(f"Filter position failed: {filter_pos_status.message}")
+                            print(f"Failed to refresh cooling status: {refresh_status.message}")
                     else:
-                        print("No filter wheel present")
-                    
-                    # Show filter wheel driver info if configured
-                    if hasattr(camera, 'filter_wheel_driver_id') and camera.filter_wheel_driver_id:
-                        print(f"Separate filter wheel driver: {camera.filter_wheel_driver_id}")
-                    else:
-                        print("No separate filter wheel driver configured")
-                    
-                    # Check if color camera
-                    if camera.is_color_camera():
-                        print("Color camera detected - debayering available")
-                    else:
-                        print("Mono camera detected")
+                        print(f"Cooling not supported: ❌")
                     
                     camera.disconnect()
                 else:
-                    print(f"Connection failed: {connect_status.message}")
-                    sys.exit(1)
+                    print(f"Failed to connect: {connect_status.message}")
+                    
+            elif args.camera_type == 'alpaca':
+                from alpaca_camera import AlpycaCameraWrapper
+                camera = AlpycaCameraWrapper(
+                    host=args.alpaca_host,
+                    port=args.alpaca_port,
+                    device_id=args.alpaca_device_id,
+                    config=config,
+                    logger=logger
+                )
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    print(f"Alpyca camera connected: {connect_status.message}")
+                    
+                    # Get camera info
+                    info_status = camera.get_camera_info()
+                    if info_status.is_success:
+                        info = info_status.data
+                        print(f"Camera: {info['name']}")
+                        print(f"Description: {info['description']}")
+                        print(f"Driver: {info['driver_info']}")
+                        print(f"Version: {info['driver_version']}")
+                        print(f"Connected: {info['connected']}")
+                        print(f"Sensor: {info['camera_size']}")
+                        print(f"Pixel size: {info['pixel_size']}")
+                        print(f"Camera type: {'Color' if info['is_color'] else 'Monochrome'}")
+                        print(f"Cooling supported: {'Yes' if info['cooling_supported'] else 'No'}")
+                        print(f"Cooler power supported: {'Yes' if info['cooler_power_supported'] else 'No'}")
+                        print(f"Binning supported: {'Yes' if info['binning_supported'] else 'No'}")
+                        print(f"Gain supported: {'Yes' if info['gain_supported'] else 'No'}")
+                        print(f"Offset supported: {'Yes' if info['offset_supported'] else 'No'}")
+                        print(f"Readout modes supported: {'Yes' if info['readout_modes_supported'] else 'No'}")
+                    
+                    # Check cooling if supported
+                    if camera.can_set_ccd_temperature:
+                        print(f"\nCooling Information:")
+                        cooling_status = camera.get_cooling_status()
+                        if cooling_status.is_success:
+                            info = cooling_status.data
+                            print(f"Current temperature: {info['temperature']}°C")
+                            print(f"Target temperature: {info['target_temperature']}°C")
+                            print(f"Cooler on: {info['cooler_on']}")
+                            print(f"Cooler power: {info['cooler_power']}%")
+                            print(f"Heat sink temperature: {info['heat_sink_temperature']}°C")
+                    
+                    camera.disconnect()
+                else:
+                    print(f"Failed to connect: {connect_status.message}")
+                    
             else:
-                print("Camera info only available for ASCOM cameras")
+                # OpenCV camera info
+                print(f"OpenCV camera (index {args.camera_index})")
+                print(f"Resolution: {args.width}x{args.height}")
+                print(f"FPS: {args.fps}")
+                print(f"Exposure: {args.exposure}s")
         
         elif args.action == 'cooling':
             if args.camera_type == 'ascom' and args.ascom_driver and args.cooling_temp is not None:
@@ -282,8 +308,44 @@ def main():
                 else:
                     print(f"❌ Connection failed: {connect_status.message}")
                     sys.exit(1)
+                    
+            elif args.camera_type == 'alpaca':
+                from alpaca_camera import AlpycaCameraWrapper
+                camera = AlpycaCameraWrapper(
+                    host=args.alpaca_host,
+                    port=args.alpaca_port,
+                    device_id=args.alpaca_device_id,
+                    config=config,
+                    logger=logger
+                )
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    print(f"✅ Alpyca camera connected successfully")
+                    print(f"Turning off cooling...")
+                    
+                    # Turn off cooling explicitly
+                    cooling_off_status = camera.turn_cooling_off()
+                    print(f"Cooling off status: {cooling_off_status.level.value.upper()} - {cooling_off_status.message}")
+                    
+                    # Force refresh to confirm cooling is off
+                    print(f"\nConfirming cooling status...")
+                    refresh_status = camera.force_refresh_cooling_status()
+                    if refresh_status.is_success:
+                        refresh_info = refresh_status.data
+                        print(f"✅ Cooling status confirmed:")
+                        print(f"  Temperature: {refresh_info.get('temperature')}°C")
+                        print(f"  Cooler power: {refresh_info.get('cooler_power')}%")
+                        print(f"  Cooler on: {refresh_info.get('cooler_on')}")
+                    
+                    # Now disconnect
+                    camera.disconnect()
+                    print(f"✅ Disconnected from camera (cooling turned off)")
+                else:
+                    print(f"❌ Connection failed: {connect_status.message}")
+                    sys.exit(1)
+                    
             else:
-                print("Cooling off requires ASCOM camera")
+                print("Cooling off requires ASCOM or Alpyca camera")
                 sys.exit(1)
         
         elif args.action == 'cooling-status':
@@ -335,18 +397,64 @@ def main():
                             print(f"  Cooler power: {info['cooler_power']}%")
                             print(f"  Cooler on: {info['cooler_on']}")
                             print(f"  Target temperature: {info['target_temperature']}°C")
-                        else:
-                            print(f"❌ Both status methods failed")
                     
-                    # Disconnect without affecting cooling
                     camera.disconnect()
-                    print(f"✅ Disconnected (cooling settings preserved)")
+                    print(f"✅ Disconnected")
                 else:
                     print(f"❌ Connection failed: {connect_status.message}")
-                    print(f"   This may indicate the camera is already in use by another application")
-                    sys.exit(1)
+                    
+            elif args.camera_type == 'alpaca':
+                from alpaca_camera import AlpycaCameraWrapper
+                camera = AlpycaCameraWrapper(
+                    host=args.alpaca_host,
+                    port=args.alpaca_port,
+                    device_id=args.alpaca_device_id,
+                    config=config,
+                    logger=logger
+                )
+                
+                print(f"Checking Alpyca cooling status (non-intrusive)...")
+                
+                # Try to connect without affecting existing cooling
+                connect_status = camera.connect()
+                if connect_status.is_success:
+                    print(f"✅ Connected successfully")
+                    
+                    # Use force refresh to get accurate status without changing settings
+                    print(f"Reading cooling status...")
+                    refresh_status = camera.force_refresh_cooling_status()
+                    
+                    if refresh_status.is_success:
+                        info = refresh_status.data
+                        print(f"Current cooling status:")
+                        print(f"  Temperature: {info['temperature']}°C")
+                        print(f"  Cooler power: {info['cooler_power']}%")
+                        print(f"  Cooler on: {info['cooler_on']}")
+                        print(f"  Target temperature: {info['target_temperature']}°C")
+                        print(f"  Can get cooler power: {info['can_set_cooler_power']}")
+                        
+                        # Provide analysis of the status
+                        if info['cooler_on'] and info['cooler_power'] > 0:
+                            print(f"✅ Cooling is active and working")
+                        elif info['cooler_on'] and info['cooler_power'] == 0:
+                            print(f"⚠️  Cooler is on but power is 0% - may be at target temperature")
+                        elif not info['cooler_on']:
+                            print(f"ℹ️  Cooler is off")
+                        
+                        # Check if target temperature is set
+                        if info['target_temperature'] is not None:
+                            temp_diff = info['temperature'] - info['target_temperature']
+                            print(f"  Temperature difference: {temp_diff:+.1f}°C")
+                    else:
+                        print(f"❌ Failed to read cooling status: {refresh_status.message}")
+                    
+                    camera.disconnect()
+                    print(f"✅ Disconnected")
+                else:
+                    print(f"❌ Connection failed: {connect_status.message}")
+                    
             else:
-                print("Cooling status check requires ASCOM camera")
+                print("Cooling status requires ASCOM or Alpyca camera")
                 sys.exit(1)
         
         elif args.action == 'cooling-status-cache':
