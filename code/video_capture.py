@@ -1141,20 +1141,52 @@ class VideoCapture:
                 self.logger.error(f"Astropy not available for FITS saving: {e}")
                 return error_status(f"Astropy not available for FITS saving: {e}")
             
-            # Get original Alpaca data
+            # Debug: Log the type and attributes of the frame object
+            self.logger.debug(f"Frame object type: {type(frame)}")
+            self.logger.debug(f"Frame object attributes: {dir(frame)}")
             if hasattr(frame, 'data'):
+                self.logger.debug(f"Frame.data type: {type(frame.data)}")
+                self.logger.debug(f"Frame.data value: {frame.data}")
+            if hasattr(frame, 'is_success'):
+                self.logger.debug(f"Frame.is_success: {frame.is_success}")
+            
+            # Get original Alpaca data - handle Status objects properly
+            image_data = None
+            
+            if hasattr(frame, 'data') and frame.data is not None:
                 # Frame is a status object with data
                 image_data = frame.data
                 self.logger.debug("Extracted data from status object")
+            elif hasattr(frame, 'is_success') and frame.is_success and hasattr(frame, 'data'):
+                # Frame is a success status object
+                image_data = frame.data
+                self.logger.debug("Extracted data from success status object")
             else:
                 # Frame is direct data
                 image_data = frame
                 self.logger.debug("Using direct frame data")
             
+            # Validate that we have actual image data
+            if image_data is None:
+                self.logger.error("No image data found in frame")
+                return error_status("No image data found in frame")
+            
+            # Debug: Log the extracted image data
+            self.logger.debug(f"Extracted image_data type: {type(image_data)}")
+            if hasattr(image_data, 'shape'):
+                self.logger.debug(f"Image data shape: {image_data.shape}")
+            if hasattr(image_data, 'dtype'):
+                self.logger.debug(f"Image data dtype: {image_data.dtype}")
+            
             # Ensure it's a numpy array
             if not isinstance(image_data, np.ndarray):
-                image_data = np.array(image_data)
-                self.logger.debug(f"Converted to numpy array: {image_data.dtype}, {image_data.shape}")
+                try:
+                    image_data = np.array(image_data)
+                    self.logger.debug(f"Converted to numpy array: {image_data.dtype}, {image_data.shape}")
+                except Exception as e:
+                    self.logger.error(f"Failed to convert to numpy array: {e}")
+                    self.logger.error(f"Image data content: {image_data}")
+                    return error_status(f"Failed to convert to numpy array: {e}")
             
             # Log the data properties for debugging
             self.logger.info(f"Alpaca FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
