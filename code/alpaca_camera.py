@@ -409,7 +409,12 @@ class AlpycaCameraWrapper:
     @property
     def heat_sink_temperature(self):
         """Get heat sink temperature."""
-        return self.camera.HeatSinkTemperature if self.camera else None
+        try:
+            return self.camera.HeatSinkTemperature if self.camera else None
+        except Exception:
+            # HeatSinkTemperature is not implemented in ZWO Alpaca driver
+            # Return CCD temperature as fallback
+            return self.ccd_temperature
     
     # ============================================================================
     # Gain and Offset Control
@@ -418,54 +423,98 @@ class AlpycaCameraWrapper:
     @property
     def gain(self):
         """Get current gain."""
-        return self.camera.Gain if self.camera else None
+        try:
+            return self.camera.Gain if self.camera else None
+        except Exception:
+            return None
     
     @gain.setter
     def gain(self, value):
         """Set gain."""
-        if self.camera:
-            self.camera.Gain = value
+        try:
+            if self.camera:
+                # Convert to integer as ZWO expects Int16
+                int_value = int(value)
+                self.camera.Gain = int_value
+                self.logger.debug(f"Gain set to {int_value}")
+        except Exception as e:
+            self.logger.warning(f"Failed to set Gain: {e}")
     
     @property
     def gain_min(self):
         """Get minimum gain."""
-        return self.camera.GainMin if self.camera else None
+        try:
+            return self.camera.GainMin if self.camera else None
+        except Exception:
+            return None
     
     @property
     def gain_max(self):
         """Get maximum gain."""
-        return self.camera.GainMax if self.camera else None
+        try:
+            return self.camera.GainMax if self.camera else None
+        except Exception:
+            return None
     
     @property
     def gains(self):
         """Get available gains."""
-        return self.camera.Gains if self.camera else None
+        try:
+            return self.camera.Gains if self.camera else None
+        except Exception:
+            # Gains property is not implemented in ZWO Alpaca driver
+            # Return a range based on min/max if available
+            if self.gain_min is not None and self.gain_max is not None:
+                return list(range(self.gain_min, self.gain_max + 1))
+            return None
     
     @property
     def offset(self):
         """Get current offset."""
-        return self.camera.Offset if self.camera else None
+        try:
+            return self.camera.Offset if self.camera else None
+        except Exception:
+            return None
     
     @offset.setter
     def offset(self, value):
         """Set offset."""
-        if self.camera:
-            self.camera.Offset = value
+        try:
+            if self.camera:
+                # Convert to integer as ZWO expects Int32
+                int_value = int(value)
+                self.camera.Offset = int_value
+                self.logger.debug(f"Offset set to {int_value}")
+        except Exception as e:
+            self.logger.warning(f"Failed to set Offset: {e}")
     
     @property
     def offset_min(self):
         """Get minimum offset."""
-        return self.camera.OffsetMin if self.camera else None
+        try:
+            return self.camera.OffsetMin if self.camera else None
+        except Exception:
+            return None
     
     @property
     def offset_max(self):
         """Get maximum offset."""
-        return self.camera.OffsetMax if self.camera else None
+        try:
+            return self.camera.OffsetMax if self.camera else None
+        except Exception:
+            return None
     
     @property
     def offsets(self):
         """Get available offsets."""
-        return self.camera.Offsets if self.camera else None
+        try:
+            return self.camera.Offsets if self.camera else None
+        except Exception:
+            # Offsets property is not implemented in ZWO Alpaca driver
+            # Return a range based on min/max if available
+            if self.offset_min is not None and self.offset_max is not None:
+                return list(range(self.offset_min, self.offset_max + 1))
+            return None
     
     # ============================================================================
     # Readout Modes
@@ -495,13 +544,21 @@ class AlpycaCameraWrapper:
     @property
     def fast_readout(self):
         """Get fast readout state."""
-        return self.camera.FastReadout if self.camera else None
+        try:
+            return self.camera.FastReadout if self.camera else None
+        except Exception:
+            # FastReadout property is not implemented in ZWO Alpaca driver
+            return False
     
     @fast_readout.setter
     def fast_readout(self, value):
         """Set fast readout state."""
-        if self.camera:
-            self.camera.FastReadout = value
+        try:
+            if self.camera:
+                self.camera.FastReadout = value
+                self.logger.debug(f"FastReadout set to {value}")
+        except Exception as e:
+            self.logger.warning(f"Failed to set FastReadout: {e}")
     
     # ============================================================================
     # Camera Methods
@@ -603,14 +660,15 @@ class AlpycaCameraWrapper:
             
             # Wait a moment for the settings to take effect
             import time
-            time.sleep(0.5)
+            time.sleep(1.0)  # Increased wait time
             
             # Get new status after setting
             new_temp = self.ccd_temperature
             new_power = self.cooler_power
             new_cooler_on = self.cooler_on
+            new_target = self.set_ccd_temperature
             
-            self.logger.info(f"New status - Temp: {new_temp}°C, Power: {new_power}%, Cooler on: {new_cooler_on}")
+            self.logger.info(f"New status - Temp: {new_temp}°C, Power: {new_power}%, Cooler on: {new_cooler_on}, Target: {new_target}°C")
             
             # Update cache
             self._update_cooling_cache()
@@ -623,11 +681,18 @@ class AlpycaCameraWrapper:
                 'current_power': current_power,
                 'new_power': new_power,
                 'current_cooler_on': current_cooler_on,
-                'new_cooler_on': new_cooler_on
+                'new_cooler_on': new_cooler_on,
+                'new_target': new_target
             }
             
-            self.logger.info(f"Cooling set successfully to {target_temp}°C")
-            return success_status(f"Cooling set to {target_temp}°C", details=details)
+            # Verify the settings were applied
+            if new_cooler_on and new_target == target_temp:
+                self.logger.info(f"Cooling set successfully to {target_temp}°C")
+                return success_status(f"Cooling set to {target_temp}°C", details=details)
+            else:
+                self.logger.warning(f"Cooling settings may not have been applied correctly")
+                return warning_status(f"Cooling set but verification failed", details=details)
+                
         except Exception as e:
             self.logger.error(f"Failed to set cooling: {e}")
             return error_status(f"Failed to set cooling: {e}")
