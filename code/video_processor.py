@@ -470,6 +470,8 @@ class VideoProcessor:
                         gain = alpaca_config.get('gain', None)
                         binning = alpaca_config.get('binning', [1, 1])
                         
+                        self.logger.info(f"Capturing FITS frame for Alpaca camera: exposure={exposure_time}s, gain={gain}, binning={binning}")
+                        
                         # Capture FITS frame for Alpaca
                         alpaca_status = self.video_capture.capture_single_frame_alpaca(
                             exposure_time_s=exposure_time,
@@ -477,9 +479,17 @@ class VideoProcessor:
                             binning=binning
                         )
                         if alpaca_status.is_success:
+                            self.logger.info(f"Alpaca FITS capture successful, saving to: {fits_filename}")
                             fits_save_status = self.video_capture.save_frame(alpaca_status, str(fits_filename))
                             if fits_save_status and fits_save_status.is_success:
                                 self.logger.info(f"FITS frame saved for plate-solving: {fits_filename}")
+                                # Verify file was actually created
+                                if fits_filename.exists():
+                                    file_size = fits_filename.stat().st_size
+                                    self.logger.info(f"FITS file verified: {fits_filename} (size: {file_size} bytes)")
+                                else:
+                                    self.logger.error(f"FITS file was not created: {fits_filename}")
+                                    fits_filename = None
                             else:
                                 self.logger.warning(f"Failed to save FITS frame: {fits_save_status.message if fits_save_status else 'No status'}")
                                 fits_filename = None
@@ -509,8 +519,21 @@ class VideoProcessor:
             if (self.plate_solver and self.auto_solve and 
                 time.time() - self.last_solve_time >= self.min_solve_interval):
                 
-                # Use FITS file for ASCOM cameras, otherwise use display format
-                solve_filename = fits_filename if fits_filename and fits_filename.exists() else frame_filename
+                # ALWAYS prefer FITS files for plate-solving (PlateSolve2 requirement)
+                solve_filename = None
+                
+                if fits_filename and fits_filename.exists():
+                    solve_filename = fits_filename
+                    self.logger.info(f"Using FITS file for plate-solving: {solve_filename}")
+                elif frame_filename and frame_filename.exists():
+                    # Only use display format if FITS is not available
+                    solve_filename = frame_filename
+                    self.logger.warning(f"FITS file not available, using display format for plate-solving: {solve_filename}")
+                    self.logger.warning("This may cause 'File type not supported' errors with PlateSolve2")
+                else:
+                    self.logger.error("No suitable file found for plate-solving")
+                    self.logger.error(f"FITS file exists: {fits_filename and fits_filename.exists() if fits_filename else False}")
+                    self.logger.error(f"Display file exists: {frame_filename and frame_filename.exists() if frame_filename else False}")
                 
                 if solve_filename and solve_filename.exists():
                     self.logger.info(f"Plate-solving frame: {solve_filename}")

@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 import logging
+import os
 
 # Import configuration
 from config_manager import ConfigManager
@@ -1131,23 +1132,32 @@ class VideoCapture:
             CameraStatus: Status object with result
         """
         try:
-            import astropy.io.fits as fits
-            from astropy.time import Time
+            # Try to import astropy
+            try:
+                import astropy.io.fits as fits
+                from astropy.time import Time
+                self.logger.debug("Astropy imported successfully")
+            except ImportError as e:
+                self.logger.error(f"Astropy not available for FITS saving: {e}")
+                return error_status(f"Astropy not available for FITS saving: {e}")
             
             # Get original Alpaca data
             if hasattr(frame, 'data'):
                 # Frame is a status object with data
                 image_data = frame.data
+                self.logger.debug("Extracted data from status object")
             else:
                 # Frame is direct data
                 image_data = frame
+                self.logger.debug("Using direct frame data")
             
             # Ensure it's a numpy array
             if not isinstance(image_data, np.ndarray):
                 image_data = np.array(image_data)
+                self.logger.debug(f"Converted to numpy array: {image_data.dtype}, {image_data.shape}")
             
             # Log the data properties for debugging
-            self.logger.debug(f"Alpaca FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
+            self.logger.info(f"Alpaca FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
             
             # Check if this is a color camera
             is_color_camera = False
@@ -1173,9 +1183,11 @@ class VideoCapture:
                         image_data = ((image_data - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
                     else:
                         image_data = image_data.astype(np.uint16)
+                    self.logger.debug(f"Converted float data to uint16: min={image_data.min()}, max={image_data.max()}")
                 else:
                     # Convert to 16-bit
                     image_data = image_data.astype(np.uint16)
+                    self.logger.debug(f"Converted to uint16: min={image_data.min()}, max={image_data.max()}")
             
             # Create FITS header with astronomical information
             header = fits.Header()
@@ -1229,18 +1241,25 @@ class VideoCapture:
             # Timestamp
             header['DATE-OBS'] = Time.now().isot
             
+            self.logger.debug(f"Created FITS header with {len(header)} keywords")
+            
             # Create FITS file
             hdu = fits.PrimaryHDU(image_data, header=header)
             hdu.writeto(filename, overwrite=True)
             
-            self.logger.info(f"Alpaca FITS file saved: {filename}")
-            return success_status("Alpaca FITS file saved", data=filename)
+            # Verify file was created
+            if os.path.exists(filename):
+                file_size = os.path.getsize(filename)
+                self.logger.info(f"Alpaca FITS file saved successfully: {filename} (size: {file_size} bytes)")
+                return success_status("Alpaca FITS file saved", data=filename)
+            else:
+                self.logger.error(f"FITS file was not created: {filename}")
+                return error_status("FITS file was not created")
             
-        except ImportError:
-            self.logger.error("Astropy not available for FITS saving")
-            return error_status("Astropy not available for FITS saving")
         except Exception as e:
             self.logger.error(f"Error saving Alpaca FITS file: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return error_status(f"Error saving Alpaca FITS file: {e}")
     
     def get_camera_info(self) -> dict[str, Any]:
