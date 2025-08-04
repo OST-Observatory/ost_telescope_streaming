@@ -472,6 +472,7 @@ class VideoProcessor:
                         binning = alpaca_config.get('binning', [1, 1])
                         
                         self.logger.info(f"Capturing FITS frame for Alpaca camera: exposure={exposure_time}s, gain={gain}, binning={binning}")
+                        self.logger.debug(f"Alpaca config from camera.alpaca: {alpaca_config}")
                         
                         # Capture FITS frame for Alpaca
                         alpaca_status = self.video_capture.capture_single_frame_alpaca(

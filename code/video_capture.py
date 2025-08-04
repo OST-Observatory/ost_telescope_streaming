@@ -627,6 +627,7 @@ class VideoCapture:
             
             # Start exposure
             self.logger.debug(f"Starting Alpaca exposure: {exposure_time_s}s, gain={gain}, binning={binning_value}")
+            self.logger.info(f"DEBUG: About to call camera.start_exposure with duration={exposure_time_s}s")
             self.camera.start_exposure(exposure_time_s, light=True)
             
             # Wait for exposure to complete with proper timeout handling
