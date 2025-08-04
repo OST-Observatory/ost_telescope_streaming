@@ -300,9 +300,9 @@ class VideoCapture:
     def disconnect(self):
         """Disconnects from the video camera."""
         if self.camera_type == 'opencv':
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+            if self.cap:
+                self.cap.release()
+                self.cap = None
         elif self.camera_type == 'ascom':
             if self.camera:
                 self.camera.disconnect()
@@ -320,9 +320,9 @@ class VideoCapture:
         """
         if self.camera_type == 'opencv':
             # For OpenCV cameras, just ensure connection
-        if not self.cap or not self.cap.isOpened():
+            if not self.cap or not self.cap.isOpened():
                 if not self._initialize_camera():
-                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         elif self.camera_type == 'ascom':
             # For ASCOM cameras, just ensure connection
             if not self.camera:
@@ -455,15 +455,18 @@ class VideoCapture:
                 return exp_status
             img_status = self.camera.get_image()
             return img_status
-        if not self.cap or not self.cap.isOpened():
-            if not self._initialize_camera():
-                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
-        ret, frame = self.cap.read()
-        if ret:
-            return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
+        elif self.camera_type == 'opencv':
+            if not self.cap or not self.cap.isOpened():
+                if not self._initialize_camera():
+                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+            ret, frame = self.cap.read()
+            if ret:
+                return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
+            else:
+                self.logger.error("Failed to capture single frame")
+                return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
         else:
-            self.logger.error("Failed to capture single frame")
-            return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
+            return error_status(f"Unsupported camera type: {self.camera_type}")
     
     def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
         """Captures a single frame with ASCOM camera.
@@ -1472,26 +1475,25 @@ class VideoCapture:
                         # Fall back to grayscale conversion
                         result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
                 else:
-            # For monochrome cameras, convert to 3-channel grayscale
-            if len(image_array.shape) == 2:
+                    # For monochrome cameras, convert to 3-channel grayscale
+                    if len(image_array.shape) == 2:
                         self.logger.debug("Converting monochrome image to 3-channel")
                         result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                    else:
+                    elif len(image_array.shape) == 3:
                         # If already 3-channel but not RGB (e.g., RGBA), convert to BGR
-            if len(image_array.shape) == 3:
-                            if image_array.shape[2] == 4:  # RGBA
-                                self.logger.debug("Converting RGBA to BGR")
-                                result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                            elif image_array.shape[2] == 1:  # Single channel
-                                self.logger.debug("Converting single channel to 3-channel")
-                                result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                            else:
-                                self.logger.debug("Returning existing 3-channel image")
-                                result_image = image_array
-                        else:
-            # Fallback: assume monochrome and convert
-                            self.logger.debug("Fallback: converting to 3-channel grayscale")
+                        if image_array.shape[2] == 4:  # RGBA
+                            self.logger.debug("Converting RGBA to BGR")
+                            result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
+                        elif image_array.shape[2] == 1:  # Single channel
+                            self.logger.debug("Converting single channel to 3-channel")
                             result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                        else:
+                            self.logger.debug("Returning existing 3-channel image")
+                            result_image = image_array
+                    else:
+                        # Fallback: assume monochrome and convert
+                        self.logger.debug("Fallback: converting to 3-channel grayscale")
+                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
             
             # NOW apply orientation correction to the debayered RGB image
             # This is much simpler and more robust than rotating Bayer patterns
