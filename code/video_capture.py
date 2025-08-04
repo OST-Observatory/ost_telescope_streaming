@@ -147,8 +147,8 @@ class VideoCapture:
                     cam.camera.NumY = self.resolution[1]
                     cam.camera.StartX = 0
                     cam.camera.StartY = 0
-            
-        except Exception as e:
+                    
+                except Exception as e:
                     self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
                     # Use default dimensions from config
                     self.resolution[0] = 1920
