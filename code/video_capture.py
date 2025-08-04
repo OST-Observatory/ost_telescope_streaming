@@ -1211,6 +1211,19 @@ class VideoCapture:
             # Log the data properties for debugging
             self.logger.info(f"Alpaca FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
             
+            # Apply orientation correction if needed (same as PNG files)
+            original_shape = image_data.shape
+            if self._needs_rotation(image_data.shape):
+                # For 2D images (monochrome)
+                if len(image_data.shape) == 2:
+                    image_data = np.transpose(image_data, (1, 0))
+                # For 3D images (color)
+                elif len(image_data.shape) == 3:
+                    image_data = np.transpose(image_data, (1, 0, 2))
+                self.logger.info(f"Alpaca FITS orientation corrected: {original_shape} -> {image_data.shape}")
+            else:
+                self.logger.debug(f"Alpaca FITS already in correct orientation: {original_shape}, no rotation needed")
+            
             # Check if this is a color camera
             is_color_camera = False
             bayer_pattern = None
