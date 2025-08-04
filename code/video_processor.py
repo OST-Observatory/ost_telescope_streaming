@@ -172,11 +172,7 @@ class VideoProcessor:
         if self.video_enabled:
             try:
                 self.video_capture = VideoCapture(config=self.config, logger=self.logger)
-                if self.video_capture.connect():
-                    self.logger.info("Video capture initialized")
-                else:
-                    self.logger.error("Failed to connect to video camera")
-                    success = False
+                self.logger.info("Video capture initialized")
             except Exception as e:
                 self.logger.error(f"Error initializing video capture: {e}")
                 success = False

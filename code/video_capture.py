@@ -61,9 +61,16 @@ class VideoCapture:
         self._initialize_camera()
         
         # Initialize cooling if enabled
-        if self.enable_cooling and self.camera:
-            from cooling_manager import create_cooling_manager
-            self.cooling_manager = create_cooling_manager(self.camera, config, logger)
+        if self.enable_cooling:
+            if self.camera:  # ASCOM or Alpaca camera
+                from cooling_manager import create_cooling_manager
+                self.cooling_manager = create_cooling_manager(self.camera, config, logger)
+            elif self.camera_type == 'opencv':
+                # OpenCV cameras don't support cooling
+                self.logger.info("Cooling not supported for OpenCV cameras")
+                self.enable_cooling = False
+            else:
+                self.logger.warning("Cooling enabled but no compatible camera found")
     
     def _ensure_directories(self):
         """Create necessary output directories."""
@@ -103,6 +110,9 @@ class VideoCapture:
             # Set gain if supported
             if hasattr(cv2, 'CAP_PROP_GAIN'):
                 self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
+            
+            # Calculate field of view
+            self.fov_width, self.fov_height = self.get_field_of_view()
             
             # Verify settings
             actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -156,11 +166,6 @@ class VideoCapture:
                 
                 self.logger.info("ASCOM camera connected")
                 
-                # Initialize cooling system if supported and enabled
-                cooling_status = self._initialize_cooling()
-                if not cooling_status.is_success:
-                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
-                
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
                 self.camera = None
@@ -178,11 +183,6 @@ class VideoCapture:
             if status.is_success:
                 self.camera = cam
                 self.logger.info("Alpaca camera connected")
-                
-                # Initialize cooling system if supported and enabled
-                cooling_status = self._initialize_cooling()
-                if not cooling_status.is_success:
-                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
                 
                 return success_status("Alpaca camera connected", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
             else:
@@ -282,20 +282,42 @@ class VideoCapture:
     
     def get_field_of_view(self) -> tuple[float, float]:
         """Returns the current field of view (FOV) in degrees."""
-        # This method needs to be implemented based on actual camera parameters
-        # For now, it will return default values or raise an error
-        # The original code had a placeholder, but the new code doesn't.
-        # Assuming a default or that this method will be re-added.
-        # For now, returning a placeholder to avoid breaking existing calls.
-        return (0.0, 0.0) # Placeholder, needs actual implementation
+        # Calculate FOV based on camera sensor size and telescope focal length
+        try:
+            # Get sensor dimensions from config
+            sensor_width = self.config.get_camera_config().get('sensor_width', 6.17)  # mm
+            sensor_height = self.config.get_camera_config().get('sensor_height', 4.55)  # mm
+            
+            # Get focal length from telescope config
+            focal_length = self.config.get_telescope_config().get('focal_length', 1000)  # mm
+            
+            # Calculate FOV in degrees
+            fov_width = (sensor_width / focal_length) * (180 / 3.14159)  # degrees
+            fov_height = (sensor_height / focal_length) * (180 / 3.14159)  # degrees
+            
+            return (fov_width, fov_height)
+        except Exception as e:
+            self.logger.warning(f"Could not calculate FOV: {e}, using defaults")
+            return (1.5, 1.0)  # Default FOV
     
     def get_sampling_arcsec_per_pixel(self) -> float:
         """Calculates the sampling in arcseconds per pixel."""
-        # This method needs to be implemented based on actual camera parameters
-        # For now, it will return a placeholder or raise an error.
-        # Assuming a default or that this method will be re-added.
-        # For now, returning a placeholder to avoid breaking existing calls.
-        return 0.0 # Placeholder, needs actual implementation
+        try:
+            # Get pixel size from config
+            pixel_size = self.config.get_camera_config().get('pixel_size', 3.75)  # micrometers
+            
+            # Get focal length from telescope config
+            focal_length = self.config.get_telescope_config().get('focal_length', 1000)  # mm
+            
+            # Calculate sampling in arcseconds per pixel
+            # Formula: (pixel_size_mm / focal_length_mm) * 206265 arcsec/radian
+            pixel_size_mm = pixel_size / 1000  # Convert micrometers to mm
+            sampling = (pixel_size_mm / focal_length) * 206265
+            
+            return sampling
+        except Exception as e:
+            self.logger.warning(f"Could not calculate sampling: {e}, using default")
+            return 1.0  # Default sampling
     
     def disconnect(self):
         """Disconnects from the video camera."""
