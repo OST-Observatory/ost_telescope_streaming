@@ -115,6 +115,7 @@ class VideoProcessor:
         # Plate-solving settings
         self.solver_type: str = self.plate_solve_config.get('default_solver', 'platesolve2')
         self.auto_solve: bool = self.plate_solve_config.get('auto_solve', True)
+        self.plate_solve_enabled: bool = self.auto_solve  # Alias for consistency
         self.min_solve_interval: int = self.plate_solve_config.get('min_solve_interval', 30)
         
         # Slewing detection settings
@@ -246,6 +247,75 @@ class VideoProcessor:
             self.video_capture.disconnect()
         self.logger.info("Video processor stopped")
         return success_status("Video processor stopped", details={'is_running': False})
+    
+    def start_observation_session(self) -> VideoProcessingStatus:
+        """Start an observation session with cooling initialization.
+        
+        This method initializes the video processor for a complete observation session,
+        including camera cooling if enabled. It's called by the OverlayRunner when
+        starting a new observation session.
+        
+        Returns:
+            VideoProcessingStatus: Status object with session start information or error.
+        """
+        try:
+            self.logger.info("Starting observation session...")
+            
+            # Initialize the video processor if not already done
+            if not self.initialize():
+                return error_status("Failed to initialize video processor for observation session")
+            
+            # Start the video processor
+            start_status = self.start()
+            if not start_status.is_success:
+                return error_status(f"Failed to start video processor: {start_status.message}")
+            
+            self.logger.info("Observation session started successfully")
+            return success_status(
+                "Observation session started successfully",
+                details={
+                    'video_enabled': self.video_enabled,
+                    'is_running': self.is_running,
+                    'capture_interval': self.capture_interval,
+                    'plate_solve_enabled': self.plate_solve_enabled
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start observation session: {e}")
+            return error_status(f"Failed to start observation session: {e}")
+    
+    def end_observation_session(self) -> VideoProcessingStatus:
+        """End an observation session with proper cleanup.
+        
+        This method properly stops the video processor and performs any necessary
+        cleanup for the observation session. It's called by the OverlayRunner when
+        ending an observation session.
+        
+        Returns:
+            VideoProcessingStatus: Status object with session end information or error.
+        """
+        try:
+            self.logger.info("Ending observation session...")
+            
+            # Stop the video processor
+            stop_status = self.stop()
+            if not stop_status.is_success:
+                self.logger.warning(f"Video processor stop warning: {stop_status.message}")
+            
+            self.logger.info("Observation session ended successfully")
+            return success_status(
+                "Observation session ended successfully",
+                details={
+                    'is_running': self.is_running,
+                    'capture_count': getattr(self, 'capture_count', 0),
+                    'solve_count': getattr(self, 'solve_count', 0)
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to end observation session: {e}")
+            return error_status(f"Failed to end observation session: {e}")
     
     def _processing_loop(self) -> None:
         """Hauptverarbeitungsschleife."""
