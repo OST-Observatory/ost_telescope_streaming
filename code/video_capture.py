@@ -51,6 +51,12 @@ class VideoCapture:
         self.camera = None
         self.cooling_manager = None
         
+        # Threading and state management
+        self.is_capturing = False
+        self.capture_thread = None
+        self.current_frame = None
+        self.frame_lock = threading.Lock()
+        
         # Calibration
         self.calibration_applier = CalibrationApplier(config, logger)
         
@@ -462,21 +468,13 @@ class VideoCapture:
             exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
             gain = self.config.get_camera_config().get('gain', None)
             binning = self.config.get_video_config().get('binning', 1)
-            exp_status = self.camera.expose(exposure_time, gain, binning)
-            if not exp_status.is_success:
-                return exp_status
-            img_status = self.camera.get_image()
-            return img_status
+            return self.capture_single_frame_ascom(exposure_time, gain, binning)
         elif self.camera_type == 'alpaca' and self.camera:
             # Use exposure time in seconds
             exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
             gain = self.config.get_camera_config().get('gain', None)
             binning = self.config.get_video_config().get('binning', 1)
-            exp_status = self.camera.expose(exposure_time, gain, binning)
-            if not exp_status.is_success:
-                return exp_status
-            img_status = self.camera.get_image()
-            return img_status
+            return self.capture_single_frame_alpaca(exposure_time, gain, binning)
         elif self.camera_type == 'opencv':
             if not self.cap or not self.cap.isOpened():
                 if not self._initialize_camera():
@@ -601,59 +599,78 @@ class VideoCapture:
             return error_status("Alpaca camera not connected")
         
         try:
-            # Use the already set dimensions from connect()
-            effective_width = self.resolution[0]
-            effective_height = self.resolution[1]
-            
-            # Only set subframe if dimensions have changed
-            try:
-                current_numx = self.camera.camera.NumX
-                current_numy = self.camera.camera.NumY
-                
-                if current_numx != effective_width or current_numy != effective_height:
-                    self.logger.debug(f"Updating subframe: {current_numx}x{current_numy} -> {effective_width}x{effective_height}")
-                    self.camera.camera.NumX = effective_width
-                    self.camera.camera.NumY = effective_height
-                    self.camera.camera.StartX = 0
-                    self.camera.camera.StartY = 0
-                else:
-                    self.logger.debug(f"Subframe already set correctly: {effective_width}x{effective_height}")
-                    
-            except Exception as e:
-                self.logger.warning(f"Could not update subframe: {e}")
-                self.logger.info("Using existing subframe settings")
-            
             # Use configuration defaults if not provided
             if gain is None:
                 gain = self.gain
             
-            # Get offset and readout mode from configuration
-            offset = self.offset
-            readout_mode = self.readout_mode
+            # Set camera parameters
+            try:
+                # Set gain if provided
+                if gain is not None:
+                    self.camera.gain = gain
+                
+                # Set binning
+                if binning != 1:
+                    self.camera.bin_x = binning
+                    self.camera.bin_y = binning
+                
+                # Set offset if available
+                if hasattr(self.camera, 'offset'):
+                    self.camera.offset = self.offset
+                
+                # Set readout mode if available
+                if hasattr(self.camera, 'readout_mode'):
+                    self.camera.readout_mode = self.readout_mode
+                    
+            except Exception as e:
+                self.logger.warning(f"Could not set camera parameters: {e}")
             
-            # Start exposure with all parameters
-            exp_status = self.camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
-            if not exp_status.is_success:
-                return exp_status
+            # Start exposure
+            self.logger.debug(f"Starting Alpaca exposure: {exposure_time_s}s, gain={gain}, binning={binning}")
+            self.camera.start_exposure(exposure_time_s, light=True)
             
-            # Get image
-            img_status = self.camera.get_image()
-            if not img_status.is_success:
-                return img_status
+            # Wait for exposure to complete
+            while not self.camera.image_ready:
+                time.sleep(0.1)
+                # Add timeout protection
+                if time.time() - self.camera.last_exposure_start_time > exposure_time_s + 30:  # 30s timeout
+                    self.logger.error("Exposure timeout")
+                    return error_status("Exposure timeout")
+            
+            # Get image data
+            image_data = self.camera.get_image_array()
+            if image_data is None:
+                return error_status("Failed to get image data from Alpaca camera")
+            
+            # Get effective dimensions
+            effective_width = self.camera.camera_x_size
+            effective_height = self.camera.camera_y_size
             
             # Check if debayering is needed
-            if hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera():
-                debayer_status = self.camera.debayer(img_status.data)
-                if debayer_status.is_success:
-                    frame_data = debayer_status.data
-                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
-                else:
-                    self.logger.warning(f"Debayering failed: {debayer_status.message}, returning raw image")
-                    frame_data = img_status.data
-                    frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+            if self.camera.is_color_camera():
+                # For color cameras, image_data is already debayered
+                frame_data = image_data
+                frame_details = {
+                    'exposure_time_s': exposure_time_s, 
+                    'gain': gain, 
+                    'binning': binning, 
+                    'offset': getattr(self.camera, 'offset', None),
+                    'readout_mode': getattr(self.camera, 'readout_mode', None),
+                    'dimensions': f"{effective_width}x{effective_height}", 
+                    'debayered': True
+                }
             else:
-                frame_data = img_status.data
-                frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
+                # For monochrome cameras
+                frame_data = image_data
+                frame_details = {
+                    'exposure_time_s': exposure_time_s, 
+                    'gain': gain, 
+                    'binning': binning, 
+                    'offset': getattr(self.camera, 'offset', None),
+                    'readout_mode': getattr(self.camera, 'readout_mode', None),
+                    'dimensions': f"{effective_width}x{effective_height}", 
+                    'debayered': False
+                }
             
             # Apply calibration if enabled and master frames are available
             calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
