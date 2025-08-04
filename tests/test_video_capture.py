@@ -184,90 +184,144 @@ def main():
                 print(f"Exposure: {args.exposure}s")
         
         elif args.action == 'cooling':
-            if args.camera_type == 'ascom' and args.ascom_driver and args.cooling_temp is not None:
-                from ascom_camera import ASCOMCamera
-                camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
-                connect_status = camera.connect()
-                if connect_status.is_success:
-                    print(f"✅ Connected successfully")
-                    print(f"Setting target temperature to {args.cooling_temp}°C...")
-                    
-                    # Set cooling with improved method
-                    cooling_status = camera.set_cooling(args.cooling_temp)
-                    print(f"Cooling status: {cooling_status.level.value.upper()} - {cooling_status.message}")
-                    
-                    # Show detailed cooling information if available
-                    if cooling_status.is_success and hasattr(cooling_status, 'details') and cooling_status.details:
-                        details = cooling_status.details
-                        print(f"  Target temperature: {details.get('target_temp')}°C")
-                        print(f"  Temperature before: {details.get('current_temp')}°C")
-                        print(f"  Temperature after: {details.get('new_temp')}°C")
-                        print(f"  Cooler power before: {details.get('current_power')}%")
-                        print(f"  Cooler power after: {details.get('new_power')}%")
-                        print(f"  Cooler on before: {details.get('current_cooler_on')}")
-                        print(f"  Cooler on after: {details.get('new_cooler_on')}")
-                    
-                    # Force refresh cooling status to get accurate power readings
-                    print(f"\nForcing cooling status refresh...")
-                    refresh_status = camera.force_refresh_cooling_status()
-                    if refresh_status.is_success:
-                        refresh_info = refresh_status.data
-                        print(f"✅ Cooling status refreshed successfully!")
-                        print(f"  Temperature: {refresh_info.get('temperature')}°C")
-                        print(f"  Cooler power: {refresh_info.get('cooler_power')}%")
-                        print(f"  Cooler on: {refresh_info.get('cooler_on')}")
-                        print(f"  Target temperature: {refresh_info.get('target_temperature')}°C")
-                        print(f"  Refresh attempts: {refresh_info.get('refresh_attempts')}")
-                    else:
-                        print(f"⚠️  Force refresh failed: {refresh_status.message}")
-                    
-                    # Wait for cooling to stabilize
-                    print(f"\nWaiting for cooling to stabilize (timeout: 30s)...")
-                    stabilization_status = camera.wait_for_cooling_stabilization(timeout=30, check_interval=2.0)
-                    
-                    if stabilization_status.is_success:
-                        final_info = stabilization_status.data
-                        print(f"✅ Cooling stabilized successfully!")
-                        print(f"Final status:")
-                        print(f"  Temperature: {final_info.get('temperature')}°C")
-                        print(f"  Cooler power: {final_info.get('cooler_power')}%")
-                        print(f"  Cooler on: {final_info.get('cooler_on')}")
-                        print(f"  Target temperature: {final_info.get('target_temperature')}°C")
-                    else:
-                        print(f"⚠️  Cooling stabilization: {stabilization_status.message}")
-                        if hasattr(stabilization_status, 'data') and stabilization_status.data:
+            if args.cooling_temp is not None:
+                if args.camera_type == 'ascom' and args.ascom_driver:
+                    from ascom_camera import ASCOMCamera
+                    camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
+                    connect_status = camera.connect()
+                    if connect_status.is_success:
+                        print(f"✅ Connected successfully")
+                        print(f"Setting target temperature to {args.cooling_temp}°C...")
+                        
+                        # Set cooling with improved method
+                        cooling_status = camera.set_cooling(args.cooling_temp)
+                        print(f"Cooling status: {cooling_status.level.value.upper()} - {cooling_status.message}")
+                        
+                        # Show detailed cooling information if available
+                        if cooling_status.is_success and hasattr(cooling_status, 'details') and cooling_status.details:
+                            details = cooling_status.details
+                            print(f"  Target temperature: {details.get('target_temp')}°C")
+                            print(f"  Temperature before: {details.get('current_temp')}°C")
+                            print(f"  Temperature after: {details.get('new_temp')}°C")
+                            print(f"  Cooler power before: {details.get('current_power')}%")
+                            print(f"  Cooler power after: {details.get('new_power')}%")
+                            print(f"  Cooler on before: {details.get('current_cooler_on')}")
+                            print(f"  Cooler on after: {details.get('new_cooler_on')}")
+                        
+                        # Force refresh cooling status to get accurate power readings
+                        print(f"\nForcing cooling status refresh...")
+                        refresh_status = camera.force_refresh_cooling_status()
+                        if refresh_status.is_success:
+                            refresh_info = refresh_status.data
+                            print(f"✅ Cooling status refreshed successfully!")
+                            print(f"  Temperature: {refresh_info.get('temperature')}°C")
+                            print(f"  Cooler power: {refresh_info.get('cooler_power')}%")
+                            print(f"  Cooler on: {refresh_info.get('cooler_on')}")
+                            print(f"  Target temperature: {refresh_info.get('target_temperature')}°C")
+                            print(f"  Refresh attempts: {refresh_info.get('refresh_attempts')}")
+                        else:
+                            print(f"⚠️  Force refresh failed: {refresh_status.message}")
+                        
+                        # Wait for cooling to stabilize
+                        print(f"\nWaiting for cooling to stabilize (timeout: 30s)...")
+                        stabilization_status = camera.wait_for_cooling_stabilization(timeout=30, check_interval=2.0)
+                        
+                        if stabilization_status.is_success:
                             final_info = stabilization_status.data
-                            print(f"Final status (timeout):")
+                            print(f"✅ Cooling stabilized successfully!")
+                            print(f"Final status:")
                             print(f"  Temperature: {final_info.get('temperature')}°C")
                             print(f"  Cooler power: {final_info.get('cooler_power')}%")
                             print(f"  Cooler on: {final_info.get('cooler_on')}")
-                    
-                    # Handle cooling when disconnecting
-                    if args.keep_cooling:
-                        print(f"\n⚠️  Keeping cooling on when disconnecting...")
-                        print(f"   Note: Cooling will remain active after disconnect")
-                        print(f"   Camera connection will be released but cooling stays on")
+                            print(f"  Target temperature: {final_info.get('target_temperature')}°C")
+                        else:
+                            print(f"⚠️  Cooling stabilization: {stabilization_status.message}")
+                            if hasattr(stabilization_status, 'data') and stabilization_status.data:
+                                final_info = stabilization_status.data
+                                print(f"Final status (timeout):")
+                                print(f"  Temperature: {final_info.get('temperature')}°C")
+                                print(f"  Cooler power: {final_info.get('cooler_power')}%")
+                                print(f"  Cooler on: {final_info.get('cooler_on')}")
                         
-                        # For ASCOM cameras, we need to keep the connection alive to maintain cooling
-                        # Instead of disconnecting, we'll just release the Python object reference
-                        # but keep the ASCOM connection active
-                        print(f"   ⚠️  ASCOM limitation: Cooling will turn off when connection is lost")
-                        print(f"   💡 Solution: Keep camera connected in background")
+                        # Handle cooling when disconnecting
+                        if args.keep_cooling:
+                            print(f"\n⚠️  Keeping cooling on when disconnecting...")
+                            print(f"   Note: Cooling will remain active after disconnect")
+                            print(f"   Camera connection will be released but cooling stays on")
+                            
+                            # For ASCOM cameras, we need to keep the connection alive to maintain cooling
+                            # Instead of disconnecting, we'll just release the Python object reference
+                            # but keep the ASCOM connection active
+                            print(f"   ⚠️  ASCOM limitation: Cooling will turn off when connection is lost")
+                            print(f"   💡 Solution: Keep camera connected in background")
+                            
+                            # Don't disconnect - keep the connection alive
+                            # The camera object will be garbage collected, but ASCOM connection stays
+                            print(f"✅ Camera connection kept alive (cooling active)")
+                            print(f"   ⚠️  IMPORTANT: Don't close this terminal or run other camera commands!")
+                            print(f"   ⚠️  Use 'cooling-off' action in a NEW terminal to turn off cooling")
+                            print(f"   💡 Tip: Keep this terminal open to maintain cooling")
+                            
+                            # Return without disconnecting
+                            return
+                        else:
+                            print(f"\n⚠️  Disconnecting will turn off cooling...")
+                            print(f"   Use --keep-cooling to maintain cooling after disconnect")
+                            camera.disconnect()
+                            print(f"✅ Disconnected from camera (cooling turned off)")
+                
+                elif args.camera_type == 'alpaca':
+                    from alpaca_camera import AlpycaCameraWrapper
+                    alpaca_config = video_config.get('alpaca', {})
+                    camera = AlpycaCameraWrapper(
+                        host=alpaca_config.get('host', 'localhost'),
+                        port=alpaca_config.get('port', 11111),
+                        device_id=alpaca_config.get('device_id', 0),
+                        config=config,
+                        logger=logger
+                    )
+                    connect_status = camera.connect()
+                    if connect_status.is_success:
+                        print(f"✅ Connected successfully")
+                        print(f"Setting target temperature to {args.cooling_temp}°C...")
                         
-                        # Don't disconnect - keep the connection alive
-                        # The camera object will be garbage collected, but ASCOM connection stays
-                        print(f"✅ Camera connection kept alive (cooling active)")
-                        print(f"   ⚠️  IMPORTANT: Don't close this terminal or run other camera commands!")
-                        print(f"   ⚠️  Use 'cooling-off' action in a NEW terminal to turn off cooling")
-                        print(f"   💡 Tip: Keep this terminal open to maintain cooling")
+                        # Set cooling with keep_connection parameter
+                        cooling_status = camera.set_cooling(args.cooling_temp, keep_connection=args.keep_cooling)
+                        print(f"Cooling status: {cooling_status.level.value.upper()} - {cooling_status.message}")
                         
-                        # Return without disconnecting
-                        return
+                        # Show detailed cooling information if available
+                        if cooling_status.is_success and hasattr(cooling_status, 'details') and cooling_status.details:
+                            details = cooling_status.details
+                            print(f"  Target temperature: {details.get('target_temp')}°C")
+                            print(f"  Temperature before: {details.get('current_temp')}°C")
+                            print(f"  Temperature after: {details.get('new_temp')}°C")
+                            print(f"  Cooler power before: {details.get('current_power')}%")
+                            print(f"  Cooler power after: {details.get('new_power')}%")
+                            print(f"  Cooler on before: {details.get('current_cooler_on')}")
+                            print(f"  Cooler on after: {details.get('new_cooler_on')}")
+                            print(f"  Keep connection: {details.get('keep_connection')}")
+                        
+                        # Handle cooling when disconnecting
+                        if args.keep_cooling:
+                            print(f"\n🚀 Keeping cooling active for 5 minutes...")
+                            # Keep connection alive for cooling
+                            cooling_maintenance_status = camera.keep_cooling_alive(duration_minutes=5)
+                            if cooling_maintenance_status.is_success:
+                                print("✅ Cooling maintenance completed successfully")
+                            else:
+                                print(f"⚠️  Cooling maintenance had issues: {cooling_maintenance_status.message}")
+                        else:
+                            print(f"\n⚠️  Disconnecting will turn off cooling...")
+                            print(f"   Use --keep-cooling to maintain cooling after disconnect")
+                            camera.disconnect()
+                            print(f"✅ Disconnected from camera (cooling turned off)")
                     else:
-                        print(f"\n⚠️  Disconnecting will turn off cooling...")
-                        print(f"   Use --keep-cooling to maintain cooling after disconnect")
-                        camera.disconnect()
-                        print(f"✅ Disconnected from camera (cooling turned off)")
+                        print(f"❌ Connection failed: {connect_status.message}")
+                
+                else:
+                    print(f"❌ Cooling action requires --camera-type ascom with --ascom-driver or --camera-type alpaca")
+            else:
+                print(f"❌ Please specify --cooling-temp")
         
         elif args.action == 'cooling-off':
             if args.camera_type == 'ascom' and args.ascom_driver:

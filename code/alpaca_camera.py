@@ -628,11 +628,12 @@ class AlpycaCameraWrapper:
     # Cooling Methods
     # ============================================================================
     
-    def set_cooling(self, target_temp):
+    def set_cooling(self, target_temp, keep_connection=False):
         """Set cooling target temperature.
         
         Args:
             target_temp: Target temperature in °C
+            keep_connection: If True, keep connection alive during cooling
             
         Returns:
             Status: Success or error status
@@ -658,9 +659,9 @@ class AlpycaCameraWrapper:
             self.cooler_on = True
             self.logger.info("Cooler turned on")
             
-            # Wait a moment for the settings to take effect
+            # Wait longer for the settings to take effect
             import time
-            time.sleep(1.0)  # Increased wait time
+            time.sleep(2.0)  # Increased wait time
             
             # Get new status after setting
             new_temp = self.ccd_temperature
@@ -682,12 +683,17 @@ class AlpycaCameraWrapper:
                 'new_power': new_power,
                 'current_cooler_on': current_cooler_on,
                 'new_cooler_on': new_cooler_on,
-                'new_target': new_target
+                'new_target': new_target,
+                'keep_connection': keep_connection
             }
             
             # Verify the settings were applied
             if new_cooler_on and new_target == target_temp:
                 self.logger.info(f"Cooling set successfully to {target_temp}°C")
+                
+                if keep_connection:
+                    self.logger.info("Connection will be kept alive for persistent cooling")
+                
                 return success_status(f"Cooling set to {target_temp}°C", details=details)
             else:
                 self.logger.warning(f"Cooling settings may not have been applied correctly")
@@ -859,6 +865,54 @@ class AlpycaCameraWrapper:
         except Exception as e:
             self.logger.error(f"Error waiting for cooling stabilization: {e}")
             return error_status(f"Failed to wait for cooling stabilization: {e}")
+    
+    def keep_cooling_alive(self, duration_minutes=10):
+        """Keep the connection alive to maintain cooling.
+        
+        Args:
+            duration_minutes: How long to keep the connection alive
+            
+        Returns:
+            Status: Success or error status
+        """
+        try:
+            self.logger.info(f"Keeping cooling connection alive for {duration_minutes} minutes")
+            
+            start_time = time.time()
+            end_time = start_time + (duration_minutes * 60)
+            
+            while time.time() < end_time:
+                try:
+                    # Check cooling status
+                    temp = self.ccd_temperature
+                    power = self.cooler_power
+                    cooler_on = self.cooler_on
+                    target = self.set_ccd_temperature
+                    
+                    elapsed = time.time() - start_time
+                    self.logger.info(
+                        f"[{elapsed:6.1f}s] Temp: {temp:5.1f}°C, "
+                        f"Power: {power:5.1f}%, Cooler: {cooler_on}, "
+                        f"Target: {target:5.1f}°C"
+                    )
+                    
+                    # If cooler is off, try to turn it back on
+                    if not cooler_on:
+                        self.logger.warning("Cooler turned off, attempting to turn back on")
+                        self.cooler_on = True
+                    
+                    time.sleep(30)  # Check every 30 seconds
+                    
+                except Exception as e:
+                    self.logger.error(f"Error during cooling maintenance: {e}")
+                    time.sleep(10)
+            
+            self.logger.info("Cooling maintenance period completed")
+            return success_status("Cooling maintained successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to maintain cooling: {e}")
+            return error_status(f"Failed to maintain cooling: {e}")
     
     # ============================================================================
     # Utility Methods
