@@ -1147,6 +1147,10 @@ class VideoCapture:
             if hasattr(frame, 'data'):
                 self.logger.debug(f"Frame.data type: {type(frame.data)}")
                 self.logger.debug(f"Frame.data value: {frame.data}")
+                # Check for nested Status objects
+                if hasattr(frame.data, 'data'):
+                    self.logger.debug(f"Frame.data.data type: {type(frame.data.data)}")
+                    self.logger.debug(f"Frame.data.data value: {frame.data.data}")
             if hasattr(frame, 'is_success'):
                 self.logger.debug(f"Frame.is_success: {frame.is_success}")
             
@@ -1155,12 +1159,28 @@ class VideoCapture:
             
             if hasattr(frame, 'data') and frame.data is not None:
                 # Frame is a status object with data
-                image_data = frame.data
-                self.logger.debug("Extracted data from status object")
+                if hasattr(frame.data, 'data') and frame.data.data is not None:
+                    # Nested Status object - extract the actual data
+                    image_data = frame.data.data
+                    self.logger.debug("Extracted data from nested status object")
+                elif hasattr(frame.data, 'is_success') and frame.data.is_success and hasattr(frame.data, 'data'):
+                    # Nested success status object
+                    image_data = frame.data.data
+                    self.logger.debug("Extracted data from nested success status object")
+                else:
+                    # Direct data in status object
+                    image_data = frame.data
+                    self.logger.debug("Extracted data from status object")
             elif hasattr(frame, 'is_success') and frame.is_success and hasattr(frame, 'data'):
                 # Frame is a success status object
-                image_data = frame.data
-                self.logger.debug("Extracted data from success status object")
+                if hasattr(frame.data, 'data') and frame.data.data is not None:
+                    # Nested Status object - extract the actual data
+                    image_data = frame.data.data
+                    self.logger.debug("Extracted data from nested status object in success frame")
+                else:
+                    # Direct data in success status object
+                    image_data = frame.data
+                    self.logger.debug("Extracted data from success status object")
             else:
                 # Frame is direct data
                 image_data = frame
