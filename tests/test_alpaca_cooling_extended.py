@@ -98,11 +98,20 @@ class CoolingMonitor:
                     elif power > 0 and prev_power == 0:
                         self.logger.info(f"🚀 Cooling power started: {power:.1f}%")
                 
+                # Check if we've reached the target temperature
+                if temp <= target + 1.0:  # Within 1°C of target
+                    self.logger.info(f"🎯 Target temperature reached! Current: {temp:.1f}°C, Target: {target:.1f}°C")
+                    break
+                
                 time.sleep(10)  # Check every 10 seconds
                 
             except Exception as e:
                 self.logger.error(f"Error during monitoring: {e}")
                 time.sleep(5)
+        
+        # Stop monitoring when loop ends
+        self.monitoring = False
+        self.logger.info(f"Monitoring completed after {len(self.data)} data points")
     
     def get_summary(self):
         """Get monitoring summary."""
