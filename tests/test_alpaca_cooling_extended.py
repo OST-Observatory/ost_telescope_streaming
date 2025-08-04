@@ -67,7 +67,7 @@ class CoolingMonitor:
                 temp = self.camera.ccd_temperature
                 power = self.camera.cooler_power
                 cooler_on = self.camera.cooler_on
-                target = self.set_ccd_temperature
+                target = self.camera.set_ccd_temperature
                 
                 # Record data
                 timestamp = datetime.now()
@@ -169,6 +169,10 @@ def test_connection_persistence(camera, logger, test_duration_minutes=3):
         
         # Get summary
         summary = monitor.get_summary()
+        
+        if isinstance(summary, str):
+            print(f"❌ {summary}")
+            return False
         
         print(f"\n=== MONITORING SUMMARY ===")
         print(f"Duration: {summary['duration_seconds']:.1f} seconds")
