@@ -1156,34 +1156,41 @@ class VideoCapture:
             
             # Get original Alpaca data - handle Status objects properly
             image_data = None
+            frame_details = {}
             
             if hasattr(frame, 'data') and frame.data is not None:
                 # Frame is a status object with data
                 if hasattr(frame.data, 'data') and frame.data.data is not None:
                     # Nested Status object - extract the actual data
                     image_data = frame.data.data
+                    frame_details = getattr(frame.data, 'details', {})
                     self.logger.debug("Extracted data from nested status object")
                 elif hasattr(frame.data, 'is_success') and frame.data.is_success and hasattr(frame.data, 'data'):
                     # Nested success status object
                     image_data = frame.data.data
+                    frame_details = getattr(frame.data, 'details', {})
                     self.logger.debug("Extracted data from nested success status object")
                 else:
                     # Direct data in status object
                     image_data = frame.data
+                    frame_details = getattr(frame, 'details', {})
                     self.logger.debug("Extracted data from status object")
             elif hasattr(frame, 'is_success') and frame.is_success and hasattr(frame, 'data'):
                 # Frame is a success status object
                 if hasattr(frame.data, 'data') and frame.data.data is not None:
                     # Nested Status object - extract the actual data
                     image_data = frame.data.data
+                    frame_details = getattr(frame.data, 'details', {})
                     self.logger.debug("Extracted data from nested status object in success frame")
                 else:
                     # Direct data in success status object
                     image_data = frame.data
+                    frame_details = getattr(frame, 'details', {})
                     self.logger.debug("Extracted data from success status object")
             else:
                 # Frame is direct data
                 image_data = frame
+                frame_details = {}
                 self.logger.debug("Using direct frame data")
             
             # Validate that we have actual image data
@@ -1288,16 +1295,36 @@ class VideoCapture:
             else:
                 header['COLORTYP'] = 'MONO'
             
-            # Exposure information
-            if hasattr(self.camera, 'exposure_time'):
+            # Exposure information - use actual values from frame details
+            actual_exposure_time = frame_details.get('exposure_time_s')
+            if actual_exposure_time is not None:
+                header['EXPTIME'] = actual_exposure_time
+                self.logger.debug(f"Added actual exposure time to FITS header: {actual_exposure_time}s")
+            elif hasattr(self.camera, 'exposure_time'):
                 header['EXPTIME'] = self.camera.exposure_time
-            if hasattr(self.camera, 'gain'):
-                header['GAIN'] = self.camera.gain
+                self.logger.debug(f"Added camera exposure time to FITS header: {self.camera.exposure_time}s")
             
-            # Binning information
-            if hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
+            actual_gain = frame_details.get('gain')
+            if actual_gain is not None:
+                header['GAIN'] = actual_gain
+                self.logger.debug(f"Added actual gain to FITS header: {actual_gain}")
+            elif hasattr(self.camera, 'gain'):
+                header['GAIN'] = self.camera.gain
+                self.logger.debug(f"Added camera gain to FITS header: {self.camera.gain}")
+            
+            actual_binning = frame_details.get('binning')
+            if actual_binning is not None:
+                if isinstance(actual_binning, list):
+                    header['XBINNING'] = actual_binning[0]
+                    header['YBINNING'] = actual_binning[1]
+                else:
+                    header['XBINNING'] = actual_binning
+                    header['YBINNING'] = actual_binning
+                self.logger.debug(f"Added actual binning to FITS header: {actual_binning}")
+            elif hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
                 header['XBINNING'] = self.camera.bin_x
                 header['YBINNING'] = self.camera.bin_y
+                self.logger.debug(f"Added camera binning to FITS header: {self.camera.bin_x}x{self.camera.bin_y}")
             
             # Temperature information
             if hasattr(self.camera, 'ccdtemperature'):

@@ -464,8 +464,9 @@ class VideoProcessor:
                     
                     # For Alpaca cameras, we need to capture a new frame for FITS
                     if self.video_capture.camera_type == 'alpaca':
-                        # Get settings from config for Alpaca camera
-                        alpaca_config = self.video_config.get('alpaca', {})
+                        # Get settings from config for Alpaca camera (correct path: camera.alpaca)
+                        camera_config = self.config.get_camera_config()
+                        alpaca_config = camera_config.get('alpaca', {})
                         exposure_time = alpaca_config.get('exposure_time', 1.0)
                         gain = alpaca_config.get('gain', None)
                         binning = alpaca_config.get('binning', [1, 1])
