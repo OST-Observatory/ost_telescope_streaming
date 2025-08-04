@@ -60,6 +60,11 @@ class OverlayRunner:
         # State
         self.running = False
         self.last_update = None
+        self.last_solve_result = None
+        
+        # Retry configuration
+        self.max_retries = overlay_config.get('update', {}).get('max_retries', 3)
+        self.retry_delay = overlay_config.get('update', {}).get('retry_delay', 5)
         
         # Initialize components
         self._initialize_components()

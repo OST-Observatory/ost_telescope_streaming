@@ -1562,18 +1562,26 @@ class VideoCapture:
     def _convert_alpaca_to_opencv(self, alpaca_image_data):
         """Convert Alpaca image data to OpenCV format.
         Args:
-            alpaca_image_data: Raw image data from Alpaca camera
+            alpaca_image_data: Raw image data from Alpaca camera or Status object
         Returns:
             numpy.ndarray: OpenCV-compatible image array or None if conversion fails
         """
         try:
+            # Check if input is a Status object and extract data
+            if hasattr(alpaca_image_data, 'data'):
+                # It's a Status object, extract the data
+                image_data = alpaca_image_data.data
+            else:
+                # It's direct data
+                image_data = alpaca_image_data
+            
             # Check if image data is None or empty
-            if alpaca_image_data is None:
+            if image_data is None:
                 self.logger.error("Alpaca image data is None")
                 return None
             
             # Convert Alpaca image array to numpy array
-            image_array = np.array(alpaca_image_data)
+            image_array = np.array(image_data)
             
             # Check if array is empty or has invalid shape
             if image_array.size == 0:
@@ -1625,7 +1633,7 @@ class VideoCapture:
             
         except Exception as e:
             self.logger.error(f"Error converting Alpaca image: {e}")
-            return None 
+            return None
 
     def _needs_rotation(self, image_shape: tuple) -> bool:
         """Check if the image needs rotation based on its dimensions.
