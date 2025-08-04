@@ -72,6 +72,37 @@ Examples:
     )
     
     parser.add_argument(
+        '--enable-cooling',
+        action='store_true',
+        help='Enable camera cooling during observation'
+    )
+    
+    parser.add_argument(
+        '--cooling-temp',
+        type=float,
+        help='Target temperature for cooling (overrides config)'
+    )
+    
+    parser.add_argument(
+        '--wait-for-cooling',
+        action='store_true',
+        help='Wait for temperature stabilization before starting'
+    )
+    
+    parser.add_argument(
+        '--cooling-timeout',
+        type=int,
+        default=300,
+        help='Timeout for cooling stabilization in seconds (default: 300)'
+    )
+    
+    parser.add_argument(
+        '--warmup-at-end',
+        action='store_true',
+        help='Start warmup phase when stopping observation'
+    )
+    
+    parser.add_argument(
         '--log-level',
         type=str,
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -124,15 +155,60 @@ Examples:
             video_config['video_enabled'] = True
             logger.info("Video processing enabled")
         
+        # Handle cooling configuration
+        if args.enable_cooling:
+            camera_config = config.get_camera_config()
+            cooling_config = camera_config.get('cooling', {})
+            cooling_config['enable_cooling'] = True
+            
+            if args.cooling_temp is not None:
+                camera_cooling = camera_config.get('cooling', {})
+                camera_cooling['target_temperature'] = args.cooling_temp
+                logger.info(f"Cooling target temperature set to {args.cooling_temp}°C")
+            
+            if args.wait_for_cooling:
+                cooling_config['wait_for_cooling'] = True
+                logger.info("Waiting for temperature stabilization enabled")
+            
+            if args.cooling_timeout != 300:
+                cooling_config['cooling_timeout'] = args.cooling_timeout
+                logger.info(f"Cooling timeout set to {args.cooling_timeout} seconds")
+            
+            if args.warmup_at_end:
+                cooling_config['warmup_at_end'] = True
+                logger.info("Warmup at end enabled")
+            
+            logger.info("Camera cooling enabled")
+        
         # Create and run overlay runner
         runner = OverlayRunner(config=config, logger=logger)
         
         logger.info("Starting Overlay Runner with image combination...")
+        if args.enable_cooling:
+            logger.info("Cooling management enabled")
         logger.info("Press Ctrl+C to stop")
         
-        # Run the overlay runner
-        runner.run()
+        # Start observation session
+        start_status = runner.start_observation()
+        if not start_status.is_success:
+            logger.error(f"Failed to start observation: {start_status.message}")
+            sys.exit(1)
         
+        # Run the overlay runner
+        try:
+            runner.run()
+        except KeyboardInterrupt:
+            logger.info("\nStopping observation session...")
+            
+            # Stop observation with warmup if enabled
+            stop_status = runner.stop_observation()
+            if stop_status.is_success:
+                logger.info("✅ Observation session stopped successfully")
+            else:
+                logger.warning(f"Session stop: {stop_status.message}")
+            
+            logger.info("Stopped by user")
+            
     except KeyboardInterrupt:
         logger.info("\nStopped by user")
     except Exception as e:

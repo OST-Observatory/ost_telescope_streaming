@@ -1,8 +1,99 @@
-# OST Telescope Streaming Configuration
-# =====================================
+# Main Configuration File
+# This is the default configuration file for the telescope streaming system
 
-# Telescope Mount Settings
-# ------------------------
+# =============================================================================
+# CAMERA CONFIGURATION (Unified for all operations)
+# =============================================================================
+camera:
+  # Camera type and basic settings
+  camera_type: "opencv"  # "ascom", "alpaca", or "opencv"
+  
+  # General camera settings
+  file_format: "PNG"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+  
+  # Sensor specifications (important for calibration)
+  sensor_width: 6.17     # Sensor width in mm
+  sensor_height: 4.55    # Sensor height in mm
+  pixel_size: 3.75       # Pixel size in micrometers
+  type: "color"          # Camera type (mono, color)
+  bit_depth: 8           # Bit depth
+  
+  # Cooling settings
+  cooling:
+    enable_cooling: false
+    target_temperature: -10.0  # Target temperature in °C
+    wait_for_cooling: true     # Wait for temperature stabilization
+    cooling_timeout: 300       # Timeout for cooling stabilization in seconds
+    stabilization_tolerance: 1.0  # Temperature tolerance in °C
+    warmup_rate: 2.0          # Warmup rate in °C per minute
+    warmup_final_temp: 15.0   # Final temperature for warmup
+    warmup_at_end: true       # Start warmup when stopping observation
+  
+  # ASCOM camera settings
+  ascom:
+    ascom_driver: "ASCOM.MyCamera.Camera"  # ASCOM driver ID for astro cameras
+    exposure_time: 0.1  # Manual exposure time in seconds
+    gain: 1.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
+    filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
+    
+  # Alpaca camera settings
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 1.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: [1, 1]  # Binning factor [x, y] for Alpaca
+    
+  # OpenCV camera settings
+  opencv:
+    camera_index: 0  # Camera device index
+    exposure_time: 0.1  # Exposure time in seconds
+    gain: 1.0  # Gain setting
+    resolution: [1920, 1080]  # Resolution [width, height]
+    frame_rate: 30  # Frame rate
+
+# =============================================================================
+# VIDEO CONFIGURATION (Frame capture and processing)
+# =============================================================================
+video:
+  video_enabled: True
+  
+  # Frame saving settings
+  use_timestamps: False  # Enable timestamps in frame filenames
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
+  use_capture_count: False  # Enable capture count in frame filenames
+  
+  # Processing settings
+  auto_debayer: False  # Auto-debayer color images
+  debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
+  
+  # Output settings
+  output_dir: "captured_frames"  # Directory for captured frames
+  cache_dir: "cache"  # Directory for temporary files
+
+# =============================================================================
+# TELESCOPE CONFIGURATION
+# =============================================================================
+telescope:
+  # Focal length in millimeters
+  focal_length: 1000
+  # Aperture diameter in millimeters
+  aperture: 200
+  # Telescope type (refractor, reflector, etc.)
+  type: "reflector"
+  # Focal ratio (focal_length / aperture)
+  focal_ratio: 5.0
+
+# =============================================================================
+# MOUNT CONFIGURATION
+# =============================================================================
 mount:
   # ASCOM driver program ID
   driver_id: "ASCOM.tenmicron_mount.Telescope"
@@ -18,172 +109,94 @@ mount:
     wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
     check_interval: 1.0  # Interval between slewing checks in seconds
 
-# Telescope Parameters
-# -------------------
-telescope:
-  # Focal length in millimeters
-  focal_length: 1000
-  # Aperture diameter in millimeters
-  aperture: 200
-  # Telescope type (refractor, reflector, etc.)
-  type: "reflector"
-  # Focal ratio (focal_length / aperture)   TODO: Replace with calculation
-  focal_ratio: 5.0
-
-# Camera Parameters
-# ----------------
-camera:
-  # Sensor width in millimeters
-  sensor_width: 6.17
-  # Sensor height in millimeters
-  sensor_height: 4.55
-  # Pixel size in micrometers
-  pixel_size: 3.75
-  # Camera type (mono, color, etc.)
-  type: "color"
-  # Bit depth
-  bit_depth: 8
-
-# Video Capture Settings
-# ---------------------
-video:
-  video_enabled: true
-  camera_type: "opencv"  # or "ascom"
-
-  # Settings only for OpenCV cameras
-  opencv:
-    camera_index: 0
-    frame_width: 1920  # Frame width in pixels
-    frame_height: 1080  # Frame height in pixels
-    fps: 30  # Frames per second
-    auto_exposure: true  # Enable auto exposure
-    exposure_time: 0.1  # Manual exposure time in seconds
-    gain: 1.0  # Gain setting
-
-  # Settings only for ASCOM cameras
-  ascom:
-    ascom_driver: "ASCOM.MyCamera.Camera"  # ASCOM driver ID for astro cameras
-    exposure_time: 0.1  # Manual exposure time in seconds
-    gain: 1.0  # Gain setting
-    binning: 1  # Binning factor (1x1, 2x2, etc.)
-    # Optional: Separate filter wheel driver (e.g., for QHY cameras)
-    # filter_wheel_driver: "ASCOM.QHYCCD.FilterWheel"  # Uncomment and set if needed
-
-  # Frame saving settings
-  use_timestamps: false  # Enable timestamps in frame filenames
-  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
-  use_capture_count: false  # Enable capture count in frame filenames
-  file_format: "png"  # File format for saved frames (jpg, png, tiff, etc.)
-
-# Plate-Solving Settings
-# ----------------------
+# =============================================================================
+# PLATE SOLVING CONFIGURATION
+# =============================================================================
 plate_solve:
-  # General plate-solving settings
-  auto_solve: true
+  auto_solve: True
   min_solve_interval: 30
-  save_plate_solve_frames: true
+  save_plate_solve_frames: True
   plate_solve_dir: "plate_solve_frames"
   default_solver: "platesolve2"
-
+  
   # Settings for PlateSolve2
   platesolve2:
     executable_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
     working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
     timeout: 60
-    verbose: true
-    auto_mode: true
+    verbose: True
+    auto_mode: True
     number_of_regions: 999
     min_stars: 20
     max_stars: 200
-
+  
   # Settings for Astrometry.net
   astrometry:
     api_key: ""
     api_url: "http://nova.astrometry.net/api/"
 
-# Overlay Generation Settings
-# ---------------------------
+# =============================================================================
+# OVERLAY CONFIGURATION
+# =============================================================================
 overlay:
   # Wait indefinitely for plate-solving results before generating overlay
-  wait_for_plate_solve: true
+  wait_for_plate_solve: True
   # Field of view in degrees (default if not provided by plate-solving)
   field_of_view: 1.5
   # Maximum magnitude of objects to display
   magnitude_limit: 9.0
   # Include objects without magnitude (e.g. galaxies)
-  include_no_magnitude: false
-  # Object types to include (empty = all types)
-  object_types: []
-  # Image size in pixels (width, height)
+  include_no_magnitude: False
+  # Image size for overlay generation
   image_size: [1920, 1080]
-  # Font size for object labels
+  # Font size for text
   font_size: 14
-  # Output file format (e.g. png, jpg)
+  # Output format for overlays
   output_format: "png"
-  # Default output filename
+  # Default filename for overlays
   default_filename: "overlay.png"
-  # Maximum length for object names (truncate if longer)
+  # Maximum length for object names
   max_name_length: 15
-  # Enable timestamped filenames for overlays
-  use_timestamps: false
-  # Timestamp format for filenames
+  # Use timestamps in overlay filenames
+  use_timestamps: False
+  # Timestamp format for overlay filenames
   timestamp_format: "%Y%m%d_%H%M%S"
-
-  # Update settings (controls overlay update logic)
+  # Update settings
   update:
-    # Interval between overlay updates in seconds
     update_interval: 30
-    # Maximum consecutive failures before stopping
     max_retries: 3
-    # Delay between retry attempts in seconds
     retry_delay: 5
-
-  # Display settings (controls overlay appearance)
+  # Display settings
   display:
-    # Object marker color (RGB)
-    object_color: [255, 0, 0]  # Red
-    # Text color (RGB)
-    text_color: [255, 255, 255]  # White
-    # Object marker size in pixels
+    object_color: [255, 0, 0]
+    text_color: [255, 255, 255]
     marker_size: 5
-    # Text offset from marker in pixels
     text_offset: [8, -8]
 
-# Logging Settings
-# ----------------
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
 logging:
-  # Enable detailed logging
-  verbose: true
-  # Log level: DEBUG, INFO, WARNING, ERROR
+  verbose: True
   level: "INFO"
-  # Log to file
-  log_to_file: false
-  # Log file path
+  show_emojis: False
+  log_to_file: False
   log_file: "telescope_streaming.log"
 
-# Platform Settings
-# -----------------
+# =============================================================================
+# PLATFORM CONFIGURATION
+# =============================================================================
 platform:
-  # Font paths for different operating systems
   fonts:
-    windows:
-      - "arial.ttf"
-      - "C:/Windows/Fonts/arial.ttf"
-    linux:
-      - "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-      - "/usr/share/fonts/TTF/arial.ttf"
-    macos:
-      - "/System/Library/Fonts/Arial.ttf"
-      - "/Library/Fonts/Arial.ttf"
+    windows: ["arial.ttf", "C:/Windows/Fonts/arial.ttf"]
+    linux: ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/arial.ttf"]
+    macos: ["/System/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial.ttf"]
 
-# Advanced Settings
-# -----------------
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
 advanced:
-  # Enable coordinate transformation debugging
-  debug_coordinates: false
-  # Enable SIMBAD query debugging
-  debug_simbad: true
-  # Save empty overlays when no objects found
-  save_empty_overlays: true
-  # Enable automatic error recovery
-  auto_recovery: true 
+  debug_coordinates: False
+  debug_simbad: False
+  save_empty_overlays: True
+  auto_recovery: True 

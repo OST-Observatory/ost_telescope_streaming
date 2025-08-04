@@ -271,75 +271,105 @@ class ConfigManager:
         """
         return self.config.get('telescope', {})
     
-    def get_camera_config(self) -> dict[str, Any]:
-        """Get camera configuration.
+    def get_camera_config(self):
+        """Get camera configuration."""
+        camera_config = self.config.get('camera', {})
         
-        Returns:
-            dict: Camera configuration settings
-        """
-        return self.config.get('camera', {
-            'sensor_width': 6.17,              # Sensor width in mm
-            'sensor_height': 4.55,             # Sensor height in mm
-            'pixel_size': 3.75,                # Pixel size in micrometers
-            'type': 'color',                   # Camera type (mono, color)
-            'bit_depth': 8,                    # Bit depth
-            'cooling': {                       # Cooling settings for ASCOM cameras
-                'enable_cooling': False,       # Enable camera cooling
-                'target_temperature': -10.0,   # Target temperature in Celsius
-                'auto_cooling': True,          # Auto-cooling mode
-                'cooling_timeout': 300,        # Cooling timeout in seconds
-                'temperature_tolerance': 1.0,  # Temperature tolerance in Celsius
-                'wait_for_cooling': True       # Wait for target temperature before capture
-            }
-        })
-    
-    def get_video_config(self):
-        """Get video configuration with support for all camera types."""
-        video_config = self.config.get('video', {})
-        
-        # Add OpenCV defaults
-        if 'opencv' not in video_config:
-            video_config['opencv'] = {
-                'camera_index': 0,
-                'frame_width': 1920,
-                'frame_height': 1080,
-                'fps': 30,
-                'exposure_time': 0.1
-            }
-        
-        # Add ASCOM defaults
-        if 'ascom' not in video_config:
-            video_config['ascom'] = {
-                'ascom_driver': 'ASCOM.ASICamera2.Camera',
-                'exposure_time': 1.0,
+        # Set defaults for missing values
+        defaults = {
+            'camera_type': 'opencv',
+            'file_format': 'FITS',  # General file format
+            'sensor_width': 23.5,    # Sensor width in mm
+            'sensor_height': 15.7,   # Sensor height in mm
+            'pixel_size': 3.76,      # Pixel size in micrometers
+            'type': 'color',         # Camera type (mono, color)
+            'bit_depth': 16,         # Bit depth
+            'cooling': {
+                'enable_cooling': False,
+                'target_temperature': -10.0,
+                'wait_for_cooling': True,
+                'cooling_timeout': 300,
+                'stabilization_tolerance': 1.0,
+                'warmup_rate': 2.0,
+                'warmup_final_temp': 15.0,
+                'warmup_at_end': True
+            },
+            'ascom': {
+                'ascom_driver': 'ASCOM.ZWOASI.Camera',
+                'exposure_time': 5.0,
                 'gain': 100.0,
                 'offset': 50.0,
+                'readout_mode': 0,
                 'binning': 1,
-                'filter_wheel_driver': None,
-                'use_timestamps': True,
-                'timestamp_format': '%Y%m%d_%H%M%S',
-                'use_capture_count': False,
-                'file_format': 'fits'
-            }
-        
-        # Add Alpyca defaults
-        if 'alpaca' not in video_config:
-            video_config['alpaca'] = {
+                'filter_wheel_driver': None
+            },
+            'alpaca': {
                 'host': 'localhost',
                 'port': 11111,
                 'device_id': 0,
-                'exposure_time': 1.0,
+                'exposure_time': 5.0,
                 'gain': 100.0,
                 'offset': 50.0,
-                'binning': 1,
-                'use_timestamps': True,
-                'timestamp_format': '%Y%m%d_%H%M%S',
-                'file_format': 'fits'
+                'readout_mode': 0,
+                'binning': [1, 1]
+            },
+            'opencv': {
+                'camera_index': 0,
+                'exposure_time': 1.0,
+                'gain': 100.0,
+                'resolution': [1920, 1080],
+                'frame_rate': 30
             }
+        }
         
-        # Set default camera type if not specified
-        if 'camera_type' not in video_config:
-            video_config['camera_type'] = 'opencv'
+        # Merge with defaults
+        for key, default_value in defaults.items():
+            if key not in camera_config:
+                camera_config[key] = default_value
+            elif isinstance(default_value, dict) and isinstance(camera_config[key], dict):
+                # Recursively merge nested dictionaries
+                for sub_key, sub_default in default_value.items():
+                    if sub_key not in camera_config[key]:
+                        camera_config[key][sub_key] = sub_default
+        
+        return camera_config
+    
+    def get_video_config(self):
+        """Get video configuration."""
+        video_config = self.config.get('video', {})
+        
+        # Set defaults for missing values
+        defaults = {
+            'video_enabled': True,
+            'use_timestamps': False,
+            'timestamp_format': '%Y%m%d_%H%M%S',
+            'use_capture_count': False,
+            'auto_debayer': False,
+            'debayer_method': 'RGGB',
+            'output_dir': 'captured_frames',
+            'cache_dir': 'cache'
+        }
+        
+        # Merge with defaults
+        for key, default_value in defaults.items():
+            if key not in video_config:
+                video_config[key] = default_value
+        
+        # Get camera type from camera config
+        camera_config = self.get_camera_config()
+        video_config['camera_type'] = camera_config.get('camera_type', 'opencv')
+        
+        # Add camera-specific settings based on camera type
+        camera_type = video_config['camera_type']
+        if camera_type == 'ascom':
+            ascom_config = camera_config.get('ascom', {})
+            video_config['ascom'] = ascom_config
+        elif camera_type == 'alpaca':
+            alpaca_config = camera_config.get('alpaca', {})
+            video_config['alpaca'] = alpaca_config
+        elif camera_type == 'opencv':
+            opencv_config = camera_config.get('opencv', {})
+            video_config['opencv'] = opencv_config
         
         return video_config
     

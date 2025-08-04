@@ -1,8 +1,99 @@
-# OST Telescope Streaming Configuration
-# =====================================
+# ASI2600MC Pro Configuration
+# Configuration for ZWO ASI2600MC Pro camera with 80mm APO telescope
 
-# Telescope Mount Settings
-# ------------------------
+# =============================================================================
+# CAMERA CONFIGURATION (Unified for all operations)
+# =============================================================================
+camera:
+  # Camera type and basic settings
+  camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
+  
+  # General camera settings
+  file_format: "FITS"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+  
+  # Sensor specifications (important for calibration)
+  sensor_width: 23.5     # Sensor width in mm
+  sensor_height: 15.7    # Sensor height in mm
+  pixel_size: 3.76       # Pixel size in micrometers
+  type: "color"          # Camera type (mono, color)
+  bit_depth: 16          # Bit depth
+  
+  # Cooling settings for ASCOM cameras
+  cooling:
+    enable_cooling: true           # Enable camera cooling
+    target_temperature: -10.0      # Target temperature in Celsius
+    wait_for_cooling: true         # Wait for target temperature before capture
+    cooling_timeout: 300           # Cooling timeout in seconds
+    stabilization_tolerance: 1.0   # Temperature tolerance in Celsius
+    warmup_rate: 2.0              # Warmup rate in °C per minute
+    warmup_final_temp: 15.0       # Final temperature for warmup
+    warmup_at_end: true           # Start warmup when stopping observation
+  
+  # ASCOM camera settings
+  ascom:
+    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
+    exposure_time: 10.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
+    filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
+    
+  # Alpaca camera settings
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 10.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: [1, 1]  # Binning factor [x, y] for Alpaca
+    
+  # OpenCV camera settings
+  opencv:
+    camera_index: 0  # Camera device index
+    exposure_time: 0.1  # Exposure time in seconds
+    gain: 1.0  # Gain setting
+    resolution: [1920, 1080]  # Resolution [width, height]
+    frame_rate: 30  # Frame rate
+
+# =============================================================================
+# VIDEO CONFIGURATION (Frame capture and processing)
+# =============================================================================
+video:
+  video_enabled: true
+  
+  # Frame saving settings
+  use_timestamps: false  # Enable timestamps in frame filenames
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
+  use_capture_count: false  # Enable capture count in frame filenames
+  
+  # Processing settings
+  auto_debayer: false  # Auto-debayer color images
+  debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
+  
+  # Output settings
+  output_dir: "captured_frames"  # Directory for captured frames
+  cache_dir: "cache"  # Directory for temporary files
+
+# =============================================================================
+# TELESCOPE CONFIGURATION
+# =============================================================================
+telescope:
+  # Focal length in millimeters
+  focal_length: 400  # 80mm APO with 5x focal ratio
+  # Aperture diameter in millimeters
+  aperture: 80
+  # Telescope type (refractor, reflector, etc.)
+  type: "refractor"
+  # Focal ratio (focal_length / aperture)
+  focal_ratio: 5.0
+
+# =============================================================================
+# MOUNT CONFIGURATION
+# =============================================================================
 mount:
   # ASCOM driver program ID
   driver_id: "ASCOM.tenmicron_mount.Telescope"
@@ -14,89 +105,13 @@ mount:
   slewing_detection:
     enabled: true  # Enable slewing detection to prevent captures during movement
     check_before_capture: true  # Check slewing status before each capture
-    wait_for_completion: true  # Wait for slewing to complete before capturing
+    wait_for_completion: false  # Wait for slewing to complete before capturing
     wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
     check_interval: 1.0  # Interval between slewing checks in seconds
 
-# Telescope Parameters
-# -------------------
-telescope:
-  # Focal length in millimeters
-  focal_length: 480
-  # Aperture diameter in millimeters
-  aperture: 80
-  # Telescope type (refractor, reflector, etc.)
-  type: "reflector"
-  # Focal ratio (focal_length / aperture)   TODO: Replace with calculation
-  focal_ratio: 6.0
-
-# Camera Parameters
-# ----------------
-camera:
-  # Sensor width in millimeters
-  sensor_width: 23.5
-  # Sensor height in millimeters
-  sensor_height: 15.7
-  # Pixel size in micrometers
-  pixel_size: 3.76
-  # Camera type (mono, color, etc.)
-  type: "color"
-  # Bit depth
-  bit_depth: 16
-  # Cooling settings for ASCOM cameras
-  cooling:
-    enable_cooling: true           # Enable camera cooling
-    target_temperature: -10.0      # Target temperature in Celsius
-    auto_cooling: true             # Auto-cooling mode
-    cooling_timeout: 300           # Cooling timeout in seconds
-    temperature_tolerance: 1.0     # Temperature tolerance in Celsius
-    wait_for_cooling: true         # Wait for target temperature before capture
-
-# Video Capture Settings
-# ---------------------
-video:
-  video_enabled: true
-  camera_type: "alpaca"  # or "ascom"
-
-  # Settings only for OpenCV cameras
-  opencv:
-    camera_index: 0
-    frame_width: 1920  # Frame width in pixels
-    frame_height: 1080  # Frame height in pixels
-    fps: 30  # Frames per second
-    auto_exposure: true  # Enable auto exposure
-    exposure_time: 0.1  # Manual exposure time in seconds
-    gain: 1.0  # Gain setting
-
-  # Settings only for Alpyca cameras
-  alpaca:
-    host: "localhost"
-    port: 11111
-    device_id: 0
-    exposure_time: 10.0
-    gain: 100.0
-    offset: 50.0
-    binning: 1
-
-  # Settings only for ASCOM cameras
-  ascom:
-    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
-    exposure_time: 10.0  # Manual exposure time in seconds
-    gain: 100.0  # Gain setting
-    offset: 50  # Offset setting (0-255 typically)
-    readout_mode: 0  # Readout mode (camera-specific)
-    binning: 1  # Binning factor (1x1, 2x2, etc.)
-    # Separate filter wheel driver for QHY cameras
-    # filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver
-
-  # Frame saving settings
-  use_timestamps: false  # Enable timestamps in frame filenames
-  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
-  use_capture_count: false  # Enable capture count in frame filenames
-  file_format: "png"  # File format for saved frames (fits, jpg, png, tiff, etc.)
-
-# Plate-Solving Settings
-# ----------------------
+# =============================================================================
+# PLATE SOLVING CONFIGURATION
+# =============================================================================
 plate_solve:
   # General plate-solving settings
   auto_solve: true
@@ -121,8 +136,9 @@ plate_solve:
     api_key: ""
     api_url: "http://nova.astrometry.net/api/"
 
-# Overlay Generation Settings
-# ---------------------------
+# =============================================================================
+# OVERLAY CONFIGURATION
+# =============================================================================
 overlay:
   # Wait indefinitely for plate-solving results before generating overlay
   wait_for_plate_solve: true
@@ -132,78 +148,56 @@ overlay:
   magnitude_limit: 9.0
   # Include objects without magnitude (e.g. galaxies)
   include_no_magnitude: false
-  # Object types to include (empty = all types)
-  object_types: []
-  # Image size in pixels (width, height)
-  image_size: [1920, 1080]
-  # Font size for object labels
+  # Image size for overlay generation
+  image_size: [6248, 4176]  # Full sensor resolution
+  # Font size for text
   font_size: 14
-  # Output file format (e.g. png, jpg)
+  # Output format for overlays
   output_format: "png"
-  # Default output filename
+  # Default filename for overlays
   default_filename: "overlay.png"
-  # Maximum length for object names (truncate if longer)
+  # Maximum length for object names
   max_name_length: 15
-  # Enable timestamped filenames for overlays
+  # Use timestamps in overlay filenames
   use_timestamps: false
-  # Timestamp format for filenames
+  # Timestamp format for overlay filenames
   timestamp_format: "%Y%m%d_%H%M%S"
-
-  # Update settings (controls overlay update logic)
+  # Update settings
   update:
-    # Interval between overlay updates in seconds
     update_interval: 30
-    # Maximum consecutive failures before stopping
     max_retries: 3
-    # Delay between retry attempts in seconds
     retry_delay: 5
-
-  # Display settings (controls overlay appearance)
+  # Display settings
   display:
-    # Object marker color (RGB)
-    object_color: [255, 0, 0]  # Red
-    # Text color (RGB)
-    text_color: [255, 255, 255]  # White
-    # Object marker size in pixels
-    marker_size: 20
-    # Text offset from marker in pixels
+    object_color: [255, 0, 0]
+    text_color: [255, 255, 255]
+    marker_size: 5
     text_offset: [8, -8]
 
-# Logging Settings
-# ----------------
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
 logging:
-  # Enable detailed logging
   verbose: true
-  # Log level: DEBUG, INFO, WARNING, ERROR
   level: "INFO"
-  # Log to file
+  show_emojis: false
   log_to_file: false
-  # Log file path
   log_file: "telescope_streaming.log"
 
-# Platform Settings
-# -----------------
+# =============================================================================
+# PLATFORM CONFIGURATION
+# =============================================================================
 platform:
-  # Font paths for different operating systems
   fonts:
-    windows:
-      - "arial.ttf"
-      - "C:/Windows/Fonts/arial.ttf"
-    linux:
-      - "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-      - "/usr/share/fonts/TTF/arial.ttf"
-    macos:
-      - "/System/Library/Fonts/Arial.ttf"
-      - "/Library/Fonts/Arial.ttf"
+    windows: ["arial.ttf", "C:/Windows/Fonts/arial.ttf"]
+    linux: ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/arial.ttf"]
+    macos: ["/System/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial.ttf"]
 
-# Advanced Settings
-# -----------------
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
 advanced:
-  # Enable coordinate transformation debugging
   debug_coordinates: false
-  # Enable SIMBAD query debugging
-  debug_simbad: true
-  # Save empty overlays when no objects found
+  debug_simbad: false
   save_empty_overlays: true
-  # Enable automatic error recovery
   auto_recovery: true 

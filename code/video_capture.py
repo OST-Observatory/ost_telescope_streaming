@@ -23,115 +23,53 @@ from calibration_applier import CalibrationApplier
 class VideoCapture:
     """Video capture class for telescope streaming."""
     
-    def __init__(self, config=None, logger=None):
-        """Initialises the video capture system."""
-        self.cap = None
-        self.is_capturing = False
-        self.current_frame = None
-        self.frame_lock = threading.Lock()
+    def __init__(self, config, logger=None):
+        """Initialize video capture with cooling support."""
+        self.config = config
+        self.logger = logger or logging.getLogger(__name__)
         
-        # Load configuration
-        # Only create default config if no config is provided
-        # This prevents loading config.yaml when config is passed from tests
-        if config is None:
-            default_config = ConfigManager()
-        else:
-            default_config = None
+        # Video configuration
+        video_config = config.get_video_config()
+        self.camera_type = video_config.get('camera_type', 'opencv')
+        self.camera_index = video_config.get('camera_index', 0)
+        self.exposure_time = video_config.get('exposure_time', 1.0)
+        self.gain = video_config.get('gain', 100.0)
+        self.offset = video_config.get('offset', 50.0)
+        self.readout_mode = video_config.get('readout_mode', 0)
+        self.binning = video_config.get('binning', [1, 1])
+        self.frame_rate = video_config.get('frame_rate', 30)
+        self.resolution = video_config.get('resolution', [1920, 1080])
+        self.video_enabled = video_config.get('video_enabled', True)
         
-        self.config = config or default_config
+        # Cooling configuration
+        cooling_config = self.config.get_camera_config().get('cooling', {})
+        self.enable_cooling = cooling_config.get('enable_cooling', False)
+        self.wait_for_cooling = cooling_config.get('wait_for_cooling', True)
+        self.cooling_timeout = cooling_config.get('cooling_timeout', 300)
         
-        # Use provided logger or get logger with proper name
-        if logger:
-            self.logger = logger
-        else:
-            # Get logger with module name for better identification
-            self.logger = logging.getLogger(__name__)
-            # Ensure logger has proper level if root logger is configured
-            if logging.getLogger().handlers:
-                self.logger.setLevel(logging.getLogger().level)
+        # Camera objects
+        self.camera = None
+        self.cooling_manager = None
         
-        self.video_config = self.config.get_video_config()
-        self.camera_config = self.config.get_camera_config()
-        self.telescope_config = self.config.get_telescope_config()
-        self.camera_type = self.video_config.get('camera_type', 'opencv')
-        if self.camera_type == 'opencv':
-            cam_cfg = self.video_config.get('opencv', {})
-            self.camera_index = cam_cfg.get('camera_index', 0)
-            self.frame_width = cam_cfg.get('frame_width', 1920)
-            self.frame_height = cam_cfg.get('frame_height', 1080)
-            self.fps = cam_cfg.get('fps', 30)
-            self.auto_exposure = cam_cfg.get('auto_exposure', True)
-            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
-            self.gain = cam_cfg.get('gain', 1.0)
-        elif self.camera_type == 'ascom':
-            cam_cfg = self.video_config.get('ascom', {})
-            self.ascom_driver = cam_cfg.get('ascom_driver', None)
-            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
-            self.gain = cam_cfg.get('gain', 1.0)
-            self.offset = cam_cfg.get('offset', 0)                    # Offset setting
-            self.readout_mode = cam_cfg.get('readout_mode', 0)        # Readout mode
-            # Set default values for ASCOM cameras
-            self.camera_index = None  # ASCOM cameras don't use camera_index
-            self.frame_width = 1920   # Will be updated from camera
-            self.frame_height = 1080  # Will be updated from camera
-            self.fps = 1              # ASCOM cameras typically use 1 FPS for long exposures
-            self.auto_exposure = False # ASCOM cameras use manual exposure
-        elif self.camera_type == 'alpaca':
-            cam_cfg = self.video_config.get('alpaca', {})
-            self.alpaca_host = cam_cfg.get('host', 'localhost')
-            self.alpaca_port = cam_cfg.get('port', 11111)
-            self.alpaca_device_id = cam_cfg.get('device_id', 0)
-            self.exposure_time = cam_cfg.get('exposure_time', 0.1)
-            self.gain = cam_cfg.get('gain', 1.0)
-            self.offset = cam_cfg.get('offset', 0)
-            self.readout_mode = cam_cfg.get('readout_mode', 0)
-            # Set default values for Alpyca cameras
-            self.camera_index = None  # Alpyca cameras don't use camera_index
-            self.frame_width = 1920 # Default for Alpaca
-            self.frame_height = 1080 # Default for Alpaca
-            self.fps = 30 # Default for Alpaca
-            self.auto_exposure = False # Alpyca cameras typically use manual exposure
-        # Remove any remaining German comments and ensure all are in English
+        # Calibration
+        self.calibration_applier = CalibrationApplier(config, logger)
         
-        # Telescope parameters for FOV calculation
-        self.focal_length = self.telescope_config.get('focal_length', 1000)  # mm
-        self.aperture = self.telescope_config.get('aperture', 200)  # mm
-        self.sensor_width = self.camera_config.get('sensor_width', 6.17)  # mm
-        self.sensor_height = self.camera_config.get('sensor_height', 4.55)  # mm
+        # Directories
+        self._ensure_directories()
         
-        # Calculate field of view
-        self.fov_width, self.fov_height = self._calculate_field_of_view()
+        # Initialize camera
+        self._initialize_camera()
         
-        # Video capture settings
-        self.capture_enabled = self.config.get_plate_solve_config().get('auto_solve', False)
-        self.capture_interval = self.config.get_plate_solve_config().get('min_solve_interval', 60)  # seconds
-        
-        # Logger is already set up above
-        
-        self.ascom_camera = None
-        self.alpaca_camera = None
-        
-        # Initialize calibration applier
-        self.calibration_applier = CalibrationApplier(config=self.config, logger=self.logger)
-        
-        # Initialize cooling settings
-        self.camera_config = self.config.get_camera_config()
-        self.cooling_config = self.camera_config.get('cooling', {})
-        self.enable_cooling = self.cooling_config.get('enable_cooling', False)
-        self.target_temperature = self.cooling_config.get('target_temperature', -10.0)
-        self.auto_cooling = self.cooling_config.get('auto_cooling', True)
-        self.cooling_timeout = self.cooling_config.get('cooling_timeout', 300)
-        self.temperature_tolerance = self.cooling_config.get('temperature_tolerance', 1.0)
-        self.wait_for_cooling = self.cooling_config.get('wait_for_cooling', True)
-        
-        # Create output directories
-        self._create_output_directories()
+        # Initialize cooling if enabled
+        if self.enable_cooling and self.camera:
+            from cooling_manager import create_cooling_manager
+            self.cooling_manager = create_cooling_manager(self.camera, config, logger)
     
-    def _create_output_directories(self):
+    def _ensure_directories(self):
         """Create necessary output directories."""
         try:
             # Create captured frames directory
-            output_dir = Path(self.video_config.get('output_directory', 'captured_frames'))
+            output_dir = Path(self.config.get_video_config().get('output_directory', 'captured_frames'))
             output_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Output directory ready: {output_dir}")
             
@@ -143,104 +81,20 @@ class VideoCapture:
         except Exception as e:
             self.logger.warning(f"Failed to create output directories: {e}")
     
-    def _calculate_field_of_view(self) -> tuple[float, float]:
-        """Calculates the field of view (FOV) in degrees based on telescope and camera parameters.
-        Returns:
-            tuple: (FOV width in degrees, FOV height in degrees)
-        """
-        # Convert sensor dimensions to degrees
-        # FOV = 2 * arctan(sensor_size / (2 * focal_length))
-        fov_width_rad = 2 * np.arctan(self.sensor_width / (2 * self.focal_length))
-        fov_height_rad = 2 * np.arctan(self.sensor_height / (2 * self.focal_length))
-        
-        # Convert to degrees
-        fov_width_deg = np.degrees(fov_width_rad)
-        fov_height_deg = np.degrees(fov_height_rad)
-        
-        self.logger.info(f"Calculated FOV: {fov_width_deg:.3f}° x {fov_height_deg:.3f}°")
-        return fov_width_deg, fov_height_deg
-    
-    def get_field_of_view(self) -> tuple[float, float]:
-        """Returns the current field of view (FOV) in degrees."""
-        return self.fov_width, self.fov_height
-    
-    def get_sampling_arcsec_per_pixel(self) -> float:
-        """Calculates the sampling in arcseconds per pixel."""
-        # arcsec/pixel = (206265 * pixel_size) / focal_length
-        # pixel_size = sensor_size / pixel_count
-        pixel_size_width = self.sensor_width / self.frame_width
-        pixel_size_height = self.sensor_height / self.frame_height
-        
-        # Use average pixel size
-        avg_pixel_size = (pixel_size_width + pixel_size_height) / 2
-        
-        sampling = (206265 * avg_pixel_size) / self.focal_length
-        return sampling
-    
-    def connect(self) -> CameraStatus:
-        """Connects to the video camera."""
-        if self.camera_type == 'ascom' and self.ascom_driver:
-            cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
-            status = cam.connect()
-            if status.is_success:
-                self.ascom_camera = cam
-                
-                # Get actual camera dimensions from ASCOM camera
-                try:
-                    # Get native sensor dimensions from ASCOM camera
-                    native_width = cam.camera.CameraXSize
-                    native_height = cam.camera.CameraYSize
-                    
-                    # Get binning from config
-                    ascom_config = self.video_config.get('ascom', {})
-                    binning = ascom_config.get('binning', 1)
-                    
-                    # Calculate effective dimensions with binning
-                    self.frame_width = native_width // binning
-                    self.frame_height = native_height // binning
-                    
-                    self.logger.info(f"ASCOM camera dimensions: {self.frame_width}x{self.frame_height} (native: {native_width}x{native_height}, binning: {binning}x{binning})")
-                    
-                    # Set the subframe to use the full sensor with binning
-                    cam.camera.NumX = self.frame_width
-                    cam.camera.NumY = self.frame_height
-                    cam.camera.StartX = 0
-                    cam.camera.StartY = 0
-                    
-                except Exception as e:
-                    self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
-                    # Use default dimensions from config
-                    self.frame_width = 1920
-                    self.frame_height = 1080
-                
-                self.logger.info("ASCOM camera connected")
-                
-                # Initialize cooling system if supported and enabled
-                cooling_status = self.initialize_cooling()
-                if not cooling_status.is_success:
-                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
-                
-                return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
-            else:
-                self.ascom_camera = None
-                self.logger.error(f"ASCOM camera connection failed: {status.message}")
-                return error_status(f"ASCOM camera connection failed: {status.message}", details={'driver': self.ascom_driver})
-        elif self.camera_type == 'alpaca' and self.alpaca_camera:
-            # Alpaca camera is already connected in __init__ if config is provided
-            self.logger.info("Alpaca camera already connected")
-            return success_status("Alpaca camera already connected")
-        try:
+    def _initialize_camera(self) -> CameraStatus:
+        """Initialize the video camera."""
+        if self.camera_type == 'opencv':
             self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
                 self.logger.error(f"Failed to open camera {self.camera_index}")
                 return error_status(f"Failed to open camera {self.camera_index}", details={'camera_index': self.camera_index})
             
             # Set camera properties
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-            self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+            self.cap.set(cv2.CAP_PROP_FPS, self.frame_rate)
             
-            if not self.auto_exposure:
+            if not self.enable_cooling: # OpenCV cameras don't have auto-exposure
                 self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
                 # Convert seconds to OpenCV exposure units (typically microseconds)
                 exposure_cv = int(self.exposure_time * 1000000)  # Convert seconds to microseconds
@@ -261,25 +115,202 @@ class VideoCapture:
             
             return success_status("Camera connected", details={'camera_index': self.camera_index, 'resolution': f'{actual_width}x{actual_height}', 'fps': actual_fps})
             
+        elif self.camera_type == 'ascom':
+            cam_cfg = self.config.get_camera_config()
+            self.ascom_driver = cam_cfg.get('ascom_driver', None)
+            if not self.ascom_driver:
+                return error_status("ASCOM driver ID not configured")
+            
+            cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
+            status = cam.connect()
+            if status.is_success:
+                self.camera = cam
+                
+                # Get actual camera dimensions from ASCOM camera
+                try:
+                    # Get native sensor dimensions from ASCOM camera
+                    native_width = cam.camera.CameraXSize
+                    native_height = cam.camera.CameraYSize
+                    
+                    # Get binning from config
+                    ascom_config = self.config.get_video_config().get('ascom', {})
+                    binning = ascom_config.get('binning', 1)
+                    
+                    # Calculate effective dimensions with binning
+                    self.resolution[0] = native_width // binning
+                    self.resolution[1] = native_height // binning
+                    
+                    self.logger.info(f"ASCOM camera dimensions: {self.resolution[0]}x{self.resolution[1]} (native: {native_width}x{native_height}, binning: {binning}x{binning})")
+                    
+                    # Set the subframe to use the full sensor with binning
+                    cam.camera.NumX = self.resolution[0]
+                    cam.camera.NumY = self.resolution[1]
+                    cam.camera.StartX = 0
+                    cam.camera.StartY = 0
+                    
+                except Exception as e:
+                    self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
+                    # Use default dimensions from config
+                    self.resolution[0] = 1920
+                    self.resolution[1] = 1080
+                
+                self.logger.info("ASCOM camera connected")
+                
+                # Initialize cooling system if supported and enabled
+                cooling_status = self._initialize_cooling()
+                if not cooling_status.is_success:
+                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
+                
+                return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
+            else:
+                self.camera = None
+                self.logger.error(f"ASCOM camera connection failed: {status.message}")
+                return error_status(f"ASCOM camera connection failed: {status.message}", details={'driver': self.ascom_driver})
+        elif self.camera_type == 'alpaca':
+            cam_cfg = self.config.get_camera_config()
+            self.alpaca_host = cam_cfg.get('alpaca_host', 'localhost')
+            self.alpaca_port = cam_cfg.get('alpaca_port', 11111)
+            self.alpaca_device_id = cam_cfg.get('alpaca_device_id', 0)
+            self.alpaca_camera_name = cam_cfg.get('alpaca_camera_name', 'Unknown')
+            
+            cam = AlpycaCameraWrapper(self.alpaca_host, self.alpaca_port, self.alpaca_device_id, self.config, self.logger)
+            status = cam.connect()
+            if status.is_success:
+                self.camera = cam
+                self.logger.info("Alpaca camera connected")
+                
+                # Initialize cooling system if supported and enabled
+                cooling_status = self._initialize_cooling()
+                if not cooling_status.is_success:
+                    self.logger.warning(f"Cooling initialization failed: {cooling_status.message}")
+                
+                return success_status("Alpaca camera connected", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
+            else:
+                self.camera = None
+                self.logger.error(f"Alpaca camera connection failed: {status.message}")
+                return error_status(f"Alpaca camera connection failed: {status.message}", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
+        else:
+            return error_status(f"Unsupported camera type: {self.camera_type}")
+    
+    def _initialize_cooling(self) -> CameraStatus:
+        """Initialize cooling system."""
+        if not self.enable_cooling:
+            return success_status("Cooling not enabled")
+        
+        if not self.cooling_manager:
+            return error_status("Cooling manager not initialized")
+        
+        try:
+            # Get cooling settings from config
+            cooling_config = self.config.get_camera_config().get('cooling', {})
+            target_temp = cooling_config.get('target_temperature', -10.0)
+            
+            self.logger.info(f"Initializing cooling to {target_temp}°C")
+            
+            # Set target temperature
+            status = self.cooling_manager.set_target_temperature(target_temp)
+            if not status.is_success:
+                return status
+            
+            # Wait for stabilization if required
+            if self.wait_for_cooling:
+                self.logger.info("Waiting for temperature stabilization...")
+                stabilization_status = self.cooling_manager.wait_for_stabilization(
+                    timeout=self.cooling_timeout
+                )
+                
+                if not stabilization_status.is_success:
+                    self.logger.warning(f"Temperature stabilization: {stabilization_status.message}")
+                    return warning_status(f"Cooling initialized but stabilization failed: {stabilization_status.message}")
+                else:
+                    self.logger.info("✅ Cooling initialized and stabilized successfully")
+            
+            return success_status("Cooling initialized successfully")
+            
         except Exception as e:
-            self.logger.error(f"Error connecting to camera: {e}")
-            return error_status(f"Error connecting to camera: {e}", details={'camera_index': self.camera_index})
+            self.logger.error(f"Failed to initialize cooling: {e}")
+            return error_status(f"Failed to initialize cooling: {e}")
+    
+    def start_observation_session(self) -> CameraStatus:
+        """Start observation session with cooling initialization."""
+        try:
+            self.logger.info("Starting observation session...")
+            
+            # Initialize cooling first
+            if self.enable_cooling:
+                cooling_status = self._initialize_cooling()
+                if not cooling_status.is_success:
+                    return cooling_status
+            
+            # Initialize calibration
+            calibration_status = self.calibration_applier.load_master_frames()
+            if not calibration_status.is_success:
+                self.logger.warning(f"Calibration initialization: {calibration_status.message}")
+            
+            return success_status("Observation session started successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start observation session: {e}")
+            return error_status(f"Failed to start observation session: {e}")
+    
+    def end_observation_session(self) -> CameraStatus:
+        """End observation session with warmup."""
+        try:
+            self.logger.info("Ending observation session...")
+            
+            # Start warmup if cooling was active
+            if self.cooling_manager and self.cooling_manager.is_cooling:
+                self.logger.info("Starting warmup phase to prevent thermal shock...")
+                warmup_status = self.cooling_manager.start_warmup()
+                if warmup_status.is_success:
+                    self.logger.info("✅ Warmup started successfully")
+                else:
+                    self.logger.warning(f"Warmup start: {warmup_status.message}")
+            
+            return success_status("Observation session ended successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to end observation session: {e}")
+            return error_status(f"Failed to end observation session: {e}")
+    
+    def get_cooling_status(self) -> Dict[str, Any]:
+        """Get current cooling status."""
+        if not self.cooling_manager:
+            return {'error': 'Cooling manager not available'}
+        
+        return self.cooling_manager.get_cooling_status()
+    
+    def get_field_of_view(self) -> tuple[float, float]:
+        """Returns the current field of view (FOV) in degrees."""
+        # This method needs to be implemented based on actual camera parameters
+        # For now, it will return default values or raise an error
+        # The original code had a placeholder, but the new code doesn't.
+        # Assuming a default or that this method will be re-added.
+        # For now, returning a placeholder to avoid breaking existing calls.
+        return (0.0, 0.0) # Placeholder, needs actual implementation
+    
+    def get_sampling_arcsec_per_pixel(self) -> float:
+        """Calculates the sampling in arcseconds per pixel."""
+        # This method needs to be implemented based on actual camera parameters
+        # For now, it will return a placeholder or raise an error.
+        # Assuming a default or that this method will be re-added.
+        # For now, returning a placeholder to avoid breaking existing calls.
+        return 0.0 # Placeholder, needs actual implementation
     
     def disconnect(self):
         """Disconnects from the video camera."""
-        if self.camera_type == 'ascom':
-            if self.ascom_camera:
-                self.ascom_camera.disconnect()
-                self.ascom_camera = None
-        elif self.camera_type == 'alpaca':
-            if self.alpaca_camera:
-                self.alpaca_camera.disconnect()
-                self.alpaca_camera = None
-        else:
+        if self.camera_type == 'opencv':
             if self.cap:
                 self.cap.release()
                 self.cap = None
-        self.is_capturing = False
+        elif self.camera_type == 'ascom':
+            if self.camera:
+                self.camera.disconnect()
+                self.camera = None
+        elif self.camera_type == 'alpaca':
+            if self.camera:
+                self.camera.disconnect()
+                self.camera = None
         self.logger.info("Camera disconnected")
     
     def start_capture(self) -> CameraStatus:
@@ -287,23 +318,23 @@ class VideoCapture:
         Returns:
             CameraStatus: Status object with start information or error.
         """
-        if self.camera_type == 'ascom':
+        if self.camera_type == 'opencv':
+            # For OpenCV cameras, just ensure connection
+            if not self.cap or not self.cap.isOpened():
+                if not self._initialize_camera():
+                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+        elif self.camera_type == 'ascom':
             # For ASCOM cameras, just ensure connection
-            if not self.ascom_camera:
-                connect_status = self.connect()
+            if not self.camera:
+                connect_status = self._initialize_camera()
                 if not connect_status.is_success:
                     return error_status("Failed to connect to ASCOM camera", details={'driver': self.ascom_driver})
         elif self.camera_type == 'alpaca':
             # For Alpaca cameras, just ensure connection
-            if not self.alpaca_camera:
-                connect_status = self.connect()
+            if not self.camera:
+                connect_status = self._initialize_camera()
                 if not connect_status.is_success:
                     return error_status("Failed to connect to Alpaca camera", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
-        else:
-            # For OpenCV cameras, check cap object
-            if not self.cap or not self.cap.isOpened():
-                if not self.connect():
-                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         
         self.is_capturing = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
@@ -339,9 +370,9 @@ class VideoCapture:
                             
                 elif self.camera_type == 'ascom':
                     # ASCOM camera logic
-                    if self.ascom_camera:
+                    if self.camera:
                         # Get settings from config
-                        ascom_config = self.video_config.get('ascom', {})
+                        ascom_config = self.config.get_video_config().get('ascom', {})
                         exposure_time = ascom_config.get('exposure_time', 1.0)
                         gain = ascom_config.get('gain', None)
                         binning = ascom_config.get('binning', 1)
@@ -365,9 +396,9 @@ class VideoCapture:
                         time.sleep(0.1)
                 elif self.camera_type == 'alpaca':
                     # Alpaca camera logic
-                    if self.alpaca_camera:
+                    if self.camera:
                         # Get settings from config
-                        alpaca_config = self.video_config.get('alpaca', {})
+                        alpaca_config = self.config.get_video_config().get('alpaca', {})
                         exposure_time = alpaca_config.get('exposure_time', 1.0)
                         gain = alpaca_config.get('gain', None)
                         binning = alpaca_config.get('binning', 1)
@@ -404,28 +435,28 @@ class VideoCapture:
         Returns:
             CameraStatus: Status object with frame or error.
         """
-        if self.camera_type == 'ascom' and self.ascom_camera:
+        if self.camera_type == 'ascom' and self.camera:
             # Use exposure time in seconds
-            exposure_time = self.camera_config.get('exposure_time', 1.0)  # seconds
-            gain = self.camera_config.get('gain', None)
-            binning = self.camera_config.get('binning', 1)
-            exp_status = self.ascom_camera.expose(exposure_time, gain, binning)
+            exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
+            gain = self.config.get_camera_config().get('gain', None)
+            binning = self.config.get_video_config().get('binning', 1)
+            exp_status = self.camera.expose(exposure_time, gain, binning)
             if not exp_status.is_success:
                 return exp_status
-            img_status = self.ascom_camera.get_image()
+            img_status = self.camera.get_image()
             return img_status
-        elif self.camera_type == 'alpaca' and self.alpaca_camera:
+        elif self.camera_type == 'alpaca' and self.camera:
             # Use exposure time in seconds
-            exposure_time = self.camera_config.get('exposure_time', 1.0)  # seconds
-            gain = self.camera_config.get('gain', None)
-            binning = self.camera_config.get('binning', 1)
-            exp_status = self.alpaca_camera.expose(exposure_time, gain, binning)
+            exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
+            gain = self.config.get_camera_config().get('gain', None)
+            binning = self.config.get_video_config().get('binning', 1)
+            exp_status = self.camera.expose(exposure_time, gain, binning)
             if not exp_status.is_success:
                 return exp_status
-            img_status = self.alpaca_camera.get_image()
+            img_status = self.camera.get_image()
             return img_status
         if not self.cap or not self.cap.isOpened():
-            if not self.connect():
+            if not self._initialize_camera():
                 return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         ret, frame = self.cap.read()
         if ret:
@@ -443,25 +474,25 @@ class VideoCapture:
         Returns:
             CameraStatus: Status object with frame or error.
         """
-        if not self.ascom_camera:
+        if not self.camera:
             return error_status("ASCOM camera not connected")
         
         try:
             # Use the already set dimensions from connect()
-            effective_width = self.frame_width
-            effective_height = self.frame_height
+            effective_width = self.resolution[0]
+            effective_height = self.resolution[1]
             
             # Only set subframe if dimensions have changed
             try:
-                current_numx = self.ascom_camera.camera.NumX
-                current_numy = self.ascom_camera.camera.NumY
+                current_numx = self.camera.camera.NumX
+                current_numy = self.camera.camera.NumY
                 
                 if current_numx != effective_width or current_numy != effective_height:
                     self.logger.debug(f"Updating subframe: {current_numx}x{current_numy} -> {effective_width}x{effective_height}")
-                    self.ascom_camera.camera.NumX = effective_width
-                    self.ascom_camera.camera.NumY = effective_height
-                    self.ascom_camera.camera.StartX = 0
-                    self.ascom_camera.camera.StartY = 0
+                    self.camera.camera.NumX = effective_width
+                    self.camera.camera.NumY = effective_height
+                    self.camera.camera.StartX = 0
+                    self.camera.camera.StartY = 0
                 else:
                     self.logger.debug(f"Subframe already set correctly: {effective_width}x{effective_height}")
                     
@@ -478,18 +509,18 @@ class VideoCapture:
             readout_mode = self.readout_mode
             
             # Start exposure with all parameters
-            exp_status = self.ascom_camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
+            exp_status = self.camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
             if not exp_status.is_success:
                 return exp_status
             
             # Get image
-            img_status = self.ascom_camera.get_image()
+            img_status = self.camera.get_image()
             if not img_status.is_success:
                 return img_status
             
             # Check if debayering is needed
-            if self.ascom_camera.is_color_camera():
-                debayer_status = self.ascom_camera.debayer(img_status.data)
+            if hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera():
+                debayer_status = self.camera.debayer(img_status.data)
                 if debayer_status.is_success:
                     frame_data = debayer_status.data
                     frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
@@ -541,25 +572,25 @@ class VideoCapture:
         Returns:
             CameraStatus: Status object with frame or error.
         """
-        if not self.alpaca_camera:
+        if not self.camera:
             return error_status("Alpaca camera not connected")
         
         try:
             # Use the already set dimensions from connect()
-            effective_width = self.frame_width
-            effective_height = self.frame_height
+            effective_width = self.resolution[0]
+            effective_height = self.resolution[1]
             
             # Only set subframe if dimensions have changed
             try:
-                current_numx = self.alpaca_camera.camera.NumX
-                current_numy = self.alpaca_camera.camera.NumY
+                current_numx = self.camera.camera.NumX
+                current_numy = self.camera.camera.NumY
                 
                 if current_numx != effective_width or current_numy != effective_height:
                     self.logger.debug(f"Updating subframe: {current_numx}x{current_numy} -> {effective_width}x{effective_height}")
-                    self.alpaca_camera.camera.NumX = effective_width
-                    self.alpaca_camera.camera.NumY = effective_height
-                    self.alpaca_camera.camera.StartX = 0
-                    self.alpaca_camera.camera.StartY = 0
+                    self.camera.camera.NumX = effective_width
+                    self.camera.camera.NumY = effective_height
+                    self.camera.camera.StartX = 0
+                    self.camera.camera.StartY = 0
                 else:
                     self.logger.debug(f"Subframe already set correctly: {effective_width}x{effective_height}")
                     
@@ -576,18 +607,18 @@ class VideoCapture:
             readout_mode = self.readout_mode
             
             # Start exposure with all parameters
-            exp_status = self.alpaca_camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
+            exp_status = self.camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
             if not exp_status.is_success:
                 return exp_status
             
             # Get image
-            img_status = self.alpaca_camera.get_image()
+            img_status = self.camera.get_image()
             if not img_status.is_success:
                 return img_status
             
             # Check if debayering is needed
-            if self.alpaca_camera.is_color_camera():
-                debayer_status = self.alpaca_camera.debayer(img_status.data)
+            if hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera():
+                debayer_status = self.camera.debayer(img_status.data)
                 if debayer_status.is_success:
                     frame_data = debayer_status.data
                     frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': True}
@@ -643,12 +674,12 @@ class VideoCapture:
             file_extension = output_path.suffix.lower()
             
             # For ASCOM cameras, preserve original data for FITS files
-            if self.camera_type == 'ascom' and self.ascom_camera and file_extension in ['.fit', '.fits']:
+            if self.camera_type == 'ascom' and self.camera and file_extension in ['.fit', '.fits']:
                 # Save original ASCOM data as FITS
                 return self._save_ascom_fits(frame, str(output_path))
             
             # For Alpaca cameras, save as a generic image file
-            if self.camera_type == 'alpaca' and self.alpaca_camera:
+            if self.camera_type == 'alpaca' and self.camera:
                 # Convert Alpaca image data to OpenCV format
                 frame = self._convert_alpaca_to_opencv(frame)
                 if frame is None:
@@ -713,8 +744,8 @@ class VideoCapture:
             is_color_camera = False
             bayer_pattern = None
             
-            if hasattr(self.ascom_camera, 'sensor_type'):
-                sensor_type = self.ascom_camera.sensor_type
+            if hasattr(self.camera, 'sensor_type'):
+                sensor_type = self.camera.sensor_type
                 if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
                     is_color_camera = True
                     bayer_pattern = sensor_type
@@ -816,14 +847,14 @@ class VideoCapture:
                 header['IMAGETYP'] = 'LIGHT'
             
             # Camera information
-            if hasattr(self.ascom_camera, 'camera'):
+            if hasattr(self.camera, 'camera'):
                 try:
                     # Try different exposure time property names
                     exposure_time = None
                     for exp_prop in ['ExposureDuration', 'ExposureTime', 'Exposure']:
-                        if hasattr(self.ascom_camera.camera, exp_prop):
+                        if hasattr(self.camera.camera, exp_prop):
                             try:
-                                exposure_time = float(getattr(self.ascom_camera.camera, exp_prop))
+                                exposure_time = float(getattr(self.camera.camera, exp_prop))
                                 self.logger.debug(f"Found exposure time using property: {exp_prop}")
                                 break
                             except (ValueError, TypeError):
@@ -839,9 +870,9 @@ class VideoCapture:
                     # Try different gain property names
                     gain_value = None
                     for gain_prop in ['Gain', 'GainValue', 'CCDGain']:
-                        if hasattr(self.ascom_camera.camera, gain_prop):
+                        if hasattr(self.camera.camera, gain_prop):
                             try:
-                                gain_value = float(getattr(self.ascom_camera.camera, gain_prop))
+                                gain_value = float(getattr(self.camera.camera, gain_prop))
                                 self.logger.debug(f"Found gain using property: {gain_prop}")
                                 break
                             except (ValueError, TypeError):
@@ -858,18 +889,18 @@ class VideoCapture:
                     bin_x = None
                     bin_y = None
                     for bin_prop in ['BinX', 'BinningX', 'XBinning']:
-                        if hasattr(self.ascom_camera.camera, bin_prop):
+                        if hasattr(self.camera.camera, bin_prop):
                             try:
-                                bin_x = int(getattr(self.ascom_camera.camera, bin_prop))
+                                bin_x = int(getattr(self.camera.camera, bin_prop))
                                 self.logger.debug(f"Found X binning using property: {bin_prop}")
                                 break
                             except (ValueError, TypeError):
                                 continue
                     
                     for bin_prop in ['BinY', 'BinningY', 'YBinning']:
-                        if hasattr(self.ascom_camera.camera, bin_prop):
+                        if hasattr(self.camera.camera, bin_prop):
                             try:
-                                bin_y = int(getattr(self.ascom_camera.camera, bin_prop))
+                                bin_y = int(getattr(self.camera.camera, bin_prop))
                                 self.logger.debug(f"Found Y binning using property: {bin_prop}")
                                 break
                             except (ValueError, TypeError):
@@ -894,36 +925,36 @@ class VideoCapture:
                     num_y = None
                     
                     for start_prop in ['StartX', 'SubFrameX', 'XStart']:
-                        if hasattr(self.ascom_camera.camera, start_prop):
+                        if hasattr(self.camera.camera, start_prop):
                             try:
-                                start_x = int(getattr(self.ascom_camera.camera, start_prop))
+                                start_x = int(getattr(self.camera.camera, start_prop))
                                 self.logger.debug(f"Found X start using property: {start_prop}")
                                 break
                             except (ValueError, TypeError):
                                 continue
                     
                     for start_prop in ['StartY', 'SubFrameY', 'YStart']:
-                        if hasattr(self.ascom_camera.camera, start_prop):
+                        if hasattr(self.camera.camera, start_prop):
                             try:
-                                start_y = int(getattr(self.ascom_camera.camera, start_prop))
+                                start_y = int(getattr(self.camera.camera, start_prop))
                                 self.logger.debug(f"Found Y start using property: {start_prop}")
                                 break
                             except (ValueError, TypeError):
                                 continue
                     
                     for num_prop in ['NumX', 'SubFrameWidth', 'XSize']:
-                        if hasattr(self.ascom_camera.camera, num_prop):
+                        if hasattr(self.camera.camera, num_prop):
                             try:
-                                num_x = int(getattr(self.ascom_camera.camera, num_prop))
+                                num_x = int(getattr(self.camera.camera, num_prop))
                                 self.logger.debug(f"Found X size using property: {num_prop}")
                                 break
                             except (ValueError, TypeError):
                                 continue
                     
                     for num_prop in ['NumY', 'SubFrameHeight', 'YSize']:
-                        if hasattr(self.ascom_camera.camera, num_prop):
+                        if hasattr(self.camera.camera, num_prop):
                             try:
-                                num_y = int(getattr(self.ascom_camera.camera, num_prop))
+                                num_y = int(getattr(self.camera.camera, num_prop))
                                 self.logger.debug(f"Found Y size using property: {num_prop}")
                                 break
                             except (ValueError, TypeError):
@@ -945,14 +976,14 @@ class VideoCapture:
                     if num_y is not None:
                         header['NAXIS1'] = int(num_y)  # Width (now height)
                     else:
-                        header['NAXIS1'] = int(self.frame_height)
-                        self.logger.debug(f"Using frame height for NAXIS1: {self.frame_height}")
+                        header['NAXIS1'] = int(self.resolution[1])
+                        self.logger.debug(f"Using frame height for NAXIS1: {self.resolution[1]}")
                     
                     if num_x is not None:
                         header['NAXIS2'] = int(num_x)  # Height (now width)
                     else:
-                        header['NAXIS2'] = int(self.frame_width)
-                        self.logger.debug(f"Using frame width for NAXIS2: {self.frame_width}")
+                        header['NAXIS2'] = int(self.resolution[0])
+                        self.logger.debug(f"Using frame width for NAXIS2: {self.resolution[0]}")
                     
                     self.logger.debug(f"Successfully added camera info to FITS header")
                     
@@ -965,16 +996,16 @@ class VideoCapture:
                     header['YBINNING'] = 1
                     header['XORGSUBF'] = 0
                     header['YORGSUBF'] = 0
-                    header['NAXIS1'] = int(self.frame_height)
-                    header['NAXIS2'] = int(self.frame_width)
+                    header['NAXIS1'] = int(self.resolution[1])
+                    header['NAXIS2'] = int(self.resolution[0])
                     self.logger.info("Added basic camera info using configuration values")
             
             # Telescope information
-            header['FOCALLEN'] = float(self.focal_length)
-            header['APERTURE'] = float(self.aperture)
+            header['FOCALLEN'] = float(self.config.get_telescope_config().get('focal_length', 1000)) # mm
+            header['APERTURE'] = float(self.config.get_telescope_config().get('aperture', 200)) # mm
             # Pixel sizes (swapped due to image transposition)
-            header['PIXSIZE1'] = float(self.sensor_height / self.frame_height)  # mm per pixel X (now height)
-            header['PIXSIZE2'] = float(self.sensor_width / self.frame_width)    # mm per pixel Y (now width)
+            header['PIXSIZE1'] = float(self.config.get_camera_config().get('sensor_height', 15.7) / self.resolution[1])  # mm per pixel X (now height)
+            header['PIXSIZE2'] = float(self.config.get_camera_config().get('sensor_width', 23.5) / self.resolution[0])    # mm per pixel Y (now width)
             
             # Field of view information (swapped due to image transposition)
             header['FOVW'] = float(self.fov_height)  # Now width after transpose
@@ -1049,10 +1080,10 @@ class VideoCapture:
         """
         info = {
             'camera_type': self.camera_type,
-            'connected': self.cap is not None or self.ascom_camera is not None or self.alpaca_camera is not None,
-            'frame_width': self.frame_width,
-            'frame_height': self.frame_height,
-            'fps': self.fps,
+            'connected': self.camera is not None,
+            'frame_width': self.resolution[0],
+            'frame_height': self.resolution[1],
+            'fps': self.frame_rate,
             'exposure_time': self.exposure_time,
             'gain': self.gain,
             'field_of_view': self.get_field_of_view(),
@@ -1060,39 +1091,39 @@ class VideoCapture:
         }
         
         # Add ASCOM-specific information
-        if self.camera_type == 'ascom' and self.ascom_camera:
+        if self.camera_type == 'ascom' and self.camera:
             info.update({
-                'driver_id': self.ascom_camera.driver_id,
-                'has_cooling': self.has_cooling(),
+                'driver_id': self.ascom_driver,
+                'has_cooling': self.enable_cooling,
                 'cooling_enabled': self.enable_cooling,
-                'target_temperature': self.target_temperature,
-                'auto_cooling': self.auto_cooling,
-                'has_offset': self.ascom_camera.has_offset(),
-                'has_readout_mode': self.ascom_camera.has_readout_mode(),
+                        'target_temperature': self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0),
+        'wait_for_cooling': self.config.get_camera_config().get('cooling', {}).get('wait_for_cooling', True),
+                'has_offset': hasattr(self.camera, 'has_offset') and self.camera.has_offset(),
+                'has_readout_mode': hasattr(self.camera, 'has_readout_mode') and self.camera.has_readout_mode(),
                 'offset': self.offset,
                 'readout_mode': self.readout_mode
             })
             
             # Get current cooling status if available
-            if self.has_cooling():
+            if self.enable_cooling:
                 cooling_status = self.get_cooling_status()
                 info.update(cooling_status)
         
         # Add Alpaca-specific information
-        if self.camera_type == 'alpaca' and self.alpaca_camera:
+        if self.camera_type == 'alpaca' and self.camera:
             info.update({
                 'host': self.alpaca_host,
                 'port': self.alpaca_port,
                 'camera_name': self.alpaca_camera_name,
-                'is_color': self.alpaca_camera.is_color_camera(),
-                'has_cooling': self.alpaca_camera.has_cooling(),
-                'has_offset': self.alpaca_camera.has_offset(),
-                'has_readout_mode': self.alpaca_camera.has_readout_mode(),
+                'is_color': hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera(),
+                'has_cooling': hasattr(self.camera, 'has_cooling') and self.camera.has_cooling(),
+                'has_offset': hasattr(self.camera, 'has_offset') and self.camera.has_offset(),
+                'has_readout_mode': hasattr(self.camera, 'has_readout_mode') and self.camera.has_readout_mode(),
                 'offset': self.offset,
                 'readout_mode': self.readout_mode
             })
-            if self.alpaca_camera.has_cooling():
-                cooling_status = self.alpaca_camera.get_cooling_status()
+            if hasattr(self.camera, 'has_cooling') and self.camera.has_cooling():
+                cooling_status = self.get_cooling_status()
                 info.update(cooling_status)
         
         return info
@@ -1103,10 +1134,10 @@ class VideoCapture:
         Returns:
             bool: True if cooling is supported
         """
-        if self.camera_type == 'ascom' and self.ascom_camera:
-            return self.ascom_camera.has_cooling()
-        elif self.camera_type == 'alpaca' and self.alpaca_camera:
-            return self.alpaca_camera.has_cooling()
+        if self.camera_type == 'ascom' and self.camera:
+            return self.enable_cooling
+        elif self.camera_type == 'alpaca' and self.camera:
+            return self.enable_cooling
         return False
     
     def enable_cooling_system(self) -> CameraStatus:
@@ -1123,22 +1154,22 @@ class VideoCapture:
         
         try:
             # Turn on the cooler
-            cooler_status = self.ascom_camera.set_cooler_on(True) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooler_on(True)
+            cooler_status = self.camera.set_cooler_on(True) if self.camera_type == 'ascom' else self.camera.set_cooler_on(True)
             if not cooler_status.is_success:
                 return cooler_status
             
             # Set target temperature
-            temp_status = self.ascom_camera.set_cooling(self.target_temperature) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(self.target_temperature)
+            temp_status = self.camera.set_cooling(self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)) if self.camera_type == 'ascom' else self.camera.set_cooling(self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0))
             if not temp_status.is_success:
                 return temp_status
             
-            self.logger.info(f"Cooling system enabled, target temperature: {self.target_temperature}°C")
+            self.logger.info(f"Cooling system enabled, target temperature: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
             
             # Wait for target temperature if configured
             if self.wait_for_cooling:
                 return self.wait_for_target_temperature()
             
-            return success_status(f"Cooling system enabled, target: {self.target_temperature}°C")
+            return success_status(f"Cooling system enabled, target: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
             
         except Exception as e:
             self.logger.error(f"Error enabling cooling system: {e}")
@@ -1155,7 +1186,7 @@ class VideoCapture:
         
         try:
             # Turn off the cooler
-            status = self.ascom_camera.turn_cooling_off() if self.camera_type == 'ascom' else self.alpaca_camera.turn_cooling_off()
+            status = self.camera.turn_cooling_off() if self.camera_type == 'ascom' else self.camera.turn_cooling_off()
             if status.is_success:
                 self.logger.info("Cooling system disabled")
             return status
@@ -1180,9 +1211,9 @@ class VideoCapture:
             return error_status("Cooling is disabled in configuration")
         
         try:
-            status = self.ascom_camera.set_cooling(temperature) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(temperature)
+            status = self.camera.set_cooling(temperature) if self.camera_type == 'ascom' else self.camera.set_cooling(temperature)
             if status.is_success:
-                self.target_temperature = temperature
+                self.config.get_camera_config()['cooling']['target_temperature'] = temperature # Update config
                 self.logger.info(f"Target temperature set to {temperature}°C")
             return status
             
@@ -1205,9 +1236,9 @@ class VideoCapture:
         try:
             # Get fresh cooling information
             if self.camera_type == 'ascom':
-                cooling_info = self.ascom_camera.get_smart_cooling_info()
+                cooling_info = self.camera.get_smart_cooling_info()
             elif self.camera_type == 'alpaca':
-                cooling_info = self.alpaca_camera.get_cooling_status()
+                cooling_info = self.camera.get_cooling_status()
             
             if cooling_info.is_success:
                 info = cooling_info.data
@@ -1251,7 +1282,7 @@ class VideoCapture:
             import time
             start_time = time.time()
             
-            self.logger.info(f"Waiting for target temperature: {self.target_temperature}°C")
+            self.logger.info(f"Waiting for target temperature: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
             
             while time.time() - start_time < self.cooling_timeout:
                 cooling_status = self.get_cooling_status()
@@ -1265,7 +1296,7 @@ class VideoCapture:
                 if current_temp is not None and target_temp is not None:
                     temp_diff = abs(current_temp - target_temp)
                     
-                    if temp_diff <= self.temperature_tolerance:
+                    if temp_diff <= self.config.get_camera_config().get('cooling', {}).get('stabilization_tolerance', 1.0):
                         self.logger.info(f"Target temperature reached: {current_temp:.1f}°C (target: {target_temp:.1f}°C)")
                         return success_status(f"Target temperature reached: {current_temp:.1f}°C")
                     
@@ -1293,7 +1324,7 @@ class VideoCapture:
             return False
         
         temp_diff = abs(current_temp - target_temp)
-        return temp_diff <= self.temperature_tolerance
+        return temp_diff <= self.config.get_camera_config().get('cooling', {}).get('stabilization_tolerance', 1.0)
     
     def initialize_cooling(self) -> CameraStatus:
         """Initialize camera cooling system with improved status detection."""
@@ -1305,9 +1336,9 @@ class VideoCapture:
             
             # Get current cooling status
             if self.camera_type == 'ascom':
-                cooling_info = self.ascom_camera.get_smart_cooling_info()
+                cooling_info = self.camera.get_smart_cooling_info()
             elif self.camera_type == 'alpaca':
-                cooling_info = self.alpaca_camera.get_cooling_status()
+                cooling_info = self.camera.get_cooling_status()
             
             if not cooling_info.is_success:
                 return error_status(f"Failed to get cooling info: {cooling_info.message}")
@@ -1323,7 +1354,7 @@ class VideoCapture:
                 self.logger.info(f"Setting target temperature to {target_temp}°C")
                 
                 # Set cooling with improved method
-                cooling_status = self.ascom_camera.set_cooling(target_temp) if self.camera_type == 'ascom' else self.alpaca_camera.set_cooling(target_temp)
+                cooling_status = self.camera.set_cooling(target_temp) if self.camera_type == 'ascom' else self.camera.set_cooling(target_temp)
                 if not cooling_status.is_success:
                     return error_status(f"Failed to set cooling: {cooling_status.message}")
                 
@@ -1331,7 +1362,7 @@ class VideoCapture:
                 
                 # Force refresh cooling status to get accurate power readings
                 self.logger.info("Forcing cooling status refresh...")
-                refresh_status = self.ascom_camera.force_refresh_cooling_status() if self.camera_type == 'ascom' else self.alpaca_camera.force_refresh_cooling_status()
+                refresh_status = self.camera.force_refresh_cooling_status() if self.camera_type == 'ascom' else self.camera.force_refresh_cooling_status()
                 if refresh_status.is_success:
                     refresh_info = refresh_status.data
                     self.logger.info(f"Cooling status refreshed: temp={refresh_info.get('temperature')}°C, "
@@ -1340,10 +1371,10 @@ class VideoCapture:
                 # Wait for cooling to stabilize if configured
                 if self.wait_for_cooling:
                     self.logger.info(f"Waiting for cooling to stabilize (timeout: {self.cooling_timeout}s)...")
-                    stabilization_status = self.ascom_camera.wait_for_cooling_stabilization(
+                    stabilization_status = self.camera.wait_for_cooling_stabilization(
                         timeout=self.cooling_timeout, 
                         check_interval=2.0
-                    ) if self.camera_type == 'ascom' else self.alpaca_camera.wait_for_cooling_stabilization(
+                    ) if self.camera_type == 'ascom' else self.camera.wait_for_cooling_stabilization(
                         timeout=self.cooling_timeout, 
                         check_interval=2.0
                     )
@@ -1405,8 +1436,8 @@ class VideoCapture:
             is_color_camera = False
             bayer_pattern = None
             
-            if hasattr(self.ascom_camera, 'sensor_type'):
-                sensor_type = self.ascom_camera.sensor_type
+            if hasattr(self.camera, 'sensor_type'):
+                sensor_type = self.camera.sensor_type
                 if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
                     is_color_camera = True
                     bayer_pattern = sensor_type

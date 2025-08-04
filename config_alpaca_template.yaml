@@ -1,114 +1,189 @@
-# Alpyca Camera Configuration Template
-# This template shows how to configure the system to use Alpyca (Python-native ASCOM API)
+# Alpaca Template Configuration
+# Template configuration for Alpaca cameras
 
-video:
-  camera_type: alpaca  # Use Alpyca instead of classic ASCOM or OpenCV
-  alpaca:
-    host: "localhost"      # Alpaca server host (usually localhost)
-    port: 11111           # Alpaca server port (default: 11111)
-    device_id: 0          # Camera device ID (usually 0 for first camera)
-    exposure_time: 1.0    # Default exposure time in seconds
-    gain: 100.0           # Default gain setting
-    offset: 50.0          # Default offset setting
-    binning: 1            # Default binning (1x1, 2x2, etc.)
-    use_timestamps: true  # Use timestamps in filenames
-    timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format
-    file_format: "fits"   # Image file format (fits, tiff, jpg)
-
-# Camera cooling configuration
+# =============================================================================
+# CAMERA CONFIGURATION (Unified for all operations)
+# =============================================================================
 camera:
+  # Camera type and basic settings
+  camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
+  
+  # General camera settings
+  file_format: "FITS"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+  
+  # Sensor specifications (important for calibration)
+  sensor_width: 23.5     # Sensor width in mm
+  sensor_height: 15.7    # Sensor height in mm
+  pixel_size: 3.76       # Pixel size in micrometers
+  type: "color"          # Camera type (mono, color)
+  bit_depth: 16          # Bit depth
+  
+  # Cooling settings
   cooling:
-    enable_cooling: true           # Enable camera cooling
-    target_temperature: -10.0      # Target temperature in °C
-    auto_cooling: true             # Automatic cooling control
-    cooling_timeout: 60            # Cooling operation timeout in seconds
-    temperature_tolerance: 2.0     # Temperature tolerance in °C
-    wait_for_cooling: true         # Wait for cooling to stabilize
+    enable_cooling: true
+    target_temperature: -10.0  # Target temperature in °C
+    wait_for_cooling: true     # Wait for temperature stabilization
+    cooling_timeout: 300       # Timeout for cooling stabilization in seconds
+    stabilization_tolerance: 1.0  # Temperature tolerance in °C
+    warmup_rate: 2.0          # Warmup rate in °C per minute
+    warmup_final_temp: 15.0   # Final temperature for warmup
+    warmup_at_end: true       # Start warmup when stopping observation
+  
+  # ASCOM camera settings
+  ascom:
+    ascom_driver: "ASCOM.ZWOASI.Camera"  # ASCOM driver ID for astro cameras
+    exposure_time: 5.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: 1  # Binning factor (1x1, 2x2, etc.)
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
+    filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
+    
+  # Alpaca camera settings
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 5.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: [1, 1]  # Binning factor [x, y] for Alpaca
+    
+  # OpenCV camera settings
+  opencv:
+    camera_index: 0  # Camera device index
+    exposure_time: 1.0  # Exposure time in seconds
+    gain: 100.0  # Gain setting
+    resolution: [1920, 1080]  # Resolution [width, height]
+    frame_rate: 30  # Frame rate
 
-# Camera sensor information (for reference)
-  sensor:
-    width: 6248           # Sensor width in pixels
-    height: 4176          # Sensor height in pixels
-    pixel_size: 3.76      # Pixel size in microns
-    type: "CMOS"          # Sensor type
-    bit_depth: 16         # Bit depth
+# =============================================================================
+# VIDEO CONFIGURATION (Frame capture and processing)
+# =============================================================================
+video:
+  video_enabled: true
+  
+  # Frame saving settings
+  use_timestamps: false  # Enable timestamps in frame filenames
+  timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
+  use_capture_count: false  # Enable capture count in frame filenames
+  
+  # Processing settings
+  auto_debayer: false  # Auto-debayer color images
+  debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
+  
+  # Output settings
+  output_dir: "captured_frames"  # Directory for captured frames
+  cache_dir: "cache"  # Directory for temporary files
 
-# Plate solving configuration
+# =============================================================================
+# TELESCOPE CONFIGURATION
+# =============================================================================
+telescope:
+  # Focal length in millimeters
+  focal_length: 1000
+  # Aperture diameter in millimeters
+  aperture: 200
+  # Telescope type (refractor, reflector, etc.)
+  type: "reflector"
+  # Focal ratio (focal_length / aperture)
+  focal_ratio: 5.0
+
+# =============================================================================
+# MOUNT CONFIGURATION
+# =============================================================================
+mount:
+  # ASCOM driver program ID
+  driver_id: "ASCOM.tenmicron_mount.Telescope"
+  # Connection timeout in seconds
+  connection_timeout: 10
+  # Coordinate validation
+  validate_coordinates: true
+  # Slewing detection settings
+  slewing_detection:
+    enabled: true  # Enable slewing detection to prevent captures during movement
+    check_before_capture: true  # Check slewing status before each capture
+    wait_for_completion: false  # Wait for slewing to complete before capturing
+    wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
+    check_interval: 1.0  # Interval between slewing checks in seconds
+
+# =============================================================================
+# PLATE SOLVING CONFIGURATION
+# =============================================================================
 plate_solve:
-  enabled: true
-  solver: "platesolve2"
-  timeout: 30
-  search_radius: 15
-  max_stars: 500
-  min_star_size: 3
-  max_star_size: 50
+  auto_solve: true
+  min_solve_interval: 30
+  save_plate_solve_frames: true
+  plate_solve_dir: "plate_solve_frames"
+  default_solver: "platesolve2"
+  
+  # Settings for PlateSolve2
+  platesolve2:
+    executable_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
+    working_directory: "C:/Users/BP34_Admin/AppData/Local/Temp"
+    timeout: 60
+    verbose: true
+    auto_mode: true
+    number_of_regions: 150
+    min_stars: 20
+    max_stars: 200
+  
+  # Settings for Astrometry.net
+  astrometry:
+    api_key: ""
+    api_url: "http://nova.astrometry.net/api/"
 
-# Overlay configuration
+# =============================================================================
+# OVERLAY CONFIGURATION
+# =============================================================================
 overlay:
-  enabled: true
-  image_size: [6248, 4176]  # Image size for overlay generation
-  mag_limit: 12.0           # Magnitude limit for stars
-  show_stars: true
-  show_dso: true
-  show_constellations: true
-  show_grid: true
+  wait_for_plate_solve: true
+  field_of_view: 1.5
+  magnitude_limit: 9.0
+  include_no_magnitude: false
+  image_size: [6248, 4176]  # Full sensor resolution
+  font_size: 14
+  output_format: "png"
+  default_filename: "overlay.png"
+  max_name_length: 15
+  use_timestamps: false
+  timestamp_format: "%Y%m%d_%H%M%S"
+  update:
+    update_interval: 30
+    max_retries: 3
+    retry_delay: 5
+  display:
+    object_color: [255, 0, 0]
+    text_color: [255, 255, 255]
+    marker_size: 5
+    text_offset: [8, -8]
 
-# Output configuration
-output:
-  directory: "captured_frames"
-  filename_pattern: "capture_{timestamp}"
-  save_original: true
-  save_overlay: true
-  save_combined: true
-
-# Logging configuration
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
 logging:
+  verbose: true
   level: "INFO"
-  file: "alpaca_camera.log"
-  console: true
-  file_handler: true
+  show_emojis: false
+  log_to_file: false
+  log_file: "telescope_streaming.log"
 
-# Example configurations for different camera types:
+# =============================================================================
+# PLATFORM CONFIGURATION
+# =============================================================================
+platform:
+  fonts:
+    windows: ["arial.ttf", "C:/Windows/Fonts/arial.ttf"]
+    linux: ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/arial.ttf"]
+    macos: ["/System/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial.ttf"]
 
-# ZWO ASI Camera via Alpyca
-# video:
-#   camera_type: alpaca
-#   alpaca:
-#     host: "localhost"
-#     port: 11111
-#     device_id: 0
-#     exposure_time: 1.0
-#     gain: 100.0
-#     offset: 50.0
-#     binning: 1
-
-# QHY Camera via Alpyca
-# video:
-#   camera_type: alpaca
-#   alpaca:
-#     host: "192.168.1.100"  # Remote Alpaca server
-#     port: 11111
-#     device_id: 0
-#     exposure_time: 2.0
-#     gain: 200.0
-#     offset: 30.0
-#     binning: 2
-
-# SBIG Camera via Alpyca
-# video:
-#   camera_type: alpaca
-#   alpaca:
-#     host: "localhost"
-#     port: 11111
-#     device_id: 0
-#     exposure_time: 5.0
-#     gain: 50.0
-#     offset: 100.0
-#     binning: 1
-
-# Notes:
-# - Alpyca requires an Alpaca server to be running
-# - The Alpaca server can be local or remote
-# - Device ID is usually 0 for the first camera, 1 for second, etc.
-# - All ASCOM-compatible cameras should work with Alpyca
-# - Cooling, gain, offset, and binning support depends on the camera 
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
+advanced:
+  debug_coordinates: false
+  debug_simbad: false
+  save_empty_overlays: true
+  auto_recovery: true 

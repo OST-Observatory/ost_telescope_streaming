@@ -6,7 +6,7 @@ import signal
 import os
 from datetime import datetime
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 
 # Import with error handling
@@ -32,60 +32,98 @@ except ImportError as e:
     OVERLAY_AVAILABLE = False
 
 from exceptions import MountError, OverlayError, VideoProcessingError
-from status import MountStatus, OverlayStatus, success_status, error_status, warning_status
+from status import MountStatus, OverlayStatus, success_status, error_status, warning_status, Status
 
 class OverlayRunner:
-    def __init__(self, config=None, logger=None):
-        from config_manager import ConfigManager
-        # Only create default config if no config is provided
-        # This prevents loading config.yaml when config is passed from tests
-        if config is None:
-            default_config = ConfigManager()
-        else:
-            default_config = None
-        import logging
+    def __init__(self, config, logger=None):
+        """Initialize overlay runner with cooling support."""
+        self.config = config
         self.logger = logger or logging.getLogger(__name__)
-        self.config = config or default_config
-        self.running = True
-        self.mount = None
+        
+        # Overlay configuration
+        overlay_config = config.get_overlay_config()
+        self.update_interval = overlay_config.get('update', {}).get('update_interval', 30)
+        self.wait_for_plate_solve = overlay_config.get('wait_for_plate_solve', False)
+        
+        # Video configuration
+        video_config = config.get_video_config()
+        self.video_enabled = video_config.get('video_enabled', False)
+        
+        # Get cooling settings from camera config
+        camera_config = config.get_camera_config()
+        self.enable_cooling = camera_config.get('cooling', {}).get('enable_cooling', False)
+        
+        # Components
         self.video_processor = None
-        self.overlay_generator = None
-        self.setup_signal_handlers()
+        self.cooling_manager = None
         
-        # Update config access for overlay update and display settings
-        overlay_config = self.config.get_overlay_config()
-        update_config = overlay_config.get('update', {})
-        display_config = overlay_config.get('display', {})
-        self.update_interval = update_config.get('update_interval', 30)
-        self.max_retries = update_config.get('max_retries', 3)
-        self.retry_delay = update_config.get('retry_delay', 5)
-        self.use_timestamps = overlay_config.get('use_timestamps', False)
-        self.timestamp_format = overlay_config.get('timestamp_format', '%Y%m%d_%H%M%S')
+        # State
+        self.running = False
+        self.last_update = None
         
-        # Video processing settings
-        self.video_enabled = self.config.get_video_config().get('video_enabled', True)  # Enable video processing by default
-        self.plate_solving_enabled = self.config.get_plate_solve_config().get('auto_solve', False)
-        self.last_solve_result = None
-        self.wait_for_plate_solve = self.config.get_overlay_config().get('wait_for_plate_solve', False)
-        
-        # Initialize overlay generator if available
-        if OVERLAY_AVAILABLE:
-            try:
-                self.overlay_generator = OverlayGenerator(config=self.config, logger=self.logger)
-                self.logger.info("Overlay generator initialized")
-            except Exception as e:
-                self.logger.warning(f"Failed to initialize overlay generator: {e}")
-                self.overlay_generator = None
-        
-    def setup_signal_handlers(self):
-        """Sets up signal handlers for clean shutdown."""
-        def signal_handler(signum, frame):
-            self.logger.info(f"\nSignal {signum} received. Shutting down...")
+        # Initialize components
+        self._initialize_components()
+    
+    def _initialize_components(self):
+        """Initialize video processor and cooling manager."""
+        try:
+            if self.video_enabled:
+                self.video_processor = VideoProcessor(self.config, self.logger)
+                
+                # Initialize cooling if enabled
+                if self.enable_cooling and hasattr(self.video_processor, 'cooling_manager'):
+                    self.cooling_manager = self.video_processor.cooling_manager
+                    self.logger.info("Cooling manager initialized")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize components: {e}")
+    
+    def start_observation(self) -> Status:
+        """Start observation session with cooling initialization."""
+        try:
+            self.logger.info("Starting observation session...")
+            
+            # Start video processor observation session
+            if self.video_processor:
+                session_status = self.video_processor.start_observation_session()
+                if not session_status.is_success:
+                    return session_status
+            
+            self.running = True
+            self.last_update = datetime.now()
+            
+            return success_status("Observation session started successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start observation: {e}")
+            return error_status(f"Failed to start observation: {e}")
+    
+    def stop_observation(self) -> Status:
+        """Stop observation session with warmup."""
+        try:
+            self.logger.info("Stopping observation session...")
+            
             self.running = False
             
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+            # End video processor observation session
+            if self.video_processor:
+                session_status = self.video_processor.end_observation_session()
+                if not session_status.is_success:
+                    self.logger.warning(f"Session end: {session_status.message}")
+            
+            return success_status("Observation session stopped successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to stop observation: {e}")
+            return error_status(f"Failed to stop observation: {e}")
     
+    def get_cooling_status(self) -> Dict[str, Any]:
+        """Get current cooling status."""
+        if not self.cooling_manager:
+            return {'error': 'Cooling manager not available'}
+        
+        return self.cooling_manager.get_cooling_status()
+
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                                    fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
                                    position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,

@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
 """
-Calibration Workflow Runner
+Calibration Workflow with Cooling Management.
 
-This script provides a unified interface for the complete calibration workflow:
-1. Dark frame capture
-2. Flat frame capture  
-3. Master frame creation
-
-All operations use a single configuration file for consistency and simplicity.
-
-Usage:
-    python calibration_workflow.py --config config_calibration_frames.yaml
-    python calibration_workflow.py --config config_calibration_frames.yaml --step darks
-    python calibration_workflow.py --config config_calibration_frames.yaml --step flats
-    python calibration_workflow.py --config config_calibration_frames.yaml --step masters
+This script provides a complete calibration workflow including:
+- Cooling initialization and stabilization
+- Dark frame capture with cooling
+- Flat frame capture with cooling
+- Master frame creation
+- Warmup phase at the end
 """
 
-import argparse
-import logging
 import sys
-import os
+import logging
+import argparse
+import time
 from pathlib import Path
-from datetime import datetime
 
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
@@ -30,327 +23,293 @@ from config_manager import ConfigManager
 from dark_capture import DarkCapture
 from flat_capture import FlatCapture
 from master_frame_creator import MasterFrameCreator
-from video_capture import VideoCapture
+from cooling_manager import create_cooling_manager
+from status import success_status, error_status, warning_status
 
 
-def setup_logging(level=logging.INFO):
-    """Set up logging configuration."""
+def setup_logging(level='INFO'):
+    """Setup logging."""
     logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f'calibration_workflow_{datetime.now().strftime("%Y%m%d")}.log', encoding='utf-8')
-        ]
+        level=getattr(logging, level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    return logging.getLogger("calibration_workflow")
+
+
+def initialize_cooling(config, logger):
+    """Initialize cooling system."""
+    try:
+        # Get camera configuration
+        video_config = config.get_video_config()
+        camera_type = video_config.get('camera_type', 'opencv')
+        
+        if camera_type == 'opencv':
+            logger.warning("Cooling not supported for OpenCV cameras")
+            return None, success_status("Cooling not applicable for OpenCV")
+        
+        # Create camera instance
+        if camera_type == 'ascom':
+            from ascom_camera import ASCOMCamera
+            ascom_config = video_config.get('ascom', {})
+            camera = ASCOMCamera(
+                driver_id=ascom_config.get('driver_id'),
+                config=config,
+                logger=logger
+            )
+        elif camera_type == 'alpaca':
+            from alpaca_camera import AlpycaCameraWrapper
+            alpaca_config = video_config.get('alpaca', {})
+            camera = AlpycaCameraWrapper(
+                host=alpaca_config.get('host', 'localhost'),
+                port=alpaca_config.get('port', 11111),
+                device_id=alpaca_config.get('device_id', 0),
+                config=config,
+                logger=logger
+            )
+        else:
+            return None, error_status(f"Unsupported camera type: {camera_type}")
+        
+        # Connect to camera
+        connect_status = camera.connect()
+        if not connect_status.is_success:
+            return None, connect_status
+        
+        # Create cooling manager
+        cooling_manager = create_cooling_manager(camera, config, logger)
+        
+        # Initialize cooling
+        cooling_config = config.get_camera_config().get('cooling', {})
+        target_temp = cooling_config.get('target_temperature', -10.0)
+        wait_for_cooling = cooling_config.get('wait_for_cooling', True)
+        cooling_timeout = cooling_config.get('cooling_timeout', 300)
+        
+        logger.info(f"Initializing cooling to {target_temp}°C")
+        
+        # Set target temperature
+        set_status = cooling_manager.set_target_temperature(target_temp)
+        if not set_status.is_success:
+            return camera, set_status
+        
+        # Wait for stabilization if required
+        if wait_for_cooling:
+            logger.info("Waiting for temperature stabilization...")
+            stabilization_status = cooling_manager.wait_for_stabilization(
+                timeout=cooling_timeout
+            )
+            
+            if not stabilization_status.is_success:
+                logger.warning(f"Temperature stabilization: {stabilization_status.message}")
+                return camera, warning_status(f"Cooling initialized but stabilization failed: {stabilization_status.message}")
+            else:
+                logger.info("✅ Cooling initialized and stabilized successfully")
+        
+        return camera, success_status("Cooling initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize cooling: {e}")
+        return None, error_status(f"Failed to initialize cooling: {e}")
+
+
+def capture_darks_with_cooling(config, logger, camera=None):
+    """Capture dark frames with cooling management."""
+    try:
+        logger.info("=== DARK FRAME CAPTURE WITH COOLING ===")
+        
+        # Initialize cooling if not already done
+        if camera is None:
+            camera, cooling_status = initialize_cooling(config, logger)
+            if not cooling_status.is_success:
+                return cooling_status
+        
+        # Create dark capture instance
+        dark_capture = DarkCapture(config, logger)
+        
+        # Capture dark frames
+        logger.info("Starting dark frame capture...")
+        status = dark_capture.capture_darks()
+        
+        if status.is_success:
+            logger.info("✅ Dark frame capture completed successfully")
+        else:
+            logger.error(f"❌ Dark frame capture failed: {status.message}")
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error during dark capture: {e}")
+        return error_status(f"Error during dark capture: {e}")
+
+
+def capture_flats_with_cooling(config, logger, camera=None):
+    """Capture flat frames with cooling management."""
+    try:
+        logger.info("=== FLAT FRAME CAPTURE WITH COOLING ===")
+        
+        # Initialize cooling if not already done
+        if camera is None:
+            camera, cooling_status = initialize_cooling(config, logger)
+            if not cooling_status.is_success:
+                return cooling_status
+        
+        # Create flat capture instance
+        flat_capture = FlatCapture(config, logger)
+        
+        # Capture flat frames
+        logger.info("Starting flat frame capture...")
+        status = flat_capture.capture_flats()
+        
+        if status.is_success:
+            logger.info("✅ Flat frame capture completed successfully")
+        else:
+            logger.error(f"❌ Flat frame capture failed: {status.message}")
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error during flat capture: {e}")
+        return error_status(f"Error during flat capture: {e}")
+
+
+def create_master_frames(config, logger):
+    """Create master frames."""
+    try:
+        logger.info("=== MASTER FRAME CREATION ===")
+        
+        # Create master frame creator
+        master_creator = MasterFrameCreator(config, logger)
+        
+        # Create master frames
+        logger.info("Creating master frames...")
+        status = master_creator.create_all_masters()
+        
+        if status.is_success:
+            logger.info("✅ Master frame creation completed successfully")
+        else:
+            logger.error(f"❌ Master frame creation failed: {status.message}")
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error during master frame creation: {e}")
+        return error_status(f"Error during master frame creation: {e}")
+
+
+def start_warmup(camera, config, logger):
+    """Start warmup phase."""
+    try:
+        logger.info("=== WARMUP PHASE ===")
+        
+        if camera is None:
+            logger.warning("No camera available for warmup")
+            return success_status("Warmup skipped - no camera")
+        
+        # Create cooling manager
+        cooling_manager = create_cooling_manager(camera, config, logger)
+        
+        # Start warmup
+        logger.info("Starting warmup phase to prevent thermal shock...")
+        warmup_status = cooling_manager.start_warmup()
+        
+        if warmup_status.is_success:
+            logger.info("✅ Warmup started successfully")
+            logger.info("💡 Camera will warm up gradually. You can safely disconnect after warmup completes.")
+        else:
+            logger.warning(f"Warmup start: {warmup_status.message}")
+        
+        return warmup_status
+        
+    except Exception as e:
+        logger.error(f"Error during warmup: {e}")
+        return error_status(f"Error during warmup: {e}")
 
 
 def main():
-    """Main function for calibration workflow."""
-    parser = argparse.ArgumentParser(
-        description='Complete Calibration Workflow System',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Complete calibration workflow (darks + flats + masters)
-  python calibration_workflow.py --config config_calibration_frames.yaml
-  
-  # Individual steps
-  python calibration_workflow.py --config config_calibration_frames.yaml --step darks
-  python calibration_workflow.py --config config_calibration_frames.yaml --step flats
-  python calibration_workflow.py --config config_calibration_frames.yaml --step masters
-  
-  # Skip confirmation prompts
-  python calibration_workflow.py --config config_calibration_frames.yaml --no-confirm
-  
-  # Debug mode
-  python calibration_workflow.py --config config_calibration_frames.yaml --debug
-        """
-    )
-    
-    parser.add_argument(
-        '--config', '-c',
-        type=str,
-        default='config_calibration_frames.yaml',
-        help='Configuration file path (default: config_calibration_frames.yaml)'
-    )
-    
-    parser.add_argument(
-        '--step',
-        type=str,
-        choices=['darks', 'flats', 'masters', 'all'],
-        default='all',
-        help='Calibration step to run (default: all)'
-    )
-    
-    parser.add_argument(
-        '--no-confirm',
-        action='store_true',
-        help='Skip confirmation prompts'
-    )
-    
-    parser.add_argument(
-        '--debug', '-d',
-        action='store_true',
-        help='Enable debug logging'
-    )
-    
-    parser.add_argument(
-        '--log-level',
-        type=str,
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        default='INFO',
-        help='Logging level (default: INFO)'
-    )
+    """Main calibration workflow."""
+    parser = argparse.ArgumentParser(description="Calibration Workflow with Cooling Management")
+    parser.add_argument("--config", type=str, required=True, help="Configuration file path")
+    parser.add_argument("--darks-only", action='store_true', help="Capture only dark frames")
+    parser.add_argument("--flats-only", action='store_true', help="Capture only flat frames")
+    parser.add_argument("--masters-only", action='store_true', help="Create only master frames")
+    parser.add_argument("--skip-cooling", action='store_true', help="Skip cooling initialization")
+    parser.add_argument("--skip-warmup", action='store_true', help="Skip warmup phase")
+    parser.add_argument("--log-level", type=str, default='INFO', help="Logging level")
     
     args = parser.parse_args()
     
     # Setup logging
-    log_level = getattr(logging, args.log_level.upper())
-    if args.debug:
-        log_level = logging.DEBUG
-    
-    setup_logging(log_level)
-    logger = logging.getLogger('calibration_workflow')
+    logger = setup_logging(args.log_level)
     
     try:
         # Load configuration
-        if not os.path.exists(args.config):
-            logger.error(f"Configuration file not found: {args.config}")
-            sys.exit(1)
-        
         config = ConfigManager(args.config)
         logger.info(f"Configuration loaded from: {args.config}")
         
-        # Display workflow information
-        logger.info("=" * 60)
-        logger.info("CALIBRATION WORKFLOW SYSTEM")
-        logger.info("=" * 60)
+        camera = None
+        cooling_status = None
         
-        if args.step == 'all':
-            logger.info("Mode: Complete calibration workflow")
-            logger.info("Steps: Darks → Flats → Master Frames")
+        # Initialize cooling unless skipped
+        if not args.skip_cooling:
+            camera, cooling_status = initialize_cooling(config, logger)
+            if not cooling_status.is_success:
+                logger.error(f"Cooling initialization failed: {cooling_status.message}")
+                if cooling_status.level.value == 'ERROR':
+                    return 1
+        
+        # Run calibration workflow
+        if args.darks_only:
+            status = capture_darks_with_cooling(config, logger, camera)
+        elif args.flats_only:
+            status = capture_flats_with_cooling(config, logger, camera)
+        elif args.masters_only:
+            status = create_master_frames(config, logger)
         else:
-            logger.info(f"Mode: Single step - {args.step}")
+            # Full workflow
+            logger.info("=== FULL CALIBRATION WORKFLOW ===")
+            
+            # Capture dark frames
+            dark_status = capture_darks_with_cooling(config, logger, camera)
+            if not dark_status.is_success:
+                logger.error(f"Dark capture failed: {dark_status.message}")
+            
+            # Capture flat frames
+            flat_status = capture_flats_with_cooling(config, logger, camera)
+            if not flat_status.is_success:
+                logger.error(f"Flat capture failed: {flat_status.message}")
+            
+            # Create master frames
+            master_status = create_master_frames(config, logger)
+            if not master_status.is_success:
+                logger.error(f"Master frame creation failed: {master_status.message}")
+            
+            # Overall status
+            if all(s.is_success for s in [dark_status, flat_status, master_status]):
+                status = success_status("Full calibration workflow completed successfully")
+            else:
+                status = warning_status("Calibration workflow completed with some issues")
         
-        logger.info("=" * 60)
+        # Start warmup unless skipped
+        if not args.skip_warmup and camera:
+            warmup_status = start_warmup(camera, config, logger)
+            if not warmup_status.is_success:
+                logger.warning(f"Warmup failed: {warmup_status.message}")
         
-        # Initialize video capture (required for all operations)
-        logger.info("Initializing video capture...")
-        video_capture = VideoCapture(config=config, logger=logger)
+        # Disconnect camera
+        if camera:
+            camera.disconnect()
+            logger.info("Camera disconnected")
         
-        if not video_capture.initialize():
-            logger.error("Failed to initialize video capture")
-            sys.exit(1)
-        
-        # Run calibration steps
-        if args.step in ['darks', 'all']:
-            if not run_dark_capture(config, video_capture, logger, args.no_confirm):
-                sys.exit(1)
-        
-        if args.step in ['flats', 'all']:
-            if not run_flat_capture(config, video_capture, logger, args.no_confirm):
-                sys.exit(1)
-        
-        if args.step in ['masters', 'all']:
-            if not run_master_frame_creation(config, logger, args.no_confirm):
-                sys.exit(1)
-        
-        logger.info("=" * 60)
-        logger.info("✅ CALIBRATION WORKFLOW COMPLETED SUCCESSFULLY!")
-        logger.info("=" * 60)
-        
-        # Display summary
-        display_summary(config, logger)
-        
-    except KeyboardInterrupt:
-        logger.info("\nCalibration workflow interrupted by user")
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        sys.exit(1)
-
-
-def run_dark_capture(config, video_capture, logger, no_confirm):
-    """Run dark capture step."""
-    logger.info("\n" + "=" * 40)
-    logger.info("STEP 1: DARK FRAME CAPTURE")
-    logger.info("=" * 40)
-    
-    try:
-        # Initialize dark capture
-        dark_capture = DarkCapture(config=config, logger=logger)
-        
-        if not dark_capture.initialize(video_capture):
-            logger.error("Failed to initialize dark capture")
-            return False
-        
-        # Display dark capture settings
-        dark_config = config.get_dark_config()
-        logger.info("Dark Capture Settings:")
-        logger.info(f"  Number of darks per exposure: {dark_config['num_darks']}")
-        logger.info(f"  Science exposure time: {dark_config['science_exposure_time']:.3f}s")
-        logger.info(f"  Exposure factors: {dark_config['exposure_factors']}")
-        logger.info(f"  Output directory: {dark_config['output_dir']}")
-        
-        # Confirm before starting
-        if not no_confirm:
-            logger.info("\nMake sure the camera is covered and no light can enter")
-            logger.info("Press Enter to start dark capture or Ctrl+C to cancel...")
-            try:
-                input()
-            except KeyboardInterrupt:
-                logger.info("Dark capture cancelled by user")
-                return False
-        
-        # Capture darks
-        result = dark_capture.capture_darks()
-        
-        if result.is_success:
-            logger.info("✅ Dark capture completed successfully!")
-            total_captured = result.details.get('total_captured', 0)
-            exposure_times = result.details.get('exposure_times', [])
-            logger.info(f"Total frames captured: {total_captured}")
-            logger.info(f"Exposure times: {exposure_times}")
-            return True
+        # Final status
+        if status.is_success:
+            logger.info("🎉 Calibration workflow completed successfully!")
+            return 0
         else:
-            logger.error(f"❌ Dark capture failed: {result.message}")
-            return False
+            logger.error(f"❌ Calibration workflow failed: {status.message}")
+            return 1
             
     except Exception as e:
-        logger.error(f"Error during dark capture: {e}")
-        return False
+        logger.error(f"Unexpected error: {e}")
+        return 1
 
 
-def run_flat_capture(config, video_capture, logger, no_confirm):
-    """Run flat capture step."""
-    logger.info("\n" + "=" * 40)
-    logger.info("STEP 2: FLAT FRAME CAPTURE")
-    logger.info("=" * 40)
-    
-    try:
-        # Initialize flat capture
-        flat_capture = FlatCapture(config=config, logger=logger)
-        
-        if not flat_capture.initialize(video_capture):
-            logger.error("Failed to initialize flat capture")
-            return False
-        
-        # Display flat capture settings
-        flat_config = config.get_flat_config()
-        logger.info("Flat Capture Settings:")
-        logger.info(f"  Target count rate: {flat_config['target_count_rate']:.1%}")
-        logger.info(f"  Count tolerance: {flat_config['count_tolerance']:.1%}")
-        logger.info(f"  Number of flats: {flat_config['num_flats']}")
-        logger.info(f"  Output directory: {flat_config['output_dir']}")
-        
-        # Confirm before starting
-        if not no_confirm:
-            logger.info("\nMake sure you have a light source set up for flat frames")
-            logger.info("Press Enter to start flat capture or Ctrl+C to cancel...")
-            try:
-                input()
-            except KeyboardInterrupt:
-                logger.info("Flat capture cancelled by user")
-                return False
-        
-        # Capture flats
-        result = flat_capture.capture_flats()
-        
-        if result.is_success:
-            logger.info("✅ Flat capture completed successfully!")
-            captured_files = result.data
-            logger.info(f"Flat frames captured: {len(captured_files)}")
-            return True
-        else:
-            logger.error(f"❌ Flat capture failed: {result.message}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error during flat capture: {e}")
-        return False
-
-
-def run_master_frame_creation(config, logger, no_confirm):
-    """Run master frame creation step."""
-    logger.info("\n" + "=" * 40)
-    logger.info("STEP 3: MASTER FRAME CREATION")
-    logger.info("=" * 40)
-    
-    try:
-        # Initialize master frame creator
-        master_creator = MasterFrameCreator(config=config, logger=logger)
-        
-        # Display master frame settings
-        master_config = config.get_master_config()
-        logger.info("Master Frame Settings:")
-        logger.info(f"  Output directory: {master_config['output_dir']}")
-        logger.info(f"  Rejection method: {master_config['rejection_method']}")
-        logger.info(f"  Sigma threshold: {master_config['sigma_threshold']}")
-        logger.info(f"  Normalization method: {master_config['normalization_method']}")
-        
-        # Confirm before starting
-        if not no_confirm:
-            logger.info("\nThis will process existing dark and flat frames")
-            logger.info("Press Enter to start master frame creation or Ctrl+C to cancel...")
-            try:
-                input()
-            except KeyboardInterrupt:
-                logger.info("Master frame creation cancelled by user")
-                return False
-        
-        # Create master frames
-        result = master_creator.create_all_master_frames()
-        
-        if result.is_success:
-            logger.info("✅ Master frame creation completed successfully!")
-            dark_count = result.details.get('dark_count', 0)
-            flat_count = result.details.get('flat_count', 0)
-            logger.info(f"Master darks created: {dark_count}")
-            logger.info(f"Master flats created: {flat_count}")
-            return True
-        else:
-            logger.error(f"❌ Master frame creation failed: {result.message}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error during master frame creation: {e}")
-        return False
-
-
-def display_summary(config, logger):
-    """Display calibration workflow summary."""
-    logger.info("\n" + "=" * 60)
-    logger.info("CALIBRATION WORKFLOW SUMMARY")
-    logger.info("=" * 60)
-    
-    # Get configuration details
-    dark_config = config.get_dark_config()
-    flat_config = config.get_flat_config()
-    master_config = config.get_master_config()
-    
-    logger.info("Configuration Used:")
-    logger.info(f"  Dark frames per exposure: {dark_config['num_darks']}")
-    logger.info(f"  Science exposure time: {dark_config['science_exposure_time']:.3f}s")
-    logger.info(f"  Flat frames: {flat_config['num_flats']}")
-    logger.info(f"  Target flat count rate: {flat_config['target_count_rate']:.1%}")
-    logger.info(f"  Master frame rejection: {master_config['rejection_method']}")
-    logger.info(f"  Master frame normalization: {master_config['normalization_method']}")
-    
-    logger.info("\nOutput Directories:")
-    logger.info(f"  Dark frames: {dark_config['output_dir']}")
-    logger.info(f"  Flat frames: {flat_config['output_dir']}")
-    logger.info(f"  Master frames: {master_config['output_dir']}")
-    
-    logger.info("\nNext Steps:")
-    logger.info("  1. Verify master frame quality")
-    logger.info("  2. Apply calibration to science images")
-    logger.info("  3. Monitor calibration quality over time")
-    
-    logger.info("\nCalibration Formula:")
-    logger.info("  calibrated_image = (science_image - master_dark) / master_flat")
-    
-    logger.info("=" * 60)
-
-
-if __name__ == '__main__':
-    main() 
+if __name__ == "__main__":
+    sys.exit(main()) 

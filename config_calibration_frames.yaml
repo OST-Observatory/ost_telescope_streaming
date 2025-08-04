@@ -2,6 +2,37 @@
 # Unified configuration for dark capture, flat capture, and master frame creation
 
 # =============================================================================
+# TELESCOPE CONFIGURATION
+# =============================================================================
+telescope:
+  # Focal length in millimeters
+  focal_length: 1000
+  # Aperture diameter in millimeters
+  aperture: 200
+  # Telescope type (refractor, reflector, etc.)
+  type: "reflector"
+  # Focal ratio (focal_length / aperture)
+  focal_ratio: 5.0
+
+# =============================================================================
+# MOUNT CONFIGURATION
+# =============================================================================
+mount:
+  # ASCOM driver program ID
+  driver_id: "ASCOM.tenmicron_mount.Telescope"
+  # Connection timeout in seconds
+  connection_timeout: 10
+  # Coordinate validation
+  validate_coordinates: true
+  # Slewing detection settings
+  slewing_detection:
+    enabled: true  # Enable slewing detection to prevent captures during movement
+    check_before_capture: true  # Check slewing status before each capture
+    wait_for_completion: false  # Wait for slewing to complete before capturing
+    wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
+    check_interval: 1.0  # Interval between slewing checks in seconds
+
+# =============================================================================
 # DARK CAPTURE CONFIGURATION
 # =============================================================================
 dark_capture:
@@ -77,64 +108,101 @@ master_frames:
   calibration_tolerance: 0.1        # 10% tolerance for exposure time matching
 
 # =============================================================================
-# VIDEO CONFIGURATION (Required for all calibration operations)
+# CAMERA CONFIGURATION (Unified for all operations)
 # =============================================================================
-video:
-  video_enabled: true
-  camera_type: "ascom"  # or "opencv"
+camera:
+  # Camera type and basic settings
+  camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
+  
+  # General camera settings
+  file_format: "FITS"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+  
+  # Sensor specifications (important for calibration)
+  sensor_width: 23.5     # Sensor width in mm
+  sensor_height: 15.7    # Sensor height in mm
+  pixel_size: 3.76       # Pixel size in micrometers
+  type: "color"          # Camera type (mono, color)
+  bit_depth: 16          # Bit depth
+  
+  # Cooling settings
+  cooling:
+    enable_cooling: true
+    target_temperature: -10.0  # Target temperature in °C
+    wait_for_cooling: true     # Wait for temperature stabilization
+    cooling_timeout: 300       # Timeout for cooling stabilization in seconds
+    stabilization_tolerance: 1.0  # Temperature tolerance in °C
+    warmup_rate: 2.0          # Warmup rate in °C per minute
+    warmup_final_temp: 15.0   # Final temperature for warmup
+    warmup_at_end: true       # Start warmup when stopping observation
   
   # ASCOM camera settings
   ascom:
-    ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
+    ascom_driver: "ASCOM.ZWOASI.Camera"  # ASCOM driver ID for astro cameras
     exposure_time: 5.0  # Manual exposure time in seconds
     gain: 100.0  # Gain setting
     offset: 50  # Offset setting (0-255 typically)
     readout_mode: 0  # Readout mode (camera-specific)
     binning: 1  # Binning factor (1x1, 2x2, etc.)
-    # Optional: Separate filter wheel driver (e.g., for QHY cameras)
-    # filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # Uncomment and set if needed
+    # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
+    filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
+    
+  # Alpaca camera settings
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 5.0  # Manual exposure time in seconds
+    gain: 100.0  # Gain setting
+    offset: 50  # Offset setting (0-255 typically)
+    readout_mode: 0  # Readout mode (camera-specific)
+    binning: [1, 1]  # Binning factor [x, y] for Alpaca
+    
+  # OpenCV camera settings
+  opencv:
+    camera_index: 0  # Camera device index
+    exposure_time: 1.0  # Exposure time in seconds
+    gain: 100.0  # Gain setting
+    resolution: [1920, 1080]  # Resolution [width, height]
+    frame_rate: 30  # Frame rate
 
+# =============================================================================
+# VIDEO CONFIGURATION (Frame capture and processing)
+# =============================================================================
+video:
+  video_enabled: true
+  
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  file_format: "fits"  # File format for saved frames (fits, jpg, png, tiff, etc.)
-
-# =============================================================================
-# CAMERA CONFIGURATION (Required for cooling settings)
-# =============================================================================
-camera:
-  # Sensor parameters
-  sensor_width: 23.5    # Sensor width in mm
-  sensor_height: 15.7    # Sensor height in mm
-  pixel_size: 3.76      # Pixel size in micrometers
-  type: "color"          # Camera type (mono, color)
-  bit_depth: 16         # Bit depth
   
-  # Cooling settings for ASCOM cameras
-  cooling:
-    enable_cooling: true           # Enable camera cooling
-    target_temperature: -10.0      # Target temperature in Celsius
-    auto_cooling: true             # Auto-cooling mode
-    cooling_timeout: 300           # Cooling timeout in seconds
-    temperature_tolerance: 1.0     # Temperature tolerance in Celsius
-    wait_for_cooling: true         # Wait for target temperature before capture
+  # Processing settings
+  auto_debayer: false  # Auto-debayer color images
+  debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
+  
+  # Output settings
+  output_dir: "captured_frames"  # Directory for captured frames
+  cache_dir: "cache"  # Directory for temporary files
 
 # =============================================================================
-# OPTIONAL CONFIGURATIONS (for reference)
+# OVERLAY CONFIGURATION (Disabled for calibration operations)
 # =============================================================================
-
-# Overlay configuration (disabled for calibration operations)
 overlay:
   update:
     update_interval: 30
     max_retries: 3
   use_timestamps: true
   wait_for_plate_solve: false  # Disable for calibration
+  image_size: [6248, 4176]  # Image size for overlay generation
 
-# Plate solving configuration (disabled for calibration operations)
+# =============================================================================
+# PLATE SOLVING CONFIGURATION (Disabled for calibration operations)
+# =============================================================================
 plate_solve:
   auto_solve: false  # Disable for calibration
+  solver_path: "C:/Program Files/PlaneWave/PlateSolve2/PlateSolve2.exe"
+  search_radius: 15.0  # Search radius in degrees
+  timeout: 30  # Timeout in seconds
 
 # =============================================================================
 # WORKFLOW EXAMPLES
@@ -150,14 +218,10 @@ plate_solve:
 #    python master_frame_runner.py --config config_calibration_frames.yaml
 # 
 # 4. COMPLETE CALIBRATION WORKFLOW:
-#    # Step 1: Capture darks
-#    python dark_capture_runner.py --config config_calibration_frames.yaml
-#    
-#    # Step 2: Capture flats
-#    python flat_capture_runner.py --config config_calibration_frames.yaml
-#    
-#    # Step 3: Create master frames
-#    python master_frame_runner.py --config config_calibration_frames.yaml
+#    python calibration_workflow.py --config config_calibration_frames.yaml
+# 
+# 5. CALIBRATION WITH COOLING:
+#    python calibration_workflow.py --config config_calibration_frames.yaml --wait-for-cooling
 # 
 # =============================================================================
 # CALIBRATION WORKFLOW EXPLANATION
