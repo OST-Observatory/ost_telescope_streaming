@@ -83,4 +83,9 @@ class FileError(TelescopeStreamingError):
 
 class CalibrationError(TelescopeStreamingError):
     """Raised when calibration operations fail."""
+    pass
+
+
+class CoolingError(HardwareError):
+    """Raised when camera cooling operations fail."""
     pass 
