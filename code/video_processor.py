@@ -456,15 +456,50 @@ class VideoProcessor:
                         frame_filename = fits_filename
                 
                 else:
-                    # For non-ASCOM cameras: Save only the configured format
-                    # Non-ASCOM cameras don't need dual-format saving
-                    frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
-                    save_status = self.video_capture.save_frame(frame, str(frame_filename))
-                    if save_status and save_status.is_success:
-                        self.logger.info(f"Frame saved: {frame_filename}")
+                    # For non-ASCOM cameras: Always save FITS for plate-solving + configured format for display
+                    # This ensures PlateSolve2 compatibility while maintaining user preferences
+                    
+                    # 1. Always save FITS for plate-solving (required for PlateSolve2)
+                    fits_filename = self.frame_dir / f"{base_filename}.fits"
+                    
+                    # For Alpaca cameras, we need to capture a new frame for FITS
+                    if self.video_capture.camera_type == 'alpaca':
+                        # Get settings from config for Alpaca camera
+                        alpaca_config = self.video_config.get('alpaca', {})
+                        exposure_time = alpaca_config.get('exposure_time', 1.0)
+                        gain = alpaca_config.get('gain', None)
+                        binning = alpaca_config.get('binning', [1, 1])
+                        
+                        # Capture FITS frame for Alpaca
+                        alpaca_status = self.video_capture.capture_single_frame_alpaca(
+                            exposure_time_s=exposure_time,
+                            gain=gain,
+                            binning=binning
+                        )
+                        if alpaca_status.is_success:
+                            fits_save_status = self.video_capture.save_frame(alpaca_status, str(fits_filename))
+                            if fits_save_status and fits_save_status.is_success:
+                                self.logger.info(f"FITS frame saved for plate-solving: {fits_filename}")
+                            else:
+                                self.logger.warning(f"Failed to save FITS frame: {fits_save_status.message if fits_save_status else 'No status'}")
+                                fits_filename = None
+                        else:
+                            self.logger.warning(f"Failed to capture Alpaca FITS frame: {alpaca_status.message}")
+                            fits_filename = None
+                    
+                    # 2. Save configured format for display (if different from FITS)
+                    if self.file_format.lower() not in ['fit', 'fits']:
+                        frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
+                        # Use current frame (converted for display)
+                        display_save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                        if display_save_status and display_save_status.is_success:
+                            self.logger.info(f"Display frame saved: {frame_filename}")
+                        else:
+                            self.logger.warning(f"Failed to save display frame: {display_save_status.message if display_save_status else 'No status'}")
+                            frame_filename = None
                     else:
-                        self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
-                        frame_filename = None
+                        # If FITS is the display format, use FITS file for both
+                        frame_filename = fits_filename
             
             # Trigger capture callback
             if self.on_capture_frame:

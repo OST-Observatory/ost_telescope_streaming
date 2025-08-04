@@ -722,6 +722,11 @@ class VideoCapture:
                 # Save original ASCOM data as FITS
                 return self._save_ascom_fits(frame, str(output_path))
             
+            # For Alpaca cameras, handle FITS files specially
+            if self.camera_type == 'alpaca' and self.camera and file_extension in ['.fit', '.fits']:
+                # Save Alpaca data as FITS
+                return self._save_alpaca_fits(frame, str(output_path))
+            
             # For Alpaca cameras, save as a generic image file
             if self.camera_type == 'alpaca' and self.camera:
                 # Convert Alpaca image data to OpenCV format
@@ -1115,6 +1120,128 @@ class VideoCapture:
         except Exception as e:
             self.logger.error(f"Failed to save FITS: {e}")
             return error_status(f"Failed to save FITS: {e}")
+    
+    def _save_alpaca_fits(self, frame: Any, filename: str) -> CameraStatus:
+        """Saves Alpaca image data as FITS file with proper headers.
+        Supports both monochrome and color cameras with debayering.
+        Args:
+            frame: The image data (could be status object or direct data)
+            filename: Output filename
+        Returns:
+            CameraStatus: Status object with result
+        """
+        try:
+            import astropy.io.fits as fits
+            from astropy.time import Time
+            
+            # Get original Alpaca data
+            if hasattr(frame, 'data'):
+                # Frame is a status object with data
+                image_data = frame.data
+            else:
+                # Frame is direct data
+                image_data = frame
+            
+            # Ensure it's a numpy array
+            if not isinstance(image_data, np.ndarray):
+                image_data = np.array(image_data)
+            
+            # Log the data properties for debugging
+            self.logger.debug(f"Alpaca FITS data: dtype={image_data.dtype}, shape={image_data.shape}, min={image_data.min()}, max={image_data.max()}")
+            
+            # Check if this is a color camera
+            is_color_camera = False
+            bayer_pattern = None
+            
+            # For Alpaca cameras, we need to determine color from sensor type
+            if hasattr(self.camera, 'sensor_type'):
+                sensor_type = self.camera.sensor_type
+                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
+                    is_color_camera = True
+                    bayer_pattern = sensor_type
+                    self.logger.info(f"Detected color camera with Bayer pattern: {bayer_pattern}")
+            
+            # Ensure data is in a format that PlateSolve 2 can read
+            # PlateSolve 2 prefers 16-bit integer data for best compatibility
+            if image_data.dtype != np.uint16:
+                if image_data.dtype in [np.float32, np.float64]:
+                    # Convert float data to 16-bit integer
+                    # Normalize to 0-65535 range
+                    data_min = image_data.min()
+                    data_max = image_data.max()
+                    if data_max > data_min:
+                        image_data = ((image_data - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
+                    else:
+                        image_data = image_data.astype(np.uint16)
+                else:
+                    # Convert to 16-bit
+                    image_data = image_data.astype(np.uint16)
+            
+            # Create FITS header with astronomical information
+            header = fits.Header()
+            
+            # Basic image information
+            header['NAXIS'] = len(image_data.shape)
+            header['NAXIS1'] = image_data.shape[1] if len(image_data.shape) >= 2 else 1
+            header['NAXIS2'] = image_data.shape[0] if len(image_data.shape) >= 2 else 1
+            if len(image_data.shape) == 3:
+                header['NAXIS3'] = image_data.shape[2]
+            
+            # Data type information
+            header['BITPIX'] = 16  # 16-bit integer
+            header['BZERO'] = 0
+            header['BSCALE'] = 1
+            
+            # Camera information
+            header['CAMERA'] = 'Alpaca'
+            if hasattr(self.camera, 'name'):
+                header['CAMNAME'] = self.camera.name
+            
+            # Sensor information
+            if hasattr(self, 'sensor_width') and hasattr(self, 'sensor_height'):
+                header['XPIXSZ'] = self.pixel_size  # Pixel size in microns
+                header['YPIXSZ'] = self.pixel_size
+                header['XBAYROFF'] = 0
+                header['YBAYROFF'] = 0
+            
+            # Color camera information
+            if is_color_camera and bayer_pattern:
+                header['BAYERPAT'] = bayer_pattern
+                header['COLORTYP'] = 'COLOR'
+            else:
+                header['COLORTYP'] = 'MONO'
+            
+            # Exposure information
+            if hasattr(self.camera, 'exposure_time'):
+                header['EXPTIME'] = self.camera.exposure_time
+            if hasattr(self.camera, 'gain'):
+                header['GAIN'] = self.camera.gain
+            
+            # Binning information
+            if hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
+                header['XBINNING'] = self.camera.bin_x
+                header['YBINNING'] = self.camera.bin_y
+            
+            # Temperature information
+            if hasattr(self.camera, 'ccdtemperature'):
+                header['CCD-TEMP'] = self.camera.ccdtemperature
+            
+            # Timestamp
+            header['DATE-OBS'] = Time.now().isot
+            
+            # Create FITS file
+            hdu = fits.PrimaryHDU(image_data, header=header)
+            hdu.writeto(filename, overwrite=True)
+            
+            self.logger.info(f"Alpaca FITS file saved: {filename}")
+            return success_status("Alpaca FITS file saved", data=filename)
+            
+        except ImportError:
+            self.logger.error("Astropy not available for FITS saving")
+            return error_status("Astropy not available for FITS saving")
+        except Exception as e:
+            self.logger.error(f"Error saving Alpaca FITS file: {e}")
+            return error_status(f"Error saving Alpaca FITS file: {e}")
     
     def get_camera_info(self) -> dict[str, Any]:
         """Get comprehensive camera information.

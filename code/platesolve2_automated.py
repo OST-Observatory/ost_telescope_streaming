@@ -53,21 +53,34 @@ class PlateSolve2Automated:
         """
         start_time = time.time()
         try:
-            # Convert image path to absolute path
+            # Convert image path to absolute path and validate
             abs_image_path = str(Path(image_path).resolve())
             self.logger.info(f"Using absolute image path: {abs_image_path}")
+            
+            # Validate that the image file exists and is readable
+            if not os.path.exists(abs_image_path):
+                return error_status(f"Image file not found: {abs_image_path}")
+            
+            if not os.access(abs_image_path, os.R_OK):
+                return error_status(f"Image file not readable: {abs_image_path}")
+            
+            # Check file size to ensure it's not empty
+            file_size = os.path.getsize(abs_image_path)
+            if file_size == 0:
+                return error_status(f"Image file is empty: {abs_image_path}")
+            
+            self.logger.info(f"Image file validated: {abs_image_path} (size: {file_size} bytes)")
             
             # Remove old .apm file if it exists
             apm_path = self._get_apm_path(abs_image_path)
             if os.path.exists(apm_path):
                 os.remove(apm_path)
+                self.logger.debug(f"Removed old .apm file: {apm_path}")
+            
             # Calculate or estimate parameters
             ra_rad, dec_rad, fov_width_rad, fov_height_rad = self._prepare_parameters(
                 ra_deg, dec_deg, fov_width_deg, fov_height_deg
             )
-            # Convert image path to absolute path
-            abs_image_path = str(Path(image_path).resolve())
-            self.logger.info(f"Using absolute image path: {abs_image_path}")
             
             # Build command line string
             cmd_string = self._build_command_string(
@@ -75,19 +88,24 @@ class PlateSolve2Automated:
             )
             if self.verbose:
                 self.logger.info(f"PlateSolve 2 command: {cmd_string}")
+            
             # Execute PlateSolve 2
             success = self._execute_platesolve2(cmd_string)
+            
             # Wait for .apm file to appear (max 10s)
             apm_timeout = 10
             waited = 0
             while not os.path.exists(apm_path) and waited < apm_timeout:
                 time.sleep(0.5)
                 waited += 0.5
+            
             if not os.path.exists(apm_path):
                 return error_status(f"No .apm result file found after {apm_timeout}s")
+            
             # Parse .apm file
             result_dict = {}
             result_dict = self._parse_apm_file(apm_path, result_dict, image_path)
+            
             if result_dict.get('success'):
                 return success_status(
                     "PlateSolve2 automated solving successful",
@@ -96,6 +114,7 @@ class PlateSolve2Automated:
                 )
             else:
                 return error_status(f"PlateSolve2 did not find a valid solution: {result_dict.get('error_message')}")
+                
         except Exception as e:
             self.logger.error(f"PlateSolve2 automation error: {e}")
             return error_status(f"PlateSolve2 automation error: {e}")
@@ -215,7 +234,15 @@ class PlateSolve2Automated:
             # Determine working directory
             working_dir = None
             if self.working_directory:
-                working_dir = self.working_directory
+                working_dir = str(Path(self.working_directory).resolve())
+                # Ensure working directory exists
+                if not os.path.exists(working_dir):
+                    os.makedirs(working_dir, exist_ok=True)
+                    self.logger.info(f"Created working directory: {working_dir}")
+                elif not os.access(working_dir, os.W_OK):
+                    self.logger.warning(f"Working directory not writable: {working_dir}")
+                    # Fall back to executable directory
+                    working_dir = str(Path(self.executable_path).parent)
             else:
                 # Use the directory of the executable as fallback
                 working_dir = str(Path(self.executable_path).parent)
