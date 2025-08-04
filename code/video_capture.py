@@ -399,13 +399,10 @@ class VideoCapture:
                 elif self.camera_type == 'ascom':
                     # ASCOM camera logic
                     if self.camera:
-                        # Get settings from config
-                        ascom_config = self.config.get_video_config().get('ascom', {})
-                        exposure_time = ascom_config.get('exposure_time', 1.0)
-                        gain = ascom_config.get('gain', None)
-                        binning = ascom_config.get('binning', 1)
-                        
-                        # Use the existing capture_single_frame_ascom method
+                        # Use exposure time in seconds
+                        exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
+                        gain = self.config.get_camera_config().get('gain', None)
+                        binning = self.config.get_camera_config().get('ascom', {}).get('binning', 1)
                         status = self.capture_single_frame_ascom(exposure_time, gain, binning)
                         if status.is_success:
                             # Convert ASCOM image to OpenCV format with debayering
@@ -425,13 +422,10 @@ class VideoCapture:
                 elif self.camera_type == 'alpaca':
                     # Alpaca camera logic
                     if self.camera:
-                        # Get settings from config
-                        alpaca_config = self.config.get_video_config().get('alpaca', {})
-                        exposure_time = alpaca_config.get('exposure_time', 1.0)
-                        gain = alpaca_config.get('gain', None)
-                        binning = alpaca_config.get('binning', 1)
-                        
-                        # Use the existing capture_single_frame_alpaca method
+                        # Use exposure time in seconds
+                        exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
+                        gain = self.config.get_camera_config().get('gain', None)
+                        binning = self.config.get_camera_config().get('alpaca', {}).get('binning', [1, 1])
                         status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
                         if status.is_success:
                             # Convert Alpaca image to OpenCV format
@@ -473,7 +467,7 @@ class VideoCapture:
             # Use exposure time in seconds
             exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
             gain = self.config.get_camera_config().get('gain', None)
-            binning = self.config.get_video_config().get('binning', 1)
+            binning = self.config.get_camera_config().get('alpaca', {}).get('binning', [1, 1])
             return self.capture_single_frame_alpaca(exposure_time, gain, binning)
         elif self.camera_type == 'opencv':
             if not self.cap or not self.cap.isOpened():
@@ -609,10 +603,15 @@ class VideoCapture:
                 if gain is not None:
                     self.camera.gain = gain
                 
-                # Set binning
-                if binning != 1:
-                    self.camera.bin_x = binning
-                    self.camera.bin_y = binning
+                # Set binning - ensure it's an integer, not a list
+                if isinstance(binning, list):
+                    binning_value = binning[0] if len(binning) > 0 else 1
+                else:
+                    binning_value = int(binning)
+                
+                if binning_value != 1:
+                    self.camera.bin_x = binning_value
+                    self.camera.bin_y = binning_value
                 
                 # Set offset if available
                 if hasattr(self.camera, 'offset'):
@@ -626,14 +625,17 @@ class VideoCapture:
                 self.logger.warning(f"Could not set camera parameters: {e}")
             
             # Start exposure
-            self.logger.debug(f"Starting Alpaca exposure: {exposure_time_s}s, gain={gain}, binning={binning}")
+            self.logger.debug(f"Starting Alpaca exposure: {exposure_time_s}s, gain={gain}, binning={binning_value}")
             self.camera.start_exposure(exposure_time_s, light=True)
             
-            # Wait for exposure to complete
+            # Wait for exposure to complete with proper timeout handling
+            start_time = time.time()
+            timeout = exposure_time_s + 30  # 30s extra timeout
+            
             while not self.camera.image_ready:
                 time.sleep(0.1)
                 # Add timeout protection
-                if time.time() - self.camera.last_exposure_start_time > exposure_time_s + 30:  # 30s timeout
+                if time.time() - start_time > timeout:
                     self.logger.error("Exposure timeout")
                     return error_status("Exposure timeout")
             
@@ -653,7 +655,7 @@ class VideoCapture:
                 frame_details = {
                     'exposure_time_s': exposure_time_s, 
                     'gain': gain, 
-                    'binning': binning, 
+                    'binning': binning_value, 
                     'offset': getattr(self.camera, 'offset', None),
                     'readout_mode': getattr(self.camera, 'readout_mode', None),
                     'dimensions': f"{effective_width}x{effective_height}", 
@@ -665,7 +667,7 @@ class VideoCapture:
                 frame_details = {
                     'exposure_time_s': exposure_time_s, 
                     'gain': gain, 
-                    'binning': binning, 
+                    'binning': binning_value, 
                     'offset': getattr(self.camera, 'offset', None),
                     'readout_mode': getattr(self.camera, 'readout_mode', None),
                     'dimensions': f"{effective_width}x{effective_height}", 
