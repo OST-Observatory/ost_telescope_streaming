@@ -102,7 +102,7 @@ class OverlayRunner:
             self.running = True
             self.last_update = datetime.now()
             
-            return success_status("Observation session started successfully")
+            return success_status("Overlay runner observation session ready")
             
         except Exception as e:
             self.logger.error(f"Failed to start observation: {e}")

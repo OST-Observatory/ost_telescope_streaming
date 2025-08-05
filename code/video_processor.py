@@ -229,8 +229,8 @@ class VideoProcessor:
         self.is_running = True
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
-        self.logger.info("Video processor started")
-        return success_status("Video processor started", details={'video_enabled': self.video_enabled, 'is_running': True})
+        self.logger.info("Video processing loop started")
+        return success_status("Video processing loop started", details={'video_enabled': self.video_enabled, 'is_running': True})
     
     def stop(self) -> VideoProcessingStatus:
         """Stoppt die Videoverarbeitung.
@@ -273,9 +273,9 @@ class VideoProcessor:
                 self.logger.error("Failed to start video capture")
                 return error_status("Failed to start video capture", details={'video_enabled': self.video_enabled})
             
-            self.logger.info("Observation session started successfully")
+            self.logger.info("Observation session initialized successfully")
             return success_status(
-                "Observation session started successfully",
+                "Observation session initialized successfully",
                 details={
                     'video_enabled': self.video_enabled,
                     'is_running': False,  # Processing loop not started yet

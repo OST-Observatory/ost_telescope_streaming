@@ -398,9 +398,45 @@ class VideoCapture:
                             time.sleep(0.1)
                             
                 elif self.camera_type in ['ascom', 'alpaca']:
-                    # For ASCOM and Alpaca cameras, don't make separate captures
-                    # The VideoProcessor will handle captures via get_current_frame()
-                    time.sleep(1)  # Just keep the thread alive
+                    # For ASCOM and Alpaca cameras, make captures but don't save files
+                    # The VideoProcessor will handle file saving and plate-solving
+                    if self.camera:
+                        if self.camera_type == 'alpaca':
+                            # Use exposure time from alpaca config
+                            alpaca_config = self.config.get_camera_config().get('alpaca', {})
+                            exposure_time = alpaca_config.get('exposure_time', 1.0)  # seconds
+                            gain = alpaca_config.get('gain', None)
+                            binning = alpaca_config.get('binning', [1, 1])
+                            status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
+                        else:  # ascom
+                            # Use exposure time in seconds
+                            exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
+                            gain = self.config.get_camera_config().get('gain', None)
+                            binning = self.config.get_camera_config().get('ascom', {}).get('binning', 1)
+                            status = self.capture_single_frame_ascom(exposure_time, gain, binning)
+                        
+                        if status.is_success:
+                            # Convert image to OpenCV format and store in current_frame
+                            if self.camera_type == 'alpaca':
+                                frame = self._convert_alpaca_to_opencv(status.data)
+                            else:  # ascom
+                                frame = self._convert_ascom_to_opencv(status.data)
+                            
+                            if frame is not None:
+                                with self.frame_lock:
+                                    self.current_frame = frame.copy()
+                            else:
+                                self.logger.warning("Failed to convert camera image")
+                                time.sleep(0.1)
+                        else:
+                            self.logger.warning(f"Failed to capture frame from {self.camera_type} camera: {status.message}")
+                            time.sleep(0.1)
+                    else:
+                        self.logger.warning(f"{self.camera_type.upper()} camera not available")
+                        time.sleep(0.1)
+                    
+                    # Sleep between captures to avoid overwhelming the camera
+                    time.sleep(5)  # 5 second interval between captures
                             
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
