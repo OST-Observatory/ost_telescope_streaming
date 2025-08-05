@@ -420,7 +420,7 @@ class VideoCapture:
                             # Store raw camera data in current_frame (no conversion here)
                             # Conversion will happen only when needed for display
                             with self.frame_lock:
-                                self.current_frame = status.data
+                                self.current_frame = status
                         else:
                             self.logger.warning(f"Failed to capture frame from {self.camera_type} camera: {status.message}")
                             time.sleep(0.1)
@@ -438,7 +438,21 @@ class VideoCapture:
     def get_current_frame(self) -> Optional[np.ndarray]:
         """Returns the last captured frame."""
         with self.frame_lock:
-            return self.current_frame.copy() if self.current_frame is not None else None
+            if self.current_frame is None:
+                return None
+            
+            # Handle Status objects
+            if hasattr(self.current_frame, 'data'):
+                # It's a Status object, extract the data
+                frame_data = self.current_frame.data
+                if hasattr(frame_data, 'data'):
+                    # Nested Status object
+                    return frame_data.data
+                else:
+                    return frame_data
+            else:
+                # It's direct data
+                return self.current_frame
     
     def capture_single_frame(self) -> CameraStatus:
         """Captures a single frame and returns status.
