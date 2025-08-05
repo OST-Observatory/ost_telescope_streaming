@@ -71,7 +71,7 @@ video:
   use_capture_count: false  # Enable capture count in frame filenames
   
   # Processing settings
-  auto_debayer: false  # Auto-debayer color images
+  auto_debayer: true  # Auto-debayer color images
   debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
   
   # Output settings
