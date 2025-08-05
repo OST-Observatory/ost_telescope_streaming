@@ -731,8 +731,16 @@ class VideoCapture:
             
             # For Alpaca cameras, save as a generic image file
             if self.camera_type == 'alpaca' and self.camera:
+                # Extract data from Status object if needed
+                if hasattr(frame, 'data'):
+                    # Frame is a Status object, extract the data
+                    frame_data = frame.data
+                else:
+                    # Frame is direct data
+                    frame_data = frame
+                
                 # Convert Alpaca image data to OpenCV format
-                frame = self._convert_alpaca_to_opencv(frame)
+                frame = self._convert_alpaca_to_opencv(frame_data)
                 if frame is None:
                     return error_status("Failed to convert Alpaca image to OpenCV format")
             
@@ -1282,29 +1290,39 @@ class VideoCapture:
                 header['COLORTYP'] = 'MONO'
             
             # Exposure information - use actual values from frame details
-            actual_exposure_time = frame_details.get('exposure_time_s')
-            if actual_exposure_time is not None:
-                header['EXPTIME'] = actual_exposure_time
-            elif hasattr(self.camera, 'exposure_time'):
-                header['EXPTIME'] = self.camera.exposure_time
-            
-            actual_gain = frame_details.get('gain')
-            if actual_gain is not None:
-                header['GAIN'] = actual_gain
-            elif hasattr(self.camera, 'gain'):
-                header['GAIN'] = self.camera.gain
-            
-            actual_binning = frame_details.get('binning')
-            if actual_binning is not None:
-                if isinstance(actual_binning, list):
-                    header['XBINNING'] = actual_binning[0]
-                    header['YBINNING'] = actual_binning[1]
-                else:
-                    header['XBINNING'] = actual_binning
-                    header['YBINNING'] = actual_binning
-            elif hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
-                header['XBINNING'] = self.camera.bin_x
-                header['YBINNING'] = self.camera.bin_y
+            if frame_details is not None:
+                actual_exposure_time = frame_details.get('exposure_time_s')
+                if actual_exposure_time is not None:
+                    header['EXPTIME'] = actual_exposure_time
+                elif hasattr(self.camera, 'exposure_time'):
+                    header['EXPTIME'] = self.camera.exposure_time
+                
+                actual_gain = frame_details.get('gain')
+                if actual_gain is not None:
+                    header['GAIN'] = actual_gain
+                elif hasattr(self.camera, 'gain'):
+                    header['GAIN'] = self.camera.gain
+                
+                actual_binning = frame_details.get('binning')
+                if actual_binning is not None:
+                    if isinstance(actual_binning, list):
+                        header['XBINNING'] = actual_binning[0]
+                        header['YBINNING'] = actual_binning[1]
+                    else:
+                        header['XBINNING'] = actual_binning
+                        header['YBINNING'] = actual_binning
+                elif hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
+                    header['XBINNING'] = self.camera.bin_x
+                    header['YBINNING'] = self.camera.bin_y
+            else:
+                # Fallback to camera attributes if frame_details is None
+                if hasattr(self.camera, 'exposure_time'):
+                    header['EXPTIME'] = self.camera.exposure_time
+                if hasattr(self.camera, 'gain'):
+                    header['GAIN'] = self.camera.gain
+                if hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
+                    header['XBINNING'] = self.camera.bin_x
+                    header['YBINNING'] = self.camera.bin_y
             
             # Temperature information
             if hasattr(self.camera, 'ccdtemperature'):
