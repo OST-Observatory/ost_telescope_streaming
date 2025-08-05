@@ -423,10 +423,11 @@ class VideoCapture:
                 elif self.camera_type == 'alpaca':
                     # Alpaca camera logic
                     if self.camera:
-                        # Use exposure time in seconds
-                        exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
-                        gain = self.config.get_camera_config().get('gain', None)
-                        binning = self.config.get_camera_config().get('alpaca', {}).get('binning', [1, 1])
+                        # Use exposure time from alpaca config
+                        alpaca_config = self.config.get_camera_config().get('alpaca', {})
+                        exposure_time = alpaca_config.get('exposure_time', 1.0)  # seconds
+                        gain = alpaca_config.get('gain', None)
+                        binning = alpaca_config.get('binning', [1, 1])
                         status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
                         if status.is_success:
                             # Convert Alpaca image to OpenCV format
@@ -465,10 +466,11 @@ class VideoCapture:
             binning = self.config.get_video_config().get('binning', 1)
             return self.capture_single_frame_ascom(exposure_time, gain, binning)
         elif self.camera_type == 'alpaca' and self.camera:
-            # Use exposure time in seconds
-            exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
-            gain = self.config.get_camera_config().get('gain', None)
-            binning = self.config.get_camera_config().get('alpaca', {}).get('binning', [1, 1])
+            # Use exposure time from alpaca config
+            alpaca_config = self.config.get_camera_config().get('alpaca', {})
+            exposure_time = alpaca_config.get('exposure_time', 1.0)  # seconds
+            gain = alpaca_config.get('gain', None)
+            binning = alpaca_config.get('binning', [1, 1])
             return self.capture_single_frame_alpaca(exposure_time, gain, binning)
         elif self.camera_type == 'opencv':
             if not self.cap or not self.cap.isOpened():

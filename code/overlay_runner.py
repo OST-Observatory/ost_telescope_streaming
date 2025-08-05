@@ -79,6 +79,13 @@ class OverlayRunner:
                 if self.enable_cooling and hasattr(self.video_processor, 'cooling_manager'):
                     self.cooling_manager = self.video_processor.cooling_manager
                     self.logger.info("Cooling manager initialized")
+                
+                # Start observation session immediately
+                session_status = self.video_processor.start_observation_session()
+                if session_status.is_success:
+                    self.logger.info("Observation session started successfully")
+                else:
+                    self.logger.error(f"Failed to start observation session: {session_status.message}")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize components: {e}")
@@ -88,11 +95,9 @@ class OverlayRunner:
         try:
             self.logger.info("Starting observation session...")
             
-            # Start video processor observation session
+            # Video processor observation session is already started in _initialize_components
             if self.video_processor:
-                session_status = self.video_processor.start_observation_session()
-                if not session_status.is_success:
-                    return session_status
+                self.logger.info("Video processor observation session already active")
             
             self.running = True
             self.last_update = datetime.now()
@@ -170,11 +175,8 @@ class OverlayRunner:
             return
             
         try:
-            # Start observation session first
-            start_status = self.start_observation()
-            if not start_status.is_success:
-                self.logger.error(f"Failed to start observation: {start_status.message}")
-                return
+            # Observation session is already started in __init__
+            self.running = True
             
             with ASCOMMount(config=self.config, logger=self.logger) as self.mount:
                 self.logger.info("Overlay Runner started")
