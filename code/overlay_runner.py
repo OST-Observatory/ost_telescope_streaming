@@ -72,7 +72,7 @@ class OverlayRunner:
     def _initialize_components(self):
         """Initialize video processor and cooling manager."""
         try:
-            if self.video_enabled:
+            if self.video_enabled and VIDEO_AVAILABLE:
                 self.video_processor = VideoProcessor(self.config, self.logger)
                 
                 # Initialize cooling if enabled
@@ -104,17 +104,17 @@ class OverlayRunner:
             return error_status(f"Failed to start observation: {e}")
     
     def stop_observation(self) -> Status:
-        """Stop observation session with warmup."""
+        """Stop observation session with optional warmup."""
         try:
             self.logger.info("Stopping observation session...")
             
-            self.running = False
-            
-            # End video processor observation session
+            # Stop video processor observation session
             if self.video_processor:
                 session_status = self.video_processor.end_observation_session()
                 if not session_status.is_success:
-                    self.logger.warning(f"Session end: {session_status.message}")
+                    self.logger.warning(f"Session stop: {session_status.message}")
+            
+            self.running = False
             
             return success_status("Observation session stopped successfully")
             
@@ -124,113 +124,45 @@ class OverlayRunner:
     
     def get_cooling_status(self) -> Dict[str, Any]:
         """Get current cooling status."""
-        if not self.cooling_manager:
-            return {'error': 'Cooling manager not available'}
-        
-        return self.cooling_manager.get_cooling_status()
-
+        if self.cooling_manager:
+            return self.cooling_manager.get_cooling_status()
+        return {}
+    
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                                    fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
                                    position_angle_deg: Optional[float] = None, image_size: Optional[Tuple[int, int]] = None,
                                    mag_limit: Optional[float] = None, is_flipped: Optional[bool] = None) -> OverlayStatus:
-        """Generate an overlay for the given coordinates.
+        """Generate astronomical overlay with given coordinates."""
+        if not OVERLAY_AVAILABLE:
+            return error_status("Overlay generator not available")
         
-        Creates an astronomical overlay showing stars, deep sky objects,
-        and other celestial features for the specified coordinates.
-        
-        Args:
-            ra_deg: Right Ascension in degrees
-            dec_deg: Declination in degrees
-            output_file: Optional output filename
-            fov_width_deg: Field of view width in degrees (from plate-solving)
-            fov_height_deg: Field of view height in degrees (from plate-solving)
-            position_angle_deg: Position angle in degrees (from plate-solving)
-            image_size: Image size as (width, height) in pixels (from camera)
-            mag_limit: Magnitude limit for objects to include
-            is_flipped: Whether the image is flipped (from plate-solving)
-            
-        Returns:
-            OverlayStatus: Status object with result or error information.
-            
-        Note:
-            This method supports both class-based and subprocess-based overlay
-            generation, with the class-based approach being preferred when available.
-        """
         try:
-            # Use class-based approach if available
-            if self.overlay_generator:
-                try:
-                    result_file = self.overlay_generator.generate_overlay(
-                        ra_deg, dec_deg, output_file, 
-                        fov_width_deg, fov_height_deg, position_angle_deg, image_size, mag_limit, is_flipped
-                    )
-                    self.logger.info(f"Overlay created successfully: {result_file}")
-                    return success_status(
-                        f"Overlay created successfully: {result_file}",
-                        data=result_file,
-                        details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size, 'mag_limit': mag_limit, 'is_flipped': is_flipped}
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error creating overlay: {e}")
-                    return error_status(f"Error creating overlay: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
+            overlay_generator = OverlayGenerator(self.config, self.logger)
             
-            # Fallback to subprocess approach
-            #   TODO: Remove this fallback in the future when the overlay generator works consistently
+            # Generate overlay
+            overlay_status = overlay_generator.generate_overlay(
+                ra_deg=ra_deg,
+                dec_deg=dec_deg,
+                output_file=output_file,
+                fov_width_deg=fov_width_deg,
+                fov_height_deg=fov_height_deg,
+                position_angle_deg=position_angle_deg,
+                image_size=image_size,
+                mag_limit=mag_limit,
+                is_flipped=is_flipped
+            )
+            
+            if overlay_status.is_success:
+                self.logger.info(f"Overlay generated successfully: {overlay_status.data}")
             else:
-                self.logger.warning("Using subprocess fallback for overlay generation")
-                cmd = [
-                    sys.executable,  # Current Python interpreter
-                    "generate_overlay.py",
-                    "--ra", str(ra_deg),
-                    "--dec", str(dec_deg)
-                ]
-                
-                if output_file:
-                    cmd.extend(["--output", output_file])
-                
-                # Add new parameters if provided
-                if fov_width_deg is not None:
-                    cmd.extend(["--fov-width", str(fov_width_deg)])
-                if fov_height_deg is not None:
-                    cmd.extend(["--fov-height", str(fov_height_deg)])
-                if position_angle_deg is not None:
-                    cmd.extend(["--position-angle", str(position_angle_deg)])
-                if image_size is not None:
-                    cmd.extend(["--image-width", str(image_size[0]), "--image-height", str(image_size[1])])
-                
-                try:
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=60,  # Timeout after 60 seconds
-                        cwd=os.path.dirname(os.path.abspath(__file__))  # Working directory
-                    )
-                    
-                    if result.returncode == 0:
-                        self.logger.info("Overlay created successfully")
-                        if result.stdout:
-                            self.logger.info(result.stdout.strip())
-                        return success_status(
-                            "Overlay created successfully via subprocess",
-                            data=output_file,
-                            details={'ra_deg': ra_deg, 'dec_deg': dec_deg, 'method': 'subprocess', 'fov_width_deg': fov_width_deg, 'fov_height_deg': fov_height_deg, 'position_angle_deg': position_angle_deg, 'image_size': image_size}
-                        )
-                    else:
-                        error_msg = result.stderr.strip() if result.stderr else "Unknown subprocess error"
-                        self.logger.error(f"Error creating overlay: {error_msg}")
-                        return error_status(f"Subprocess error: {error_msg}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
-                        
-                except subprocess.TimeoutExpired:
-                    self.logger.error("Timeout while creating overlay")
-                    return error_status("Timeout while creating overlay", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
-                except Exception as e:
-                    self.logger.error(f"Unexpected error: {e}")
-                    return error_status(f"Unexpected error: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
-                    
+                self.logger.warning(f"Overlay generation failed: {overlay_status.message}")
+            
+            return overlay_status
+            
         except Exception as e:
-            return error_status(f"Overlay generation failed: {e}", details={'ra_deg': ra_deg, 'dec_deg': dec_deg})
-
+            self.logger.error(f"Error generating overlay: {e}")
+            return error_status(f"Error generating overlay: {e}")
+    
     def run(self) -> None:
         """Main loop of the overlay runner."""
         if not MOUNT_AVAILABLE:
@@ -238,15 +170,19 @@ class OverlayRunner:
             return
             
         try:
+            # Start observation session first
+            start_status = self.start_observation()
+            if not start_status.is_success:
+                self.logger.error(f"Failed to start observation: {start_status.message}")
+                return
+            
             with ASCOMMount(config=self.config, logger=self.logger) as self.mount:
                 self.logger.info("Overlay Runner started")
                 self.logger.info(f"Update interval: {self.update_interval} seconds")
                 
-                # Initialize video processor if available and enabled
-                if VIDEO_AVAILABLE and self.video_enabled:
+                # Use existing video processor from initialization
+                if self.video_processor:
                     try:
-                        self.video_processor = VideoProcessor(config=self.config, logger=self.logger)
-                        
                         # Set up callbacks
                         def on_solve_result(result):
                             self.last_solve_result = result
@@ -267,12 +203,12 @@ class OverlayRunner:
                         
                         start_status = self.video_processor.start()
                         if start_status.is_success:
-                            self.logger.debug("Video processor start successful")
+                            self.logger.info("Video processor started")
                         else:
                             self.logger.error(f"Failed to start video processor: {start_status.message}")
                             self.video_processor = None
                     except Exception as e:
-                        self.logger.error(f"Error initializing video processor: {e}")
+                        self.logger.error(f"Error starting video processor: {e}")
                         self.video_processor = None
                 else:
                     self.logger.info("Video processing disabled or not available")

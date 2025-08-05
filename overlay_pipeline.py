@@ -26,16 +26,16 @@ def main():
         epilog="""
 Examples:
   # Run with default settings
-  python overlay_runner.py
+  python overlay_pipeline.py
   
   # Run with custom config and 60-second intervals
-  python overlay_runner.py --config my_config.yaml --interval 60
+  python overlay_pipeline.py --config my_config.yaml --interval 60
   
   # Run with debug logging
-  python overlay_runner.py --debug
+  python overlay_pipeline.py --debug
   
   # Run with video processing and plate-solving
-  python overlay_runner.py --enable-video --wait-for-plate-solve
+  python overlay_pipeline.py --enable-video --wait-for-plate-solve
         """
     )
     
@@ -180,7 +180,7 @@ Examples:
             
             logger.info("Camera cooling enabled")
         
-        # Create and run overlay runner
+        # Create overlay runner (VideoProcessor wird automatisch initialisiert)
         runner = OverlayRunner(config=config, logger=logger)
         
         logger.info("Starting Overlay Runner with image combination...")
@@ -188,13 +188,7 @@ Examples:
             logger.info("Cooling management enabled")
         logger.info("Press Ctrl+C to stop")
         
-        # Start observation session
-        start_status = runner.start_observation()
-        if not start_status.is_success:
-            logger.error(f"Failed to start observation: {start_status.message}")
-            sys.exit(1)
-        
-        # Run the overlay runner
+        # Run the overlay runner (startet VideoProcessor und Hauptschleife)
         try:
             runner.run()
         except KeyboardInterrupt:

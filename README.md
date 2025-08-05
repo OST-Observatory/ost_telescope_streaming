@@ -32,19 +32,19 @@ cp config.yaml my_config.yaml
 
 ```bash
 # Basic usage
-python overlay_runner.py
+python overlay_pipeline.py
 
 # With video processing and image combination
-python overlay_runner.py --enable-video --wait-for-plate-solve
+python overlay_pipeline.py --enable-video --wait-for-plate-solve
 
 # With custom interval and debug logging
-python overlay_runner.py --enable-video --interval 60 --debug
+python overlay_pipeline.py --enable-video --interval 60 --debug
 ```
 
 ## Command Line Options
 
 ```bash
-python overlay_runner.py [OPTIONS]
+python overlay_pipeline.py [OPTIONS]
 
 Options:
   --config, -c CONFIG_FILE    Configuration file path (default: config.yaml)
@@ -59,17 +59,17 @@ Options:
 
 ### Basic Overlay Generation
 ```bash
-python overlay_runner.py --config my_config.yaml
+python overlay_pipeline.py --config my_config.yaml
 ```
 
 ### Full System with Image Combination
 ```bash
-python overlay_runner.py --enable-video --wait-for-plate-solve --interval 60
+python overlay_pipeline.py --enable-video --wait-for-plate-solve --interval 60
 ```
 
 ### Debug Mode
 ```bash
-python overlay_runner.py --enable-video --debug
+python overlay_pipeline.py --enable-video --debug
 ```
 
 ## Output Files

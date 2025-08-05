@@ -419,6 +419,15 @@ class VideoProcessor:
                 else:
                     self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
                     frame_filename = None
+                
+                # ALWAYS save FITS for plate-solving (PlateSolve2 requirement)
+                fits_filename = self.frame_dir / f"{base_filename}.fits"
+                fits_save_status = self.video_capture.save_frame(frame, str(fits_filename))
+                if fits_save_status and fits_save_status.is_success:
+                    self.logger.info(f"FITS frame saved: {fits_filename}")
+                else:
+                    self.logger.warning(f"Failed to save FITS frame: {fits_save_status.message if fits_save_status else 'No status'}")
+                    fits_filename = None
             
             # Trigger capture callback
             if self.on_capture_frame:
