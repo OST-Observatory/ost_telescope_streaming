@@ -49,7 +49,7 @@ Instead of rotating Bayer patterns (which is complex), we use a **much simpler a
 
 ### **For Display Formats (PNG/JPG)**
 ```python
-def _convert_ascom_to_opencv(self, ascom_image_data):
+def _convert_to_opencv(self, image_data):
     # 1. Convert raw data to numpy array
     image_array = np.array(ascom_image_data)
     
@@ -78,7 +78,7 @@ def _convert_ascom_to_opencv(self, ascom_image_data):
 
 ### **For FITS Files (Plate-Solving)**
 ```python
-def _save_ascom_fits(self, frame, filename):
+def _save_fits_unified(self, frame, filename):
     # 1. Get raw Bayer data
     image_data = frame.data
     

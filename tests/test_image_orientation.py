@@ -134,7 +134,7 @@ def test_image_orientation():
     
     # Test the full conversion method
     logger.info("Testing full conversion method...")
-    converted_image = video_capture._convert_ascom_to_opencv(raw_image_data)
+    converted_image = video_capture._convert_to_opencv(raw_image_data)
     
     if converted_image is not None:
         full_conversion_filename = output_dir / "full_conversion.png"

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 import logging
 import os
+from datetime import datetime
 
 # Import configuration
 from config_manager import ConfigManager
@@ -416,18 +417,10 @@ class VideoCapture:
                             status = self.capture_single_frame_ascom(exposure_time, gain, binning)
                         
                         if status.is_success:
-                            # Convert image to OpenCV format and store in current_frame
-                            if self.camera_type == 'alpaca':
-                                frame = self._convert_alpaca_to_opencv(status.data)
-                            else:  # ascom
-                                frame = self._convert_ascom_to_opencv(status.data)
-                            
-                            if frame is not None:
-                                with self.frame_lock:
-                                    self.current_frame = frame.copy()
-                            else:
-                                self.logger.warning("Failed to convert camera image")
-                                time.sleep(0.1)
+                            # Store raw camera data in current_frame (no conversion here)
+                            # Conversion will happen only when needed for display
+                            with self.frame_lock:
+                                self.current_frame = status.data
                         else:
                             self.logger.warning(f"Failed to capture frame from {self.camera_type} camera: {status.message}")
                             time.sleep(0.1)
@@ -713,419 +706,40 @@ class VideoCapture:
             output_path = Path(filename)
             file_extension = output_path.suffix.lower()
             
-            # For ASCOM cameras, preserve original data for FITS files
-            if self.camera_type == 'ascom' and self.camera and file_extension in ['.fit', '.fits']:
-                # Save original ASCOM data as FITS
-                return self._save_ascom_fits(frame, str(output_path))
+            # For FITS files, use unified function for all camera types
+            if file_extension in ['.fit', '.fits']:
+                return self._save_fits_unified(frame, str(output_path))
             
-            # For Alpaca cameras, handle FITS files specially
-            if self.camera_type == 'alpaca' and self.camera and file_extension in ['.fit', '.fits']:
-                # Save Alpaca data as FITS
-                return self._save_alpaca_fits(frame, str(output_path))
-            
-            # For Alpaca cameras, save as a generic image file
-            if self.camera_type == 'alpaca' and self.camera:
-                # Extract data from Status object if needed
-                if hasattr(frame, 'data'):
-                    # Frame is a Status object, extract the data
-                    frame_data = frame.data
-                else:
-                    # Frame is direct data
-                    frame_data = frame
-                
-                # Convert Alpaca image data to OpenCV format
-                frame = self._convert_alpaca_to_opencv(frame_data)
-                if frame is None:
-                    return error_status("Failed to convert Alpaca image to OpenCV format")
-            
-            # Ensure frame is a numpy array
-            if not isinstance(frame, np.ndarray):
-                frame = np.array(frame)
-            
-            # Convert to uint8 if needed
-            if frame.dtype != np.uint8:
-                if frame.dtype == np.float32 or frame.dtype == np.float64:
-                    # Normalize to 0-255 range
-                    frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255).astype(np.uint8)
-                else:
-                    frame = frame.astype(np.uint8)
-            
-            success = cv2.imwrite(str(output_path), frame)
-            if success:
-                self.logger.info(f"Frame saved: {output_path.absolute()}")
-                # Use appropriate camera identifier
-                camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
-                return success_status("Frame saved", data=str(output_path.absolute()), details={'camera_id': camera_id})
-            else:
-                self.logger.error(f"Failed to save frame: {output_path}")
-                camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
-                return error_status("Failed to save frame", details={'camera_id': camera_id})
+            # For image files (PNG, JPG, etc.), use unified function with conversion
+            return self._save_image_file(frame, str(output_path))
         except Exception as e:
             self.logger.error(f"Error saving frame: {e}")
             camera_id = self.camera_index if hasattr(self, 'camera_index') else self.ascom_driver
             return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
     
-    def _save_ascom_fits(self, frame: Any, filename: str) -> CameraStatus:
-        """Saves ASCOM image data as FITS file with proper headers.
-        Supports both monochrome and color cameras with debayering.
-        Args:
-            frame: The image data (could be status object or direct data)
-            filename: Output filename
-        Returns:
-            CameraStatus: Status object with result
-        """
-        try:
-            import astropy.io.fits as fits
-            from astropy.time import Time
-            
-            # Get original ASCOM data
-            if hasattr(frame, 'data'):
-                # Frame is a status object with data
-                image_data = frame.data
-            else:
-                # Frame is direct data
-                image_data = frame
-            
-            # Ensure it's a numpy array
-            if not isinstance(image_data, np.ndarray):
-                image_data = np.array(image_data)
-            
-
-            
-            # Check if this is a color camera
-            is_color_camera = False
-            bayer_pattern = None
-            
-            if hasattr(self.camera, 'sensor_type'):
-                sensor_type = self.camera.sensor_type
-                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                    is_color_camera = True
-                    bayer_pattern = sensor_type
-                    self.logger.info(f"Detected color camera with Bayer pattern: {bayer_pattern}")
-            
-            # For color cameras, we have two options:
-            # 1. Save raw Bayer data (for plate-solving)
-            # 2. Save debayered color data (for display)
-            
-            # For plate-solving, we typically want the raw Bayer data
-            # But we need to ensure it's in the right format
-            
-            # Ensure data is in a format that PlateSolve 2 can read
-            # PlateSolve 2 prefers 16-bit integer data for best compatibility
-            original_dtype = image_data.dtype
-            original_min = image_data.min()
-            original_max = image_data.max()
-            
-
-            
-            # Convert to int16 for PlateSolve 2 compatibility
-            if image_data.dtype == np.int16:
-                # Already int16, keep as is
-                pass
-            elif image_data.dtype == np.uint16:
-                # Convert uint16 to int16 (most common case for ASCOM cameras)
-                # Handle potential overflow by clipping
-                image_data = np.clip(image_data, 0, 32767).astype(np.int16)
-            elif image_data.dtype == np.int32:
-                # Convert int32 to int16 (clip to avoid overflow)
-                image_data = np.clip(image_data, -32768, 32767).astype(np.int16)
-            elif image_data.dtype == np.uint8:
-                # Convert uint8 to int16
-                image_data = image_data.astype(np.int16)
-            elif image_data.dtype == np.float32 or image_data.dtype == np.float64:
-                # Convert float to int16 (normalize and clip)
-                if original_max > original_min:
-                    # Normalize to 0-32767 range
-                    image_data = ((image_data - original_min) / (original_max - original_min) * 32767).astype(np.int16)
-                else:
-                    # All values are the same, set to 0
-                    image_data = np.zeros_like(image_data, dtype=np.int16)
-            else:
-                # Convert other types to int16
-                image_data = image_data.astype(np.int16)
-            
-
-            
-            # Fix image orientation for ASCOM cameras
-            # ASCOM images are often rotated 90° compared to other software
-            # Transpose the image to correct orientation
-            original_shape = image_data.shape
-            
-            # Check if rotation is needed
-            if self._needs_rotation(image_data.shape):
-                image_data = np.transpose(image_data)
-                self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
-            else:
-                self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
-            
-            # Note: For 90° rotation (transpose), Bayer patterns remain unchanged
-            # RGGB -> RGGB, GRBG -> GRBG, GBRG -> GBRG, BGGR -> BGGR
-            # No pattern adjustment needed for this rotation
-            
-            # Create FITS header with astronomical information
-            header = fits.Header()
-            
-            # REQUIRED FITS headers (FITS Standard)
-            header['SIMPLE'] = True
-            header['BITPIX'] = image_data.dtype.itemsize * 8
-            header['NAXIS'] = len(image_data.shape)
-            header['NAXIS1'] = image_data.shape[1] if len(image_data.shape) >= 2 else 1
-            header['NAXIS2'] = image_data.shape[0] if len(image_data.shape) >= 2 else 1
-            
-            # Add NAXIS3 for color images
-            if len(image_data.shape) == 3:
-                header['NAXIS3'] = image_data.shape[2]
-                header['NAXIS'] = 3
-            
-            # Data scaling (important for PlateSolve 2)
-            header['BZERO'] = 0
-            header['BSCALE'] = 1
-            
-            # Standard astronomical headers
-            header['DATE'] = Time.now().isot
-            header['DATE-OBS'] = Time.now().isot
-            header['ORIGIN'] = 'OST Telescope Streaming'
-            header['TELESCOP'] = 'OST Telescope'
-            header['INSTRUME'] = self.ascom_driver if hasattr(self, 'ascom_driver') else 'Unknown'
-            
-            # Color camera information
-            if is_color_camera:
-                header['BAYERPAT'] = bayer_pattern
-                header['COLORCAM'] = True
-                header['IMAGETYP'] = 'LIGHT'
-                self.logger.info(f"Added color camera info: Bayer pattern = {bayer_pattern}")
-            else:
-                header['COLORCAM'] = False
-                header['IMAGETYP'] = 'LIGHT'
-            
-            # Camera information
-            if hasattr(self.camera, 'camera'):
-                try:
-                    # Try different exposure time property names
-                    exposure_time = None
-                    for exp_prop in ['ExposureDuration', 'ExposureTime', 'Exposure']:
-                        if hasattr(self.camera.camera, exp_prop):
-                            try:
-                                exposure_time = float(getattr(self.camera.camera, exp_prop))
-                                self.logger.debug(f"Found exposure time using property: {exp_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    if exposure_time is not None:
-                        header['EXPTIME'] = exposure_time
-                    else:
-                        # Use the exposure time from our configuration
-                        header['EXPTIME'] = float(self.exposure_time)
-                        self.logger.debug(f"Using configured exposure time: {self.exposure_time}")
-                    
-                    # Try different gain property names
-                    gain_value = None
-                    for gain_prop in ['Gain', 'GainValue', 'CCDGain']:
-                        if hasattr(self.camera.camera, gain_prop):
-                            try:
-                                gain_value = float(getattr(self.camera.camera, gain_prop))
-                                self.logger.debug(f"Found gain using property: {gain_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    if gain_value is not None:
-                        header['GAIN'] = gain_value
-                    else:
-                        # Use the gain from our configuration
-                        header['GAIN'] = float(self.gain)
-                        self.logger.debug(f"Using configured gain: {self.gain}")
-                    
-                    # Try different binning property names
-                    bin_x = None
-                    bin_y = None
-                    for bin_prop in ['BinX', 'BinningX', 'XBinning']:
-                        if hasattr(self.camera.camera, bin_prop):
-                            try:
-                                bin_x = int(getattr(self.camera.camera, bin_prop))
-                                self.logger.debug(f"Found X binning using property: {bin_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    for bin_prop in ['BinY', 'BinningY', 'YBinning']:
-                        if hasattr(self.camera.camera, bin_prop):
-                            try:
-                                bin_y = int(getattr(self.camera.camera, bin_prop))
-                                self.logger.debug(f"Found Y binning using property: {bin_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    if bin_x is not None:
-                        header['XBINNING'] = bin_x
-                    else:
-                        header['XBINNING'] = 1
-                        self.logger.debug("Using default X binning: 1")
-                    
-                    if bin_y is not None:
-                        header['YBINNING'] = bin_y
-                    else:
-                        header['YBINNING'] = 1
-                        self.logger.debug("Using default Y binning: 1")
-                    
-                    # Try different subframe property names
-                    start_x = None
-                    start_y = None
-                    num_x = None
-                    num_y = None
-                    
-                    for start_prop in ['StartX', 'SubFrameX', 'XStart']:
-                        if hasattr(self.camera.camera, start_prop):
-                            try:
-                                start_x = int(getattr(self.camera.camera, start_prop))
-                                self.logger.debug(f"Found X start using property: {start_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    for start_prop in ['StartY', 'SubFrameY', 'YStart']:
-                        if hasattr(self.camera.camera, start_prop):
-                            try:
-                                start_y = int(getattr(self.camera.camera, start_prop))
-                                self.logger.debug(f"Found Y start using property: {start_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    for num_prop in ['NumX', 'SubFrameWidth', 'XSize']:
-                        if hasattr(self.camera.camera, num_prop):
-                            try:
-                                num_x = int(getattr(self.camera.camera, num_prop))
-                                self.logger.debug(f"Found X size using property: {num_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    for num_prop in ['NumY', 'SubFrameHeight', 'YSize']:
-                        if hasattr(self.camera.camera, num_prop):
-                            try:
-                                num_y = int(getattr(self.camera.camera, num_prop))
-                                self.logger.debug(f"Found Y size using property: {num_prop}")
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    if start_x is not None:
-                        header['XORGSUBF'] = start_x
-                    else:
-                        header['XORGSUBF'] = 0
-                        self.logger.debug("Using default X start: 0")
-                    
-                    if start_y is not None:
-                        header['YORGSUBF'] = start_y
-                    else:
-                        header['YORGSUBF'] = 0
-                        self.logger.debug("Using default Y start: 0")
-                    
-                    # Image dimensions (swapped due to transposition)
-                    if num_y is not None:
-                        header['NAXIS1'] = int(num_y)  # Width (now height)
-                    else:
-                        header['NAXIS1'] = int(self.resolution[1])
-                    
-                    if num_x is not None:
-                        header['NAXIS2'] = int(num_x)  # Height (now width)
-                    else:
-                        header['NAXIS2'] = int(self.resolution[0])
-                    
-                except Exception as e:
-                    self.logger.warning(f"Could not add camera info to FITS header: {e}")
-                    # Add basic camera info using configuration values
-                    header['EXPTIME'] = float(self.exposure_time)
-                    header['GAIN'] = float(self.gain)
-                    header['XBINNING'] = 1
-                    header['YBINNING'] = 1
-                    header['XORGSUBF'] = 0
-                    header['YORGSUBF'] = 0
-                    header['NAXIS1'] = int(self.resolution[1])
-                    header['NAXIS2'] = int(self.resolution[0])
-                    self.logger.info("Added basic camera info using configuration values")
-            
-            # Telescope information
-            header['FOCALLEN'] = float(self.config.get_telescope_config().get('focal_length', 1000)) # mm
-            header['APERTURE'] = float(self.config.get_telescope_config().get('aperture', 200)) # mm
-            # Pixel sizes (swapped due to image transposition)
-            header['PIXSIZE1'] = float(self.config.get_camera_config().get('sensor_height', 15.7) / self.resolution[1])  # mm per pixel X (now height)
-            header['PIXSIZE2'] = float(self.config.get_camera_config().get('sensor_width', 23.5) / self.resolution[0])    # mm per pixel Y (now width)
-            
-            # Field of view information (swapped due to image transposition)
-            header['FOVW'] = float(self.fov_height)  # Now width after transpose
-            header['FOVH'] = float(self.fov_width)   # Now height after transpose
-            
-            # PlateSolve 2 specific headers
-            header['OBJECT'] = 'Unknown'
-            header['OBSERVER'] = 'OST System'
-            header['SITELAT'] = 0.0  # Default, should be set from config
-            header['SITELONG'] = 0.0  # Default, should be set from config
-            
-            # For plate-solving, we want 2D data
-            # If it's a color camera, we need to handle this carefully
-            if is_color_camera and len(image_data.shape) == 3:
-                # For color cameras, we have several options:
-                # 1. Use the green channel (most sensitive for plate-solving)
-                # 2. Convert to grayscale
-                # 3. Use the first channel
-                
-                # Option 1: Use green channel (most common for plate-solving)
-                if image_data.shape[2] >= 3:
-                    # Convert to grayscale using standard RGB weights
-                    # Green channel is most sensitive for astronomical imaging
-                    green_channel = image_data[:, :, 1]  # Green channel
-                    self.logger.info("Using green channel for plate-solving (color camera)")
-                    image_data = green_channel
-                else:
-                    # Use first channel if not RGB
-                    image_data = image_data[:, :, 0]
-                    self.logger.info("Using first channel for plate-solving (color camera)")
-            
-            # Ensure 2D array for FITS (PlateSolve 2 requirement)
-            if len(image_data.shape) == 1:
-                # Convert 1D to 2D
-                image_data = image_data.reshape(1, -1)
-            elif len(image_data.shape) > 2:
-                # Take first 2D slice if 3D or higher
-                image_data = image_data[:, :, 0] if len(image_data.shape) == 3 else image_data[:, :]
-            
-            # Update header with final dimensions
-            header['NAXIS'] = len(image_data.shape)
-            header['NAXIS1'] = image_data.shape[1]
-            header['NAXIS2'] = image_data.shape[0]
-            header['BITPIX'] = image_data.dtype.itemsize * 8
-            
-            # Create FITS file with proper data type
-            hdu = fits.PrimaryHDU(image_data, header=header)
-            
-            # Verify FITS file is valid
-            hdu.verify('fix')
-            
-            # Write to file
-            hdu.writeto(filename, overwrite=True, output_verify='fix')
-            
-            self.logger.info(f"FITS frame saved: {filename}")
-            return success_status("FITS frame saved", data=filename, details={'camera_id': self.ascom_driver})
-            
-        except ImportError:
-            self.logger.warning("astropy not available, falling back to OpenCV format")
-            return error_status("astropy not available for FITS saving")
-        except Exception as e:
-            self.logger.error(f"Failed to save FITS: {e}")
-            return error_status(f"Failed to save FITS: {e}")
-    
+    # DEPRECATED: Use _save_fits_unified() instead
+    # This function has been replaced by _save_fits_unified() which works for all camera types
     def _save_alpaca_fits(self, frame: Any, filename: str) -> CameraStatus:
-        """Saves Alpaca image data as FITS file with proper headers.
-        Supports both monochrome and color cameras with debayering.
+        """DEPRECATED: Use _save_fits_unified() instead.
+        
+        This function has been replaced by _save_fits_unified() which provides
+        unified FITS saving for all camera types (ASCOM, Alpaca, etc.).
+        """
+        self.logger.warning("_save_alpaca_fits is deprecated, use _save_fits_unified instead")
+        return self._save_fits_unified(frame, filename)
+    
+    def _save_fits_unified(self, frame: Any, filename: str) -> CameraStatus:
+        """Save camera frame as FITS file (unified for all camera types).
+        
+        This function works for both ASCOM and Alpaca cameras, treating them
+        as astronomical cameras with similar data formats.
+        
         Args:
-            frame: The image data (could be status object or direct data)
-            filename: Output filename
+            frame: Raw image data from camera (Status object or direct data)
+            filename: Output filename for FITS file
+            
         Returns:
-            CameraStatus: Status object with result
+            CameraStatus: Success or error status
         """
         try:
             # Try to import astropy
@@ -1137,20 +751,7 @@ class VideoCapture:
                 self.logger.error(f"Astropy not available for FITS saving: {e}")
                 return error_status(f"Astropy not available for FITS saving: {e}")
             
-            # Debug: Log the type and attributes of the frame object
-            self.logger.debug(f"Frame object type: {type(frame)}")
-            self.logger.debug(f"Frame object attributes: {dir(frame)}")
-            if hasattr(frame, 'data'):
-                self.logger.debug(f"Frame.data type: {type(frame.data)}")
-                self.logger.debug(f"Frame.data value: {frame.data}")
-                # Check for nested Status objects
-                if hasattr(frame.data, 'data'):
-                    self.logger.debug(f"Frame.data.data type: {type(frame.data.data)}")
-                    self.logger.debug(f"Frame.data.data value: {frame.data.data}")
-            if hasattr(frame, 'is_success'):
-                self.logger.debug(f"Frame.is_success: {frame.is_success}")
-            
-            # Get original Alpaca data - handle Status objects properly
+            # Get original data - handle Status objects properly
             image_data = None
             frame_details = {}
             
@@ -1193,8 +794,6 @@ class VideoCapture:
             if image_data is None:
                 self.logger.error("No image data found in frame")
                 return error_status("No image data found in frame")
-            
-
             
             # Ensure it's a numpy array
             if not isinstance(image_data, np.ndarray):
@@ -1363,593 +962,62 @@ class VideoCapture:
             self.logger.error(f"Traceback: {traceback.format_exc()}")
             return error_status(f"Error saving Alpaca FITS file: {e}")
     
-    def get_camera_info(self) -> dict[str, Any]:
-        """Get comprehensive camera information.
-        
-        Returns:
-            dict: Camera information including cooling status
-        """
-        info = {
-            'camera_type': self.camera_type,
-            'connected': self.camera is not None,
-            'frame_width': self.resolution[0],
-            'frame_height': self.resolution[1],
-            'fps': self.frame_rate,
-            'exposure_time': self.exposure_time,
-            'gain': self.gain,
-            'field_of_view': self.get_field_of_view(),
-            'sampling': self.get_sampling_arcsec_per_pixel()
-        }
-        
-        # Add ASCOM-specific information
-        if self.camera_type == 'ascom' and self.camera:
-            info.update({
-                'driver_id': self.ascom_driver,
-                'has_cooling': self.enable_cooling,
-                'cooling_enabled': self.enable_cooling,
-                        'target_temperature': self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0),
-        'wait_for_cooling': self.config.get_camera_config().get('cooling', {}).get('wait_for_cooling', True),
-                'has_offset': hasattr(self.camera, 'has_offset') and self.camera.has_offset(),
-                'has_readout_mode': hasattr(self.camera, 'has_readout_mode') and self.camera.has_readout_mode(),
-                'offset': self.offset,
-                'readout_mode': self.readout_mode
-            })
-            
-            # Get current cooling status if available
-            if self.enable_cooling:
-                cooling_status = self.get_cooling_status()
-                info.update(cooling_status)
-        
-        # Add Alpaca-specific information
-        if self.camera_type == 'alpaca' and self.camera:
-            info.update({
-                'host': self.alpaca_host,
-                'port': self.alpaca_port,
-                'camera_name': self.alpaca_camera_name,
-                'is_color': hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera(),
-                'has_cooling': hasattr(self.camera, 'has_cooling') and self.camera.has_cooling(),
-                'has_offset': hasattr(self.camera, 'has_offset') and self.camera.has_offset(),
-                'has_readout_mode': hasattr(self.camera, 'has_readout_mode') and self.camera.has_readout_mode(),
-                'offset': self.offset,
-                'readout_mode': self.readout_mode
-            })
-            if hasattr(self.camera, 'has_cooling') and self.camera.has_cooling():
-                cooling_status = self.get_cooling_status()
-                info.update(cooling_status)
-        
-        return info 
-
-    def has_cooling(self) -> bool:
-        """Check if the camera supports cooling.
-        
-        Returns:
-            bool: True if cooling is supported
-        """
-        if self.camera_type == 'ascom' and self.camera:
-            return self.enable_cooling
-        elif self.camera_type == 'alpaca' and self.camera:
-            return self.enable_cooling
-        return False
-    
-    def enable_cooling_system(self) -> CameraStatus:
-        """Enable the camera cooling system.
-        
-        Returns:
-            CameraStatus: Status of the operation
-        """
-        if not self.has_cooling():
-            return error_status("Cooling not supported by this camera")
-        
-        if not self.enable_cooling:
-            return error_status("Cooling is disabled in configuration")
-        
-        try:
-            # Turn on the cooler
-            cooler_status = self.camera.set_cooler_on(True) if self.camera_type == 'ascom' else self.camera.set_cooler_on(True)
-            if not cooler_status.is_success:
-                return cooler_status
-            
-            # Set target temperature
-            temp_status = self.camera.set_cooling(self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)) if self.camera_type == 'ascom' else self.camera.set_cooling(self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0))
-            if not temp_status.is_success:
-                return temp_status
-            
-            self.logger.info(f"Cooling system enabled, target temperature: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
-            
-            # Wait for target temperature if configured
-            if self.wait_for_cooling:
-                return self.wait_for_target_temperature()
-            
-            return success_status(f"Cooling system enabled, target: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
-            
-        except Exception as e:
-            self.logger.error(f"Error enabling cooling system: {e}")
-            return error_status(f"Failed to enable cooling system: {e}")
-    
-    def disable_cooling_system(self) -> CameraStatus:
-        """Disable the camera cooling system.
-        
-        Returns:
-            CameraStatus: Status of the operation
-        """
-        if not self.has_cooling():
-            return error_status("Cooling not supported by this camera")
-        
-        try:
-            # Turn off the cooler
-            status = self.camera.turn_cooling_off() if self.camera_type == 'ascom' else self.camera.turn_cooling_off()
-            if status.is_success:
-                self.logger.info("Cooling system disabled")
-            return status
-            
-        except Exception as e:
-            self.logger.error(f"Error disabling cooling system: {e}")
-            return error_status(f"Failed to disable cooling system: {e}")
-    
-    def set_target_temperature(self, temperature: float) -> CameraStatus:
-        """Set the target temperature for cooling.
+    def _save_image_file(self, frame: Any, filename: str) -> CameraStatus:
+        """Save frame as image file (PNG, JPG, etc.) with conversion to OpenCV format.
         
         Args:
-            temperature: Target temperature in Celsius
+            frame: Raw image data from camera (Status object or direct data)
+            filename: Output filename
             
         Returns:
-            CameraStatus: Status of the operation
-        """
-        if not self.has_cooling():
-            return error_status("Cooling not supported by this camera")
-        
-        if not self.enable_cooling:
-            return error_status("Cooling is disabled in configuration")
-        
-        try:
-            status = self.camera.set_cooling(temperature) if self.camera_type == 'ascom' else self.camera.set_cooling(temperature)
-            if status.is_success:
-                self.config.get_camera_config()['cooling']['target_temperature'] = temperature # Update config
-                self.logger.info(f"Target temperature set to {temperature}°C")
-            return status
-            
-        except Exception as e:
-            self.logger.error(f"Error setting target temperature: {e}")
-            return error_status(f"Failed to set target temperature: {e}")
-    
-    def get_cooling_status(self) -> dict[str, Any]:
-        """Get current cooling status.
-        
-        Returns:
-            dict: Cooling status information
-        """
-        if not self.has_cooling():
-            return {
-                'cooling_supported': False,
-                'cooling_enabled': False
-            }
-        
-        try:
-            # Get fresh cooling information
-            if self.camera_type == 'ascom':
-                cooling_info = self.camera.get_smart_cooling_info()
-            elif self.camera_type == 'alpaca':
-                cooling_info = self.camera.get_cooling_status()
-            
-            if cooling_info.is_success:
-                info = cooling_info.data
-                return {
-                    'cooling_supported': True,
-                    'cooling_enabled': self.enable_cooling,
-                    'current_temperature': info.get('temperature'),
-                    'target_temperature': info.get('target_temperature'),
-                    'cooler_power': info.get('cooler_power'),
-                    'cooler_on': info.get('cooler_on'),
-                    'temperature_stable': self._is_temperature_stable(info.get('temperature'), info.get('target_temperature'))
-                }
-            else:
-                return {
-                    'cooling_supported': True,
-                    'cooling_enabled': self.enable_cooling,
-                    'error': cooling_info.message
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error getting cooling status: {e}")
-            return {
-                'cooling_supported': True,
-                'cooling_enabled': self.enable_cooling,
-                'error': str(e)
-            }
-    
-    def wait_for_target_temperature(self) -> CameraStatus:
-        """Wait for the camera to reach the target temperature.
-        
-        Returns:
-            CameraStatus: Status of the operation
-        """
-        if not self.has_cooling():
-            return error_status("Cooling not supported by this camera")
-        
-        if not self.wait_for_cooling:
-            return success_status("Waiting for cooling disabled in configuration")
-        
-        try:
-            import time
-            start_time = time.time()
-            
-            self.logger.info(f"Waiting for target temperature: {self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)}°C")
-            
-            while time.time() - start_time < self.cooling_timeout:
-                cooling_status = self.get_cooling_status()
-                
-                if 'error' in cooling_status:
-                    return error_status(f"Error monitoring temperature: {cooling_status['error']}")
-                
-                current_temp = cooling_status.get('current_temperature')
-                target_temp = cooling_status.get('target_temperature')
-                
-                if current_temp is not None and target_temp is not None:
-                    temp_diff = abs(current_temp - target_temp)
-                    
-                    if temp_diff <= self.config.get_camera_config().get('cooling', {}).get('stabilization_tolerance', 1.0):
-                        self.logger.info(f"Target temperature reached: {current_temp:.1f}°C (target: {target_temp:.1f}°C)")
-                        return success_status(f"Target temperature reached: {current_temp:.1f}°C")
-                    
-        
-                
-                time.sleep(2)  # Check every 2 seconds
-            
-            return error_status(f"Timeout waiting for target temperature after {self.cooling_timeout}s")
-            
-        except Exception as e:
-            self.logger.error(f"Error waiting for target temperature: {e}")
-            return error_status(f"Failed to wait for target temperature: {e}")
-    
-    def _is_temperature_stable(self, current_temp: Optional[float], target_temp: Optional[float]) -> bool:
-        """Check if the temperature is stable at the target.
-        
-        Args:
-            current_temp: Current temperature
-            target_temp: Target temperature
-            
-        Returns:
-            bool: True if temperature is stable
-        """
-        if current_temp is None or target_temp is None:
-            return False
-        
-        temp_diff = abs(current_temp - target_temp)
-        return temp_diff <= self.config.get_camera_config().get('cooling', {}).get('stabilization_tolerance', 1.0)
-    
-    def initialize_cooling(self) -> CameraStatus:
-        """Initialize camera cooling system with improved status detection."""
-        if not self.has_cooling():
-            return warning_status("Cooling not supported by this camera")
-        
-        try:
-            self.logger.info("Initializing camera cooling system...")
-            
-            # Get current cooling status
-            if self.camera_type == 'ascom':
-                cooling_info = self.camera.get_smart_cooling_info()
-            elif self.camera_type == 'alpaca':
-                cooling_info = self.camera.get_cooling_status()
-            
-            if not cooling_info.is_success:
-                return error_status(f"Failed to get cooling info: {cooling_info.message}")
-            
-            info = cooling_info.data
-            current_temp = info.get('temperature')
-            target_temp = info.get('target_temperature')
-            
-            self.logger.info(f"Current temperature: {current_temp}°C, Target: {target_temp}°C")
-            
-            # If cooling is enabled and target temperature is set
-            if self.enable_cooling and target_temp is not None:
-                self.logger.info(f"Setting target temperature to {target_temp}°C")
-                
-                # Set cooling with improved method
-                cooling_status = self.camera.set_cooling(target_temp) if self.camera_type == 'ascom' else self.camera.set_cooling(target_temp)
-                if not cooling_status.is_success:
-                    return error_status(f"Failed to set cooling: {cooling_status.message}")
-                
-                self.logger.info(f"Cooling set successfully: {cooling_status.message}")
-                
-                # Force refresh cooling status to get accurate power readings
-                self.logger.info("Forcing cooling status refresh...")
-                refresh_status = self.camera.force_refresh_cooling_status() if self.camera_type == 'ascom' else self.camera.force_refresh_cooling_status()
-                if refresh_status.is_success:
-                    refresh_info = refresh_status.data
-                    self.logger.info(f"Cooling status refreshed: temp={refresh_info.get('temperature')}°C, "
-                                   f"power={refresh_info.get('cooler_power')}%")
-                
-                # Wait for cooling to stabilize if configured
-                if self.wait_for_cooling:
-                    self.logger.info(f"Waiting for cooling to stabilize (timeout: {self.cooling_timeout}s)...")
-                    stabilization_status = self.camera.wait_for_cooling_stabilization(
-                        timeout=self.cooling_timeout, 
-                        check_interval=2.0
-                    ) if self.camera_type == 'ascom' else self.camera.wait_for_cooling_stabilization(
-                        timeout=self.cooling_timeout, 
-                        check_interval=2.0
-                    )
-                    
-                    if stabilization_status.is_success:
-                        final_info = stabilization_status.data
-                        self.logger.info(f"Cooling stabilized: temp={final_info.get('temperature')}°C, "
-                                       f"power={final_info.get('cooler_power')}%")
-                    else:
-                        self.logger.warning(f"Cooling stabilization: {stabilization_status.message}")
-                
-                return success_status("Camera cooling initialized successfully", data=cooling_status.data)
-            
-            else:
-                self.logger.info("Cooling initialization skipped (not enabled or no target temperature)")
-                return success_status("Cooling initialization skipped", data=info)
-                
-        except Exception as e:
-            self.logger.error(f"Error initializing cooling: {e}")
-            return error_status(f"Failed to initialize cooling: {e}")
-    
-    def _convert_ascom_to_opencv(self, ascom_image_data):
-        """Convert ASCOM image data to OpenCV format with debayering.
-        Supports both monochrome and color cameras with automatic Bayer pattern detection.
-        Args:
-            ascom_image_data: Raw image data from ASCOM camera
-        Returns:
-            numpy.ndarray: OpenCV-compatible image array or None if conversion fails
+            CameraStatus: Success or error status
         """
         try:
-            # Check if image data is None or empty
-            if ascom_image_data is None:
-                self.logger.error("ASCOM image data is None")
-                return None
-            
-            # Convert ASCOM image array to numpy array
-            image_array = np.array(ascom_image_data)
-            
-            # Check if array is empty or has invalid shape
-            if image_array.size == 0:
-                self.logger.error("ASCOM image array is empty")
-                return None
-            
-            # Log the original data type and shape for debugging
-            self.logger.debug(f"ASCOM image data type: {image_array.dtype}, shape: {image_array.shape}")
-            
-            # Convert data type to uint16 first (most ASCOM cameras use 16-bit)
-            if image_array.dtype == np.int32:
-                # For 32-bit signed integers, convert to uint16
-                image_array = image_array.astype(np.uint16)
-            elif image_array.dtype == np.float32 or image_array.dtype == np.float64:
-                # For floating point, normalize to uint16
-                image_array = ((image_array - image_array.min()) / (image_array.max() - image_array.min()) * 65535).astype(np.uint16)
-            elif image_array.dtype != np.uint8 and image_array.dtype != np.uint16:
-                # For other types, try to convert to uint16
-                image_array = image_array.astype(np.uint16)
-            
-            # Check if camera is color (has Bayer pattern)
-            is_color_camera = False
-            bayer_pattern = None
-            
-            if hasattr(self.camera, 'sensor_type'):
-                sensor_type = self.camera.sensor_type
-                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                    is_color_camera = True
-                    bayer_pattern = sensor_type
-                    self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
-            
-            # If already 3-channel (already debayered), handle as is
-            if len(image_array.shape) == 3 and image_array.shape[2] == 3:
-                self.logger.debug("Image is already 3-channel RGB, proceeding with orientation correction")
-                result_image = image_array
+            # Extract data from Status object if needed
+            if hasattr(frame, 'data'):
+                # Frame is a Status object, extract the data
+                frame_data = frame.data
             else:
-                # Apply debayering for color cameras FIRST (before rotation)
-                if is_color_camera and bayer_pattern:
-                    # Apply debayering based on Bayer pattern
-                    if bayer_pattern == 'RGGB':
-                        bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                    elif bayer_pattern == 'GRBG':
-                        bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
-                    elif bayer_pattern == 'GBRG':
-                        bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
-                    elif bayer_pattern == 'BGGR':
-                        bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
-                    else:
-                        self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
-                        bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                    
-                    # Apply debayering
-                    try:
-                        result_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
-                        self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
-                    except Exception as e:
-                        self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
-                        # Fall back to grayscale conversion
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                # Frame is direct data
+                frame_data = frame
+            
+            # Convert camera data to OpenCV format for display
+            if self.camera_type == 'alpaca' or self.camera_type == 'ascom':
+                frame = self._convert_to_opencv(frame_data)
+            else:
+                # For other camera types, assume it's already in OpenCV format
+                frame = frame_data
+            
+            if frame is None:
+                return error_status("Failed to convert camera image to OpenCV format")
+            
+            # Ensure frame is a numpy array
+            if not isinstance(frame, np.ndarray):
+                frame = np.array(frame)
+            
+            # Convert to uint8 if needed
+            if frame.dtype != np.uint8:
+                if frame.dtype == np.float32 or frame.dtype == np.float64:
+                    # Normalize to 0-255 range
+                    frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255).astype(np.uint8)
                 else:
-                    # For monochrome cameras, convert to 3-channel grayscale
-                    if len(image_array.shape) == 2:
-                        self.logger.debug("Converting monochrome image to 3-channel")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                    elif len(image_array.shape) == 3:
-                        # If already 3-channel but not RGB (e.g., RGBA), convert to BGR
-                        if image_array.shape[2] == 4:  # RGBA
-                            self.logger.debug("Converting RGBA to BGR")
-                            result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                        elif image_array.shape[2] == 1:  # Single channel
-                            self.logger.debug("Converting single channel to 3-channel")
-                            result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                        else:
-                            self.logger.debug("Returning existing 3-channel image")
-                            result_image = image_array
-                    else:
-                        # Fallback: assume monochrome and convert
-                        self.logger.debug("Fallback: converting to 3-channel grayscale")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+                    frame = frame.astype(np.uint8)
             
-            # NOW apply orientation correction to the debayered RGB image
-            # This is much simpler and more robust than rotating Bayer patterns
-            original_shape = result_image.shape
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
             
-            # Check if rotation is needed
-            if self._needs_rotation(result_image.shape):
-                result_image = np.transpose(result_image, (1, 0, 2))  # Transpose only spatial dimensions
-                self.logger.info(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
+            # Save image file
+            success = cv2.imwrite(filename, frame)
+            if success:
+                self.logger.info(f"Image file saved: {filename}")
+                return success_status("Image file saved", data=filename)
+            else:
+                self.logger.error(f"Failed to save image file: {filename}")
+                return error_status("Failed to save image file")
                 
-                # Debug: Check if the rotation actually changed the dimensions
-                if original_shape[0] == result_image.shape[1] and original_shape[1] == result_image.shape[0]:
-                    self.logger.info(f"[OK] Rotation applied successfully: {original_shape} -> {result_image.shape}")
-                else:
-                    self.logger.warning(f"[WARNING] Rotation may not have worked as expected: {original_shape} -> {result_image.shape}")
-            else:
-                self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
-            
-            return result_image
-            
         except Exception as e:
-            self.logger.error(f"Error converting ASCOM image: {e}")
-            return None 
-
-    def _convert_alpaca_to_opencv(self, alpaca_image_data):
-        """Convert Alpaca image data to OpenCV format with debayering support.
-        Args:
-            alpaca_image_data: Raw image data from Alpaca camera or Status object
-        Returns:
-            numpy.ndarray: OpenCV-compatible image array or None if conversion fails
-        """
-        try:
-            # Check if input is a Status object and extract data
-            if hasattr(alpaca_image_data, 'data'):
-                # It's a Status object, extract the data
-                image_data = alpaca_image_data.data
-            else:
-                # It's direct data
-                image_data = alpaca_image_data
-            
-            # Check if image data is None or empty
-            if image_data is None:
-                self.logger.error("Alpaca image data is None")
-                return None
-            
-            # Convert Alpaca image array to numpy array
-            image_array = np.array(image_data)
-            
-            # Check if array is empty or has invalid shape
-            if image_array.size == 0:
-                self.logger.error("Alpaca image array is empty")
-                return None
-            
-            # Log the original data type and shape for debugging
-            self.logger.debug(f"Alpaca image data type: {image_array.dtype}, shape: {image_array.shape}")
-            
-            # Ensure it's a numpy array
-            if not isinstance(image_array, np.ndarray):
-                image_array = np.array(image_array)
-            
-            # Check if camera is color (has Bayer pattern)
-            is_color_camera = False
-            bayer_pattern = None
-            
-            # Method 1: Check sensor type from camera
-            if hasattr(self.camera, 'sensor_type'):
-                sensor_type = self.camera.sensor_type
-                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                    is_color_camera = True
-                    bayer_pattern = sensor_type
-                    self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
-            
-            # Method 2: Check if auto_debayer is enabled in config
-            if not is_color_camera:
-                camera_config = self.config.get_camera_config()
-                auto_debayer = camera_config.get('auto_debayer', False)
-                if auto_debayer:
-                    debayer_method = camera_config.get('debayer_method', 'RGGB')
-                    if debayer_method in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                        is_color_camera = True
-                        bayer_pattern = debayer_method
-                        self.logger.debug(f"Color camera detected via config, Bayer pattern: {bayer_pattern}")
-            
-            # Method 3: Check camera name for color indicators
-            if not is_color_camera and hasattr(self.camera, 'name'):
-                camera_name = self.camera.name.lower()
-                color_indicators = ['color', 'rgb', 'bayer', 'asi2600mc', 'asi2600mmc', 'qhy600c', 'qhy600mc']
-                if any(indicator in camera_name for indicator in color_indicators):
-                    is_color_camera = True
-                    bayer_pattern = 'RGGB'  # Default for most color cameras
-                    self.logger.debug(f"Color camera detected via name: {camera_name}, using default Bayer pattern: {bayer_pattern}")
-            
-            # Convert data type for processing
-            if image_array.dtype != np.uint16:
-                if image_array.dtype in [np.float32, np.float64]:
-                    # Normalize to 0-65535 range for 16-bit
-                    data_min = image_array.min()
-                    data_max = image_array.max()
-                    if data_max > data_min:
-                        image_array = ((image_array - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
-                    else:
-                        image_array = image_array.astype(np.uint16)
-                else:
-                    image_array = image_array.astype(np.uint16)
-            
-            # Apply debayering for color cameras FIRST (before rotation)
-            if is_color_camera and bayer_pattern and len(image_array.shape) == 2:
-                # Apply debayering based on Bayer pattern
-                if bayer_pattern == 'RGGB':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                elif bayer_pattern == 'GRBG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
-                elif bayer_pattern == 'GBRG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
-                elif bayer_pattern == 'BGGR':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
-                else:
-                    self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                
-                # Apply debayering
-                try:
-                    result_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
-                    self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
-                except Exception as e:
-                    self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-            else:
-                # Handle non-color or already debayered images
-                if len(image_array.shape) == 2:
-                    self.logger.debug("Converting monochrome Alpaca image to 3-channel")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                elif len(image_array.shape) == 3:
-                    # If it's already 3-channel (e.g., RGBA), convert to BGR
-                    if image_array.shape[2] == 4:
-                        self.logger.debug("Converting RGBA to BGR")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                    else:
-                        # Assume it's RGB and convert to BGR
-                        self.logger.debug("Converting RGB to BGR")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
-                else:
-                    # Fallback: assume monochrome and convert
-                    self.logger.debug("Fallback: converting to 3-channel grayscale")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-            
-            # NOW apply orientation correction to the debayered RGB image
-            # This is much simpler and more robust than rotating Bayer patterns
-            original_shape = result_image.shape
-            if self._needs_rotation(result_image.shape):
-                result_image = np.transpose(result_image, (1, 0, 2))  # Transpose spatial dimensions
-                self.logger.info(f"Alpaca image orientation corrected: {original_shape} -> {result_image.shape}")
-            else:
-                self.logger.debug(f"Alpaca image already in correct orientation: {original_shape}, no rotation needed")
-            
-            # Convert to uint8 for display (if needed)
-            if result_image.dtype != np.uint8:
-                if result_image.dtype == np.uint16:
-                    # Scale 16-bit to 8-bit for display
-                    result_image = (result_image / 256).astype(np.uint8)
-                else:
-                    result_image = result_image.astype(np.uint8)
-            
-            return result_image
-            
-        except Exception as e:
-            self.logger.error(f"Error converting Alpaca image: {e}")
-            return None
+            self.logger.error(f"Error saving image file: {e}")
+            return error_status(f"Error saving image file: {e}")
 
     def _needs_rotation(self, image_shape: tuple) -> bool:
         """Check if the image needs rotation based on its dimensions.
@@ -1972,4 +1040,4 @@ class VideoCapture:
             self.logger.debug(f"Image dimensions: {width}x{height}, needs rotation: {needs_rotation}")
             return needs_rotation
         
-        return False 
+        return False
