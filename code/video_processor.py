@@ -215,15 +215,17 @@ class VideoProcessor:
             The processing loop runs in a separate thread to ensure the main
             application remains responsive during continuous operation.
         """
-        if not self.initialize():
-            return error_status("Initialization failed", details={'video_enabled': self.video_enabled})
+        # Skip initialization if already done in start_observation_session
+        if not self.video_capture:
+            if not self.initialize():
+                return error_status("Initialization failed", details={'video_enabled': self.video_enabled})
+        
         if not self.video_capture:
             self.logger.error("Video capture not available")
             return error_status("Video capture not available", details={'video_enabled': self.video_enabled})
-        capture_status = self.video_capture.start_capture()
-        if not capture_status.is_success:
-            self.logger.error("Failed to start video capture")
-            return error_status("Failed to start video capture", details={'video_enabled': self.video_enabled})
+        
+        # Video capture is already started in start_observation_session
+        # Just start the processing loop
         self.is_running = True
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
@@ -261,17 +263,22 @@ class VideoProcessor:
             if not self.initialize():
                 return error_status("Failed to initialize video processor for observation session")
             
-            # Start the video processor
-            start_status = self.start()
-            if not start_status.is_success:
-                return error_status(f"Failed to start video processor: {start_status.message}")
+            # Start video capture (but not the processing loop yet)
+            if not self.video_capture:
+                self.logger.error("Video capture not available")
+                return error_status("Video capture not available", details={'video_enabled': self.video_enabled})
+            
+            capture_status = self.video_capture.start_capture()
+            if not capture_status.is_success:
+                self.logger.error("Failed to start video capture")
+                return error_status("Failed to start video capture", details={'video_enabled': self.video_enabled})
             
             self.logger.info("Observation session started successfully")
             return success_status(
                 "Observation session started successfully",
                 details={
                     'video_enabled': self.video_enabled,
-                    'is_running': self.is_running,
+                    'is_running': False,  # Processing loop not started yet
                     'capture_interval': self.capture_interval,
                     'plate_solve_enabled': self.plate_solve_enabled
                 }

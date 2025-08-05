@@ -387,7 +387,7 @@ class VideoCapture:
         while self.is_capturing:
             try:
                 if self.camera_type == 'opencv':
-                    # OpenCV camera logic
+                    # OpenCV camera logic - continuous capture
                     if self.cap and self.cap.isOpened():
                         ret, frame = self.cap.read()
                         if ret:
@@ -397,54 +397,11 @@ class VideoCapture:
                             self.logger.warning("Failed to read frame from OpenCV camera")
                             time.sleep(0.1)
                             
-                elif self.camera_type == 'ascom':
-                    # ASCOM camera logic
-                    if self.camera:
-                        # Use exposure time in seconds
-                        exposure_time = self.config.get_camera_config().get('exposure_time', 1.0)  # seconds
-                        gain = self.config.get_camera_config().get('gain', None)
-                        binning = self.config.get_camera_config().get('ascom', {}).get('binning', 1)
-                        status = self.capture_single_frame_ascom(exposure_time, gain, binning)
-                        if status.is_success:
-                            # Convert ASCOM image to OpenCV format with debayering
-                            frame = self._convert_ascom_to_opencv(status.data)
-                            if frame is not None:
-                                with self.frame_lock:
-                                    self.current_frame = frame.copy()
-                            else:
-                                self.logger.warning("Failed to convert ASCOM image")
-                                time.sleep(0.1)
-                        else:
-                            self.logger.warning(f"Failed to capture frame from ASCOM camera: {status.message}")
-                            time.sleep(0.1)
-                    else:
-                        self.logger.warning("ASCOM camera not available")
-                        time.sleep(0.1)
-                elif self.camera_type == 'alpaca':
-                    # Alpaca camera logic
-                    if self.camera:
-                        # Use exposure time from alpaca config
-                        alpaca_config = self.config.get_camera_config().get('alpaca', {})
-                        exposure_time = alpaca_config.get('exposure_time', 1.0)  # seconds
-                        gain = alpaca_config.get('gain', None)
-                        binning = alpaca_config.get('binning', [1, 1])
-                        status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
-                        if status.is_success:
-                            # Convert Alpaca image to OpenCV format
-                            frame = self._convert_alpaca_to_opencv(status.data)
-                            if frame is not None:
-                                with self.frame_lock:
-                                    self.current_frame = frame.copy()
-                            else:
-                                self.logger.warning("Failed to convert Alpaca image")
-                                time.sleep(0.1)
-                        else:
-                            self.logger.warning(f"Failed to capture frame from Alpaca camera: {status.message}")
-                            time.sleep(0.1)
-                    else:
-                        self.logger.warning("Alpaca camera not available")
-                        time.sleep(0.1)
-                        
+                elif self.camera_type in ['ascom', 'alpaca']:
+                    # For ASCOM and Alpaca cameras, don't make separate captures
+                    # The VideoProcessor will handle captures via get_current_frame()
+                    time.sleep(1)  # Just keep the thread alive
+                            
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
