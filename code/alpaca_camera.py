@@ -575,8 +575,6 @@ class AlpycaCameraWrapper:
             Status: Success or error status
         """
         try:
-            self.logger.info(f"DEBUG: start_exposure called with duration={duration}s, light={light}")
-            self.logger.info(f"DEBUG: About to call self.camera.StartExposure({duration}, {light})")
             self.camera.StartExposure(duration, light)
             self.logger.info(f"Started {duration}s exposure (light={light})")
             return success_status("Exposure started")
