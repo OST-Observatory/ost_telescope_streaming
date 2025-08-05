@@ -1028,15 +1028,11 @@ class VideoCapture:
                         header['NAXIS1'] = int(num_y)  # Width (now height)
                     else:
                         header['NAXIS1'] = int(self.resolution[1])
-                        self.logger.debug(f"Using frame height for NAXIS1: {self.resolution[1]}")
                     
                     if num_x is not None:
                         header['NAXIS2'] = int(num_x)  # Height (now width)
                     else:
                         header['NAXIS2'] = int(self.resolution[0])
-                        self.logger.debug(f"Using frame width for NAXIS2: {self.resolution[0]}")
-                    
-                    self.logger.debug(f"Successfully added camera info to FITS header")
                     
                 except Exception as e:
                     self.logger.warning(f"Could not add camera info to FITS header: {e}")
@@ -1110,8 +1106,6 @@ class VideoCapture:
             
             # Write to file
             hdu.writeto(filename, overwrite=True, output_verify='fix')
-            
-            self.logger.debug(f"FITS file created: {filename}, shape={image_data.shape}, dtype={image_data.dtype}")
             
             self.logger.info(f"FITS frame saved: {filename}")
             return success_status("FITS frame saved", data=filename, details={'camera_id': self.ascom_driver})
@@ -1256,11 +1250,9 @@ class VideoCapture:
                         image_data = ((image_data - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
                     else:
                         image_data = image_data.astype(np.uint16)
-                    self.logger.debug(f"Converted float data to uint16: min={image_data.min()}, max={image_data.max()}")
                 else:
                     # Convert to 16-bit
                     image_data = image_data.astype(np.uint16)
-                    self.logger.debug(f"Converted to uint16: min={image_data.min()}, max={image_data.max()}")
             
             # Create FITS header with astronomical information
             header = fits.Header()
@@ -1300,18 +1292,14 @@ class VideoCapture:
             actual_exposure_time = frame_details.get('exposure_time_s')
             if actual_exposure_time is not None:
                 header['EXPTIME'] = actual_exposure_time
-                self.logger.debug(f"Added actual exposure time to FITS header: {actual_exposure_time}s")
             elif hasattr(self.camera, 'exposure_time'):
                 header['EXPTIME'] = self.camera.exposure_time
-                self.logger.debug(f"Added camera exposure time to FITS header: {self.camera.exposure_time}s")
             
             actual_gain = frame_details.get('gain')
             if actual_gain is not None:
                 header['GAIN'] = actual_gain
-                self.logger.debug(f"Added actual gain to FITS header: {actual_gain}")
             elif hasattr(self.camera, 'gain'):
                 header['GAIN'] = self.camera.gain
-                self.logger.debug(f"Added camera gain to FITS header: {self.camera.gain}")
             
             actual_binning = frame_details.get('binning')
             if actual_binning is not None:
@@ -1321,11 +1309,9 @@ class VideoCapture:
                 else:
                     header['XBINNING'] = actual_binning
                     header['YBINNING'] = actual_binning
-                self.logger.debug(f"Added actual binning to FITS header: {actual_binning}")
             elif hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
                 header['XBINNING'] = self.camera.bin_x
                 header['YBINNING'] = self.camera.bin_y
-                self.logger.debug(f"Added camera binning to FITS header: {self.camera.bin_x}x{self.camera.bin_y}")
             
             # Temperature information
             if hasattr(self.camera, 'ccdtemperature'):
@@ -1334,16 +1320,13 @@ class VideoCapture:
             # Timestamp
             header['DATE-OBS'] = Time.now().isot
             
-            self.logger.debug(f"Created FITS header with {len(header)} keywords")
-            
             # Create FITS file
             hdu = fits.PrimaryHDU(image_data, header=header)
             hdu.writeto(filename, overwrite=True)
             
             # Verify file was created
             if os.path.exists(filename):
-                file_size = os.path.getsize(filename)
-                self.logger.info(f"Alpaca FITS file saved successfully: {filename} (size: {file_size} bytes)")
+                self.logger.info(f"Alpaca FITS file saved successfully: {filename}")
                 return success_status("Alpaca FITS file saved", data=filename)
             else:
                 self.logger.error(f"FITS file was not created: {filename}")
@@ -1583,7 +1566,7 @@ class VideoCapture:
                         self.logger.info(f"Target temperature reached: {current_temp:.1f}°C (target: {target_temp:.1f}°C)")
                         return success_status(f"Target temperature reached: {current_temp:.1f}°C")
                     
-                    self.logger.debug(f"Current: {current_temp:.1f}°C, Target: {target_temp:.1f}°C, Diff: {temp_diff:.1f}°C")
+        
                 
                 time.sleep(2)  # Check every 2 seconds
             
