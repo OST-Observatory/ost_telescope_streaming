@@ -114,9 +114,21 @@ class OverlayRunner:
         try:
             self.logger.info("Stopping observation session...")
             
+            # Stop the main loop first
+            self.running = False
+            
+            # Stop video processor immediately to stop all captures
+            if self.video_processor:
+                self.logger.info("Stopping video processor...")
+                stop_status = self.video_processor.stop()
+                if not stop_status.is_success:
+                    self.logger.warning(f"Failed to stop video processor: {stop_status.message}")
+                else:
+                    self.logger.info("Video processor stopped successfully")
+            
             # Stop cooling with warmup if enabled
             if self.cooling_manager:
-                # Shutdown cooling manager first (starts warmup if cooling was active)
+                # Shutdown cooling manager (starts warmup if cooling was active)
                 shutdown_status = self.cooling_manager.shutdown()
                 if shutdown_status.is_success:
                     self.logger.info("🌡️  Cooling manager shutdown initiated")
@@ -139,18 +151,6 @@ class OverlayRunner:
                 else:
                     self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
             
-            # Stop video processor observation session AFTER warmup is complete
-            if self.video_processor:
-                # Only stop the processing loop, keep the camera connection for warmup
-                if hasattr(self.video_processor, 'stop') and self.video_processor.is_running:
-                    self.video_processor.stop()
-                    self.logger.info("Video processor processing loop stopped")
-                
-                # Keep the session active until warmup is complete
-                # The full session shutdown will happen after warmup
-            
-            self.running = False
-            
             return success_status("Observation session stopped successfully")
             
         except Exception as e:
@@ -162,11 +162,9 @@ class OverlayRunner:
         try:
             self.logger.info("Finalizing shutdown...")
             
-            # Now stop the video processor session completely
-            if self.video_processor:
-                session_status = self.video_processor.end_observation_session()
-                if not session_status.is_success:
-                    self.logger.warning(f"Session stop: {session_status.message}")
+            # Video processor is already stopped in stop_observation()
+            # Just log completion
+            self.logger.info("Shutdown sequence completed")
             
             return success_status("Shutdown finalized successfully")
             
