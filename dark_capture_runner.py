@@ -15,6 +15,7 @@ import argparse
 import logging
 import sys
 import os
+import signal
 from pathlib import Path
 from datetime import datetime
 
@@ -24,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / "code"))
 from config_manager import ConfigManager
 from dark_capture import DarkCapture
 from video_capture import VideoCapture
+from cooling_manager import create_cooling_manager
 
 
 def setup_logging(level=logging.INFO):
@@ -41,24 +43,30 @@ def setup_logging(level=logging.INFO):
 def main():
     """Main function for dark capture runner."""
     parser = argparse.ArgumentParser(
-        description='Automatic Dark Frame Capture System',
+        description='Automatic Dark Frame Capture System with Cooling Management',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Complete dark capture (all exposure times)
+  # Complete dark capture (all exposure times) with cooling
   python dark_capture_runner.py --config config_dark_capture.yaml
   
-  # Bias frames only (minimum exposure time)
+  # Bias frames only (minimum exposure time) with cooling
   python dark_capture_runner.py --config config_dark_capture.yaml --bias-only
   
-  # Science darks only (science exposure time)
+  # Science darks only (science exposure time) with cooling
   python dark_capture_runner.py --config config_dark_capture.yaml --science-only
   
-  # Custom number of darks
+  # Custom number of darks with cooling
   python dark_capture_runner.py --config config_dark_capture.yaml --num-darks 30
   
-  # Debug mode
+  # Debug mode with cooling
   python dark_capture_runner.py --config config_dark_capture.yaml --debug
+  
+  # Skip cooling (not recommended for scientific imaging)
+  python dark_capture_runner.py --config config_dark_capture.yaml --skip-cooling
+  
+  # Skip warmup (not recommended for camera protection)
+  python dark_capture_runner.py --config config_dark_capture.yaml --skip-warmup
         """
     )
     
@@ -107,6 +115,18 @@ Examples:
         help='Logging level (default: INFO)'
     )
     
+    parser.add_argument(
+        '--skip-cooling',
+        action='store_true',
+        help='Skip cooling initialization (not recommended for scientific imaging)'
+    )
+    
+    parser.add_argument(
+        '--skip-warmup',
+        action='store_true',
+        help='Skip warmup phase (not recommended for camera protection)'
+    )
+    
     args = parser.parse_args()
     
     # Setup logging
@@ -116,6 +136,50 @@ Examples:
     
     setup_logging(log_level)
     logger = logging.getLogger('dark_capture_runner')
+    
+    # Global variables for signal handling
+    global_dark_capture = None
+    global_cooling_manager = None
+    global_shutdown_in_progress = False
+    
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C signal."""
+        nonlocal global_shutdown_in_progress
+        
+        if global_shutdown_in_progress:
+            logger.info("\nShutdown already in progress, forcing exit...")
+            sys.exit(1)
+        
+        global_shutdown_in_progress = True
+        logger.info("\nReceived interrupt signal, stopping dark capture...")
+        
+        try:
+            # Start warmup if cooling manager is available
+            if global_cooling_manager and not args.skip_warmup:
+                logger.info("Starting warmup phase...")
+                warmup_status = global_cooling_manager.start_warmup()
+                if warmup_status.is_success:
+                    logger.info("🔥 Warmup started successfully")
+                    
+                    # Wait for warmup to complete
+                    logger.info("🔥 Waiting for warmup to complete...")
+                    wait_status = global_cooling_manager.wait_for_warmup_completion(timeout=600)
+                    if wait_status.is_success:
+                        logger.info("🔥 Warmup completed successfully")
+                    else:
+                        logger.warning(f"Warmup issue: {wait_status.message}")
+                else:
+                    logger.warning(f"Warmup start: {warmup_status.message}")
+            
+            logger.info("Dark capture stopped by user")
+            sys.exit(0)
+            
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+            sys.exit(1)
+    
+    # Set up signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
     
     try:
         # Load configuration
@@ -145,9 +209,44 @@ Examples:
             logger.error("Failed to initialize video capture")
             sys.exit(1)
         
+        # Initialize cooling if not skipped
+        if not args.skip_cooling:
+            logger.info("Initializing cooling system...")
+            if hasattr(video_capture, 'camera') and video_capture.camera:
+                global_cooling_manager = create_cooling_manager(video_capture.camera, config, logger)
+                
+                # Get cooling configuration
+                cooling_config = config.get_camera_config().get('cooling', {})
+                target_temp = cooling_config.get('target_temperature', -10.0)
+                wait_for_cooling = cooling_config.get('wait_for_cooling', True)
+                cooling_timeout = cooling_config.get('cooling_timeout', 300)
+                
+                logger.info(f"Setting cooling target temperature to {target_temp}°C")
+                
+                # Set target temperature
+                set_status = global_cooling_manager.set_target_temperature(target_temp)
+                if not set_status.is_success:
+                    logger.warning(f"Failed to set target temperature: {set_status.message}")
+                
+                # Wait for stabilization if required
+                if wait_for_cooling:
+                    logger.info("Waiting for temperature stabilization...")
+                    stabilization_status = global_cooling_manager.wait_for_stabilization(timeout=cooling_timeout)
+                    if not stabilization_status.is_success:
+                        logger.warning(f"Temperature stabilization: {stabilization_status.message}")
+                    else:
+                        logger.info("✅ Cooling initialized and stabilized successfully")
+                else:
+                    logger.info("✅ Cooling initialized (stabilization skipped)")
+            else:
+                logger.warning("No camera available for cooling")
+        else:
+            logger.info("Cooling initialization skipped")
+        
         # Initialize dark capture
         logger.info("Initializing dark capture system...")
         dark_capture = DarkCapture(config=config, logger=logger)
+        global_dark_capture = dark_capture
         
         if not dark_capture.initialize(video_capture):
             logger.error("Failed to initialize dark capture")
@@ -209,6 +308,26 @@ Examples:
                 logger.info("Details:")
                 for key, value in result.details.items():
                     logger.info(f"  {key}: {value}")
+            
+            # Start warmup if cooling was used and not skipped
+            if global_cooling_manager and not args.skip_warmup:
+                logger.info("=== WARMUP PHASE ===")
+                logger.info("Starting warmup phase to prevent thermal shock...")
+                
+                warmup_status = global_cooling_manager.start_warmup()
+                if warmup_status.is_success:
+                    logger.info("🔥 Warmup started successfully")
+                    
+                    # Wait for warmup to complete
+                    logger.info("🔥 Waiting for warmup to complete...")
+                    wait_status = global_cooling_manager.wait_for_warmup_completion(timeout=600)
+                    if wait_status.is_success:
+                        logger.info("🔥 Warmup completed successfully")
+                        logger.info("💡 Camera is now safe to disconnect")
+                    else:
+                        logger.warning(f"Warmup issue: {wait_status.message}")
+                else:
+                    logger.warning(f"Warmup start: {warmup_status.message}")
         else:
             logger.error(f"❌ Dark capture failed: {result.message}")
             sys.exit(1)

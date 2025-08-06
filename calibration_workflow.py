@@ -14,6 +14,7 @@ import sys
 import logging
 import argparse
 import time
+import signal
 from pathlib import Path
 
 # Add the code directory to the Python path
@@ -239,6 +240,55 @@ def main():
     # Setup logging
     logger = setup_logging(args.log_level)
     
+    # Global variables for signal handling
+    global_camera = None
+    global_cooling_manager = None
+    global_shutdown_in_progress = False
+    
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C signal."""
+        nonlocal global_shutdown_in_progress
+        
+        if global_shutdown_in_progress:
+            logger.info("\nShutdown already in progress, forcing exit...")
+            sys.exit(1)
+        
+        global_shutdown_in_progress = True
+        logger.info("\nReceived interrupt signal, stopping calibration workflow...")
+        
+        try:
+            # Start warmup if cooling manager is available
+            if global_cooling_manager and not args.skip_warmup:
+                logger.info("Starting warmup phase...")
+                warmup_status = global_cooling_manager.start_warmup()
+                if warmup_status.is_success:
+                    logger.info("🔥 Warmup started successfully")
+                    
+                    # Wait for warmup to complete
+                    logger.info("🔥 Waiting for warmup to complete...")
+                    wait_status = global_cooling_manager.wait_for_warmup_completion(timeout=600)
+                    if wait_status.is_success:
+                        logger.info("🔥 Warmup completed successfully")
+                    else:
+                        logger.warning(f"Warmup issue: {wait_status.message}")
+                else:
+                    logger.warning(f"Warmup start: {warmup_status.message}")
+            
+            # Disconnect camera
+            if global_camera:
+                global_camera.disconnect()
+                logger.info("Camera disconnected")
+            
+            logger.info("Calibration workflow stopped by user")
+            sys.exit(0)
+            
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+            sys.exit(1)
+    
+    # Set up signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
         # Load configuration
         config = ConfigManager(args.config)
@@ -250,10 +300,16 @@ def main():
         # Initialize cooling unless skipped
         if not args.skip_cooling:
             camera, cooling_status = initialize_cooling(config, logger)
+            global_camera = camera  # Set global variable for signal handler
+            
             if not cooling_status.is_success:
                 logger.error(f"Cooling initialization failed: {cooling_status.message}")
                 if cooling_status.level.value == 'ERROR':
                     return 1
+            
+            # Get cooling manager for signal handler
+            if camera:
+                global_cooling_manager = create_cooling_manager(camera, config, logger)
         
         # Run calibration workflow
         if args.darks_only:
