@@ -255,10 +255,10 @@ class FlatCapture:
             if not frame_status.is_success:
                 return error_status(f"Failed to capture test frame: {frame_status.message}")
             
-            # Get frame data - should be a numpy array from camera
+            # Get frame data - handle Status objects from camera
             frame_data = frame_status.data
             
-            # For calibration, we expect numpy arrays directly from the camera
+            # For calibration, we expect numpy arrays from the camera
             if isinstance(frame_data, np.ndarray):
                 frame = frame_data
                 self.logger.debug(f"Using frame data directly: shape={frame.shape}, dtype={frame.dtype}")
@@ -266,6 +266,10 @@ class FlatCapture:
                 # Handle nested Status objects
                 frame = frame_data.data
                 self.logger.debug(f"Extracted frame from Status object: shape={frame.shape}, dtype={frame.dtype}")
+            elif isinstance(frame_data, list):
+                # Convert list to numpy array (for some camera types)
+                frame = np.array(frame_data)
+                self.logger.debug(f"Converted list to numpy array: shape={frame.shape}, dtype={frame.dtype}")
             else:
                 self.logger.error(f"Unexpected frame data type: {type(frame_data)}")
                 return error_status(f"Unexpected frame data type: {type(frame_data)}")
