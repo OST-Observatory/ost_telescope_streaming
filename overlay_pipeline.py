@@ -4,6 +4,7 @@ import argparse
 import os
 import threading
 import time
+import signal
 from pathlib import Path
 from datetime import datetime
 
@@ -12,8 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
 from overlay_runner import OverlayRunner
-
-
 
 def main():
     """Command-line interface for the overlay runner with image combination functionality.
@@ -41,8 +40,8 @@ Examples:
   # Run with frame processing and plate-solving
   python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve
   
-  # Run with cooling and status monitoring
-  python overlay_pipeline.py --enable-cooling --cooling-temp -10.0 --cooling-status-interval 15
+  # Run with cooling enabled (status monitoring is automatic)
+  python overlay_pipeline.py --enable-cooling --cooling-temp -10.0
         """
     )
     
@@ -117,8 +116,6 @@ Examples:
         help='Logging level (default: INFO)'
     )
     
-
-    
     args = parser.parse_args()
     
     # Setup logging
@@ -137,6 +134,18 @@ Examples:
     )
     
     logger = logging.getLogger('overlay_runner_cli')
+    
+    # Global variable to store the runner for signal handler
+    global_runner = None
+    
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C signal."""
+        if global_runner:
+            logger.info("\nReceived interrupt signal, stopping observation session...")
+            global_runner.running = False
+    
+    # Set up signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
     
     try:
         # Load configuration
@@ -196,6 +205,7 @@ Examples:
         
         # Create overlay runner (VideoProcessor wird automatisch initialisiert)
         runner = OverlayRunner(config=config, logger=logger)
+        global_runner = runner  # Store for signal handler
         
         logger.info("Starting Overlay Runner with image combination...")
         if args.enable_frame_processing:

@@ -304,6 +304,9 @@ class OverlayRunner:
                 
                 while self.running:
                     try:
+                        # Check for KeyboardInterrupt and re-raise it
+                        if not self.running:
+                            break
                         # Check if we need to wait for warmup
                         if self.cooling_manager and self.cooling_manager.is_warming_up:
                             self.logger.info("🔥 Warmup in progress, pausing main loop...")
