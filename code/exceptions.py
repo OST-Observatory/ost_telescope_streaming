@@ -88,4 +88,19 @@ class CalibrationError(TelescopeStreamingError):
 
 class CoolingError(HardwareError):
     """Raised when camera cooling operations fail."""
+    pass
+
+
+class DarkCaptureError(TelescopeStreamingError):
+    """Raised when dark frame capture operations fail."""
+    pass
+
+
+class FlatCaptureError(TelescopeStreamingError):
+    """Raised when flat frame capture operations fail."""
+    pass
+
+
+class MasterFrameError(TelescopeStreamingError):
+    """Raised when master frame creation operations fail."""
     pass 
