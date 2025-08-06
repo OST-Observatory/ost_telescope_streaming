@@ -142,7 +142,35 @@ Examples:
         """Handle Ctrl+C signal."""
         if global_runner:
             logger.info("\nReceived interrupt signal, stopping observation session...")
+            
+            # Set running to False to stop the main loop
             global_runner.running = False
+            
+            # Stop observation with warmup if enabled (this will wait for warmup to complete)
+            stop_status = global_runner.stop_observation()
+            if stop_status.is_success:
+                logger.info("✅ Observation session stopped successfully")
+                
+                # Wait for warmup to complete if it was started
+                if global_runner.cooling_manager and global_runner.cooling_manager.is_warming_up:
+                    logger.info("🔥 Waiting for warmup to complete...")
+                    warmup_status = global_runner.cooling_manager.wait_for_warmup_completion(timeout=600)
+                    if warmup_status.is_success:
+                        logger.info("🔥 Warmup completed successfully")
+                    else:
+                        logger.warning(f"Warmup issue: {warmup_status.message}")
+                
+                # Finalize shutdown after warmup is complete
+                finalize_status = global_runner.finalize_shutdown()
+                if finalize_status.is_success:
+                    logger.info("✅ Shutdown finalized successfully")
+                else:
+                    logger.warning(f"Finalize shutdown: {finalize_status.message}")
+            else:
+                logger.warning(f"Session stop: {stop_status.message}")
+            
+            logger.info("Stopped by user")
+            sys.exit(0)
     
     # Set up signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
@@ -217,37 +245,6 @@ Examples:
         # Run the overlay runner (startet VideoProcessor und Hauptschleife)
         try:
             runner.run()
-        except KeyboardInterrupt:
-            logger.info("\nStopping observation session...")
-            
-            # Set running to False to stop the main loop
-            runner.running = False
-            
-            # Stop observation with warmup if enabled (this will wait for warmup to complete)
-            stop_status = runner.stop_observation()
-            if stop_status.is_success:
-                logger.info("✅ Observation session stopped successfully")
-                
-                # Wait for warmup to complete if it was started
-                if runner.cooling_manager and runner.cooling_manager.is_warming_up:
-                    logger.info("🔥 Waiting for warmup to complete...")
-                    warmup_status = runner.cooling_manager.wait_for_warmup_completion(timeout=600)
-                    if warmup_status.is_success:
-                        logger.info("🔥 Warmup completed successfully")
-                    else:
-                        logger.warning(f"Warmup issue: {warmup_status.message}")
-                
-                # Finalize shutdown after warmup is complete
-                finalize_status = runner.finalize_shutdown()
-                if finalize_status.is_success:
-                    logger.info("✅ Shutdown finalized successfully")
-                else:
-                    logger.warning(f"Finalize shutdown: {finalize_status.message}")
-            else:
-                logger.warning(f"Session stop: {stop_status.message}")
-            
-            logger.info("Stopped by user")
-            
         except Exception as e:
             logger.error(f"Error: {e}")
             sys.exit(1)
