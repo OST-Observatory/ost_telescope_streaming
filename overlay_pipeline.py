@@ -210,10 +210,17 @@ Examples:
         except KeyboardInterrupt:
             logger.info("\nStopping observation session...")
             
-            # Stop observation with warmup if enabled
+            # Stop observation with warmup if enabled (this will wait for warmup to complete)
             stop_status = runner.stop_observation()
             if stop_status.is_success:
                 logger.info("✅ Observation session stopped successfully")
+                
+                # Finalize shutdown after warmup is complete
+                finalize_status = runner.finalize_shutdown()
+                if finalize_status.is_success:
+                    logger.info("✅ Shutdown finalized successfully")
+                else:
+                    logger.warning(f"Finalize shutdown: {finalize_status.message}")
             else:
                 logger.warning(f"Session stop: {stop_status.message}")
             

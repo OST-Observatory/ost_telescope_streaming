@@ -123,9 +123,12 @@ class OverlayRunner:
                     
                     # If warmup was started, wait for it to complete
                     if self.cooling_manager.is_warming_up:
+                        self.logger.info("🔥 Waiting for warmup to complete before stopping other components...")
                         warmup_status = self.cooling_manager.wait_for_warmup_completion(timeout=600)
                         if not warmup_status.is_success:
                             self.logger.warning(f"Warmup issue: {warmup_status.message}")
+                        else:
+                            self.logger.info("🔥 Warmup completed, now stopping other components")
                 else:
                     self.logger.warning(f"Failed to shutdown cooling manager: {shutdown_status.message}")
                 
@@ -136,11 +139,15 @@ class OverlayRunner:
                 else:
                     self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
             
-            # Stop video processor observation session
+            # Stop video processor observation session AFTER warmup is complete
             if self.video_processor:
-                session_status = self.video_processor.end_observation_session()
-                if not session_status.is_success:
-                    self.logger.warning(f"Session stop: {session_status.message}")
+                # Only stop the processing loop, keep the camera connection for warmup
+                if hasattr(self.video_processor, 'stop') and self.video_processor.is_running:
+                    self.video_processor.stop()
+                    self.logger.info("Video processor processing loop stopped")
+                
+                # Keep the session active until warmup is complete
+                # The full session shutdown will happen after warmup
             
             self.running = False
             
@@ -149,6 +156,23 @@ class OverlayRunner:
         except Exception as e:
             self.logger.error(f"Failed to stop observation: {e}")
             return error_status(f"Failed to stop observation: {e}")
+    
+    def finalize_shutdown(self) -> Status:
+        """Finalize shutdown after warmup is complete."""
+        try:
+            self.logger.info("Finalizing shutdown...")
+            
+            # Now stop the video processor session completely
+            if self.video_processor:
+                session_status = self.video_processor.end_observation_session()
+                if not session_status.is_success:
+                    self.logger.warning(f"Session stop: {session_status.message}")
+            
+            return success_status("Shutdown finalized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to finalize shutdown: {e}")
+            return error_status(f"Failed to finalize shutdown: {e}")
     
     def _initialize_cooling_manager(self) -> bool:
         """Initialize cooling manager after video capture is available."""
