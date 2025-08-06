@@ -22,8 +22,8 @@ from datetime import datetime
 import glob
 import re
 
-from .status import Status, success_status, error_status, warning_status
-from .exceptions import MasterFrameError
+from status import Status, success_status, error_status, warning_status
+from exceptions import MasterFrameError
 
 
 class MasterFrameCreator:
@@ -41,7 +41,7 @@ class MasterFrameCreator:
             config: Configuration manager instance
             logger: Logger instance
         """
-        from .config_manager import ConfigManager
+        from config_manager import ConfigManager
         
         # Only create default config if no config is provided
         if config is None:

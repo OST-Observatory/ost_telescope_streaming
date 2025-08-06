@@ -22,9 +22,9 @@ from typing import Optional, List, Tuple, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from .status import Status, success_status, error_status, warning_status
-from .exceptions import DarkCaptureError
-from .video_capture import VideoCapture
+from status import Status, success_status, error_status, warning_status
+from exceptions import DarkCaptureError
+from video_capture import VideoCapture
 
 
 class DarkCapture:
@@ -42,7 +42,7 @@ class DarkCapture:
             config: Configuration manager instance
             logger: Logger instance
         """
-        from .config_manager import ConfigManager
+        from config_manager import ConfigManager
         
         # Only create default config if no config is provided
         if config is None:
