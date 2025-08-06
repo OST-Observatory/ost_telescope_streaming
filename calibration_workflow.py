@@ -224,7 +224,7 @@ def create_master_frames(config, logger):
 
 
 def start_warmup(camera, config, logger):
-    """Start warmup phase."""
+    """Start warmup phase and wait for completion."""
     try:
         logger.info("=== WARMUP PHASE ===")
         
@@ -240,12 +240,21 @@ def start_warmup(camera, config, logger):
         warmup_status = cooling_manager.start_warmup()
         
         if warmup_status.is_success:
-            logger.info("✅ Warmup started successfully")
-            logger.info("💡 Camera will warm up gradually. You can safely disconnect after warmup completes.")
+            logger.info("🔥 Warmup started successfully")
+            
+            # Wait for warmup to complete
+            logger.info("🔥 Waiting for warmup to complete...")
+            wait_status = cooling_manager.wait_for_warmup_completion(timeout=600)
+            if wait_status.is_success:
+                logger.info("🔥 Warmup completed successfully")
+                logger.info("💡 Camera is now safe to disconnect")
+            else:
+                logger.warning(f"Warmup issue: {wait_status.message}")
+            
+            return wait_status
         else:
             logger.warning(f"Warmup start: {warmup_status.message}")
-        
-        return warmup_status
+            return warmup_status
         
     except Exception as e:
         logger.error(f"Error during warmup: {e}")

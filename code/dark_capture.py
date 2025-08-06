@@ -267,8 +267,8 @@ class DarkCapture:
                 filepath = os.path.join(exp_dir, filename)
                 
                 # Capture frame
-                if hasattr(self.video_capture, 'capture_frame'):
-                    frame_status = self.video_capture.capture_frame()
+                if hasattr(self.video_capture, 'capture_single_frame'):
+                    frame_status = self.video_capture.capture_single_frame()
                     if frame_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured dark {i+1}/{self.num_darks}: {filename}")

@@ -222,8 +222,8 @@ class FlatCapture:
                 return error_status("Video capture not available")
             
             # Capture frame
-            if hasattr(self.video_capture, 'capture_frame'):
-                frame_status = self.video_capture.capture_frame()
+            if hasattr(self.video_capture, 'capture_single_frame'):
+                frame_status = self.video_capture.capture_single_frame()
                 if not frame_status.is_success:
                     return error_status(f"Failed to capture test frame: {frame_status.message}")
                 
@@ -242,7 +242,7 @@ class FlatCapture:
                 return success_status("Test frame captured", data=analysis)
             
             else:
-                return error_status("Video capture does not support frame capture")
+                return error_status("Video capture does not support single frame capture")
                 
         except Exception as e:
             self.logger.error(f"Error capturing test frame: {e}")
@@ -334,8 +334,8 @@ class FlatCapture:
                 filepath = os.path.join(self.flat_output_dir, filename)
                 
                 # Capture frame
-                if hasattr(self.video_capture, 'capture_frame'):
-                    frame_status = self.video_capture.capture_frame()
+                if hasattr(self.video_capture, 'capture_single_frame'):
+                    frame_status = self.video_capture.capture_single_frame()
                     if frame_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename}")
