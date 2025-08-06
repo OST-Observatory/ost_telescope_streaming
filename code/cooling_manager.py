@@ -221,11 +221,8 @@ class CoolingManager:
             self.is_warming_up = True
             self.warmup_start_time = datetime.now()
             
-            # Start monitoring thread
-            self.monitoring = True
-            self.monitor_thread = threading.Thread(target=self._warmup_monitor, args=(final_temp,))
-            self.monitor_thread.daemon = True
-            self.monitor_thread.start()
+            # Note: Status monitor will handle warmup display automatically
+            # No need to start separate monitoring thread
             
             return success_status(f"Warmup started to {final_temp}°C")
             
@@ -359,20 +356,27 @@ class CoolingManager:
                     
                     if temperature is not None:
                         # Format temperature display
-                        temp_str = f"{temperature:.1f}°C"
-                        if target_temp is not None:
-                            temp_diff = temperature - target_temp
-                            if abs(temp_diff) <= 1.0:
-                                temp_status = "✅"
-                            elif temp_diff > 0:
-                                temp_status = "📈"
-                            else:
-                                temp_status = "📉"
-                            temp_str += f" (Target: {target_temp:.1f}°C, Diff: {temp_diff:+5.1f}°C) {temp_status}"
+                        if self.is_warming_up:
+                            # Warmup mode
+                            temp_str = f"{temperature:.1f}°C (Warmup to {self.warmup_final_temp:.1f}°C) 🔥"
+                        else:
+                            # Normal cooling mode
+                            temp_str = f"{temperature:.1f}°C"
+                            if target_temp is not None:
+                                temp_diff = temperature - target_temp
+                                if abs(temp_diff) <= 1.0:
+                                    temp_status = "✅"
+                                elif temp_diff > 0:
+                                    temp_status = "📈"
+                                else:
+                                    temp_status = "📉"
+                                temp_str += f" (Target: {target_temp:.1f}°C, Diff: {temp_diff:+5.1f}°C) {temp_status}"
                         
                         # Format cooler power display
                         power_str = ""
-                        if cooler_power is not None:
+                        if self.is_warming_up:
+                            power_str = "❄️  Cooler: OFF (warmup)"
+                        elif cooler_power is not None:
                             if cooler_on:
                                 if cooler_power > 0:
                                     power_str = f"❄️  Cooler: {cooler_power:.0f}%"
@@ -418,15 +422,19 @@ class CoolingManager:
         try:
             self.logger.info("Shutting down cooling manager")
             
-            # Stop any monitoring
-            self.monitoring = False
-            if self.monitor_thread:
-                self.monitor_thread.join(timeout=5)
-            
             # Start warmup if cooling was active
             if self.is_cooling:
-                return self.start_warmup()
+                warmup_status = self.start_warmup()
+                if warmup_status.is_success:
+                    self.logger.info("🔥 Warmup started - status monitor will continue to show progress")
+                    return success_status("Warmup started successfully")
+                else:
+                    return warmup_status
             else:
+                # Stop monitoring if no cooling was active
+                self.monitoring = False
+                if self.monitor_thread:
+                    self.monitor_thread.join(timeout=5)
                 return success_status("Cooling manager shutdown complete")
                 
         except Exception as e:
