@@ -76,7 +76,7 @@ flat_capture:
   exposure_step_factor: 1.5
   
   # Maximum attempts to adjust exposure time
-  max_adjustment_attempts: 10
+  max_adjustment_attempts: 20
   
   # Output directory for flat frames
   output_dir: "flats"

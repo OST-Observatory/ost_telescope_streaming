@@ -100,14 +100,16 @@ class FlatCapture:
             
             # Get current exposure time as starting point from config
             camera_config = self.config.get_camera_config()
+            default_exposure = 2.0  # Start with 2s for efficiency
+            
             if video_capture.camera_type == 'ascom':
                 ascom_config = camera_config.get('ascom', {})
-                self.current_exposure = ascom_config.get('exposure_time', self.min_exposure)
+                self.current_exposure = ascom_config.get('exposure_time', default_exposure)
             elif video_capture.camera_type == 'alpaca':
                 alpaca_config = camera_config.get('alpaca', {})
-                self.current_exposure = alpaca_config.get('exposure_time', self.min_exposure)
+                self.current_exposure = alpaca_config.get('exposure_time', default_exposure)
             else:
-                self.current_exposure = self.min_exposure
+                self.current_exposure = default_exposure
             
             self.logger.info(f"Starting exposure time: {self.current_exposure}s")
             
