@@ -6,11 +6,11 @@
 # =============================================================================
 telescope:
   # Focal length in millimeters
-  focal_length: 1000
+  focal_length: 400
   # Aperture diameter in millimeters
-  aperture: 200
+  aperture: 80
   # Telescope type (refractor, reflector, etc.)
-  type: "reflector"
+  type: "refractor"
   # Focal ratio (focal_length / aperture)
   focal_ratio: 5.0
 
@@ -43,7 +43,7 @@ dark_capture:
   flat_exposure_time: null  # Will be auto-detected
   
   # Science image exposure time (for main observations)
-  science_exposure_time: 5.0
+  science_exposure_time: 10.0
   
   # Exposure time limits (in seconds)
   min_exposure: 0.001    # 1ms for bias frames
