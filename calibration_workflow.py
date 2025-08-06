@@ -41,8 +41,8 @@ def initialize_cooling(config, logger):
     """Initialize cooling system."""
     try:
         # Get camera configuration
-        frame_config = config.get_frame_processing_config()
-        camera_type = frame_config.get('camera_type', 'opencv')
+        camera_config = config.get_camera_config()
+        camera_type = camera_config.get('camera_type', 'opencv')
         
         if camera_type == 'opencv':
             logger.warning("Cooling not supported for OpenCV cameras")
@@ -129,9 +129,10 @@ def capture_darks_with_cooling(config, logger, camera=None):
         from video_capture import VideoCapture
         video_capture = VideoCapture(config=config, logger=logger)
         
-        if not video_capture.initialize():
-            logger.error("Failed to initialize video capture")
-            return error_status("Failed to initialize video capture")
+        # Check if camera was initialized successfully
+        if not video_capture.camera:
+            logger.error("Failed to initialize video capture - no camera available")
+            return error_status("Failed to initialize video capture - no camera available")
         
         # Create dark capture instance and initialize it
         dark_capture = DarkCapture(config, logger)
@@ -171,9 +172,10 @@ def capture_flats_with_cooling(config, logger, camera=None):
         from video_capture import VideoCapture
         video_capture = VideoCapture(config=config, logger=logger)
         
-        if not video_capture.initialize():
-            logger.error("Failed to initialize video capture")
-            return error_status("Failed to initialize video capture")
+        # Check if camera was initialized successfully
+        if not video_capture.camera:
+            logger.error("Failed to initialize video capture - no camera available")
+            return error_status("Failed to initialize video capture - no camera available")
         
         # Create flat capture instance and initialize it
         flat_capture = FlatCapture(config, logger)
