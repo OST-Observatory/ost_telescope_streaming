@@ -201,9 +201,9 @@ Examples:
             dark_config['science_exposure_time'] = args.science_exposure_time
             logger.info(f"Science exposure time set to: {args.science_exposure_time}s")
         
-        # Initialize video capture
+        # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
-        video_capture = VideoCapture(config=config, logger=logger)
+        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False)
         
         if not video_capture.initialize():
             logger.error("Failed to initialize video capture")

@@ -25,8 +25,14 @@ from calibration_applier import CalibrationApplier
 class VideoCapture:
     """Video capture class for telescope streaming."""
     
-    def __init__(self, config, logger=None):
-        """Initialize video capture with cooling support."""
+    def __init__(self, config, logger=None, enable_calibration=True):
+        """Initialize video capture with cooling support.
+        
+        Args:
+            config: Configuration manager instance
+            logger: Logger instance
+            enable_calibration: Whether to enable calibration (default: True)
+        """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         
@@ -59,8 +65,13 @@ class VideoCapture:
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
-        # Calibration
-        self.calibration_applier = CalibrationApplier(config, logger)
+        # Calibration (only if enabled)
+        self.enable_calibration = enable_calibration
+        if enable_calibration:
+            self.calibration_applier = CalibrationApplier(config, logger)
+        else:
+            self.calibration_applier = None
+            self.logger.info("Calibration disabled for this session")
         
         # Directories
         self._ensure_directories()
@@ -250,10 +261,13 @@ class VideoCapture:
                 if not cooling_status.is_success:
                     return cooling_status
             
-            # Initialize calibration
-            calibration_status = self.calibration_applier.load_master_frames()
-            if not calibration_status.is_success:
-                self.logger.warning(f"Calibration initialization: {calibration_status.message}")
+            # Initialize calibration only if enabled
+            if self.enable_calibration and self.calibration_applier:
+                calibration_status = self.calibration_applier.load_master_frames()
+                if not calibration_status.is_success:
+                    self.logger.warning(f"Calibration initialization: {calibration_status.message}")
+            else:
+                self.logger.info("Calibration skipped (disabled for this session)")
             
             return success_status("Observation session started successfully")
             
@@ -555,29 +569,35 @@ class VideoCapture:
                 frame_details = {'exposure_time_s': exposure_time_s, 'gain': gain, 'binning': binning, 'offset': offset, 'readout_mode': readout_mode, 'dimensions': f"{effective_width}x{effective_height}", 'debayered': False}
             
             # Apply calibration if enabled and master frames are available
-            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
-            
-            if calibration_status.is_success:
-                calibrated_frame = calibration_status.data
-                calibration_details = calibration_status.details
+            if self.enable_calibration and self.calibration_applier:
+                calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
                 
-                # Update frame details with calibration information
-                frame_details.update(calibration_details)
-                
-                if calibration_details.get('calibration_applied', False):
-                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
-                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
-                    return success_status("Frame captured and calibrated", 
-                                        data=calibrated_frame, 
-                                        details=frame_details)
+                if calibration_status.is_success:
+                    calibrated_frame = calibration_status.data
+                    calibration_details = calibration_status.details
+                    
+                    # Update frame details with calibration information
+                    frame_details.update(calibration_details)
+                    
+                    if calibration_details.get('calibration_applied', False):
+                        self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                       f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                        return success_status("Frame captured and calibrated", 
+                                            data=calibrated_frame, 
+                                            details=frame_details)
+                    else:
+                        self.logger.debug("Frame captured (no calibration applied)")
+                        return success_status("Frame captured", 
+                                            data=calibrated_frame, 
+                                            details=frame_details)
                 else:
-                    self.logger.debug("Frame captured (no calibration applied)")
-                    return success_status("Frame captured", 
-                                        data=calibrated_frame, 
+                    self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                    return success_status("Frame captured (calibration failed)", 
+                                        data=frame_data, 
                                         details=frame_details)
             else:
-                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
-                return success_status("Frame captured (calibration failed)", 
+                # No calibration applied
+                return success_status("Frame captured (calibration disabled)", 
                                     data=frame_data, 
                                     details=frame_details)
                 
@@ -680,29 +700,35 @@ class VideoCapture:
                 }
             
             # Apply calibration if enabled and master frames are available
-            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
-            
-            if calibration_status.is_success:
-                calibrated_frame = calibration_status.data
-                calibration_details = calibration_status.details
+            if self.enable_calibration and self.calibration_applier:
+                calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
                 
-                # Update frame details with calibration information
-                frame_details.update(calibration_details)
-                
-                if calibration_details.get('calibration_applied', False):
-                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
-                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
-                    return success_status("Frame captured and calibrated", 
-                                        data=calibrated_frame, 
-                                        details=frame_details)
+                if calibration_status.is_success:
+                    calibrated_frame = calibration_status.data
+                    calibration_details = calibration_status.details
+                    
+                    # Update frame details with calibration information
+                    frame_details.update(calibration_details)
+                    
+                    if calibration_details.get('calibration_applied', False):
+                        self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                       f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                        return success_status("Frame captured and calibrated", 
+                                            data=calibrated_frame, 
+                                            details=frame_details)
+                    else:
+                        self.logger.debug("Frame captured (no calibration applied)")
+                        return success_status("Frame captured", 
+                                            data=calibrated_frame, 
+                                            details=frame_details)
                 else:
-                    self.logger.debug("Frame captured (no calibration applied)")
-                    return success_status("Frame captured", 
-                                        data=calibrated_frame, 
+                    self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                    return success_status("Frame captured (calibration failed)", 
+                                        data=frame_data, 
                                         details=frame_details)
             else:
-                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
-                return success_status("Frame captured (calibration failed)", 
+                # No calibration applied
+                return success_status("Frame captured (calibration disabled)", 
                                     data=frame_data, 
                                     details=frame_details)
                 

@@ -221,28 +221,48 @@ class FlatCapture:
             if not self.video_capture:
                 return error_status("Video capture not available")
             
-            # Capture frame
-            if hasattr(self.video_capture, 'capture_single_frame'):
+            # Capture frame with current exposure time
+            if hasattr(self.video_capture, 'capture_single_frame_ascom') and self.video_capture.camera_type == 'ascom':
+                # Get camera config for other parameters
+                camera_config = self.config.get_camera_config()
+                ascom_config = camera_config.get('ascom', {})
+                gain = ascom_config.get('gain', None)
+                binning = ascom_config.get('binning', 1)
+                
+                frame_status = self.video_capture.capture_single_frame_ascom(
+                    self.current_exposure, gain, binning
+                )
+            elif hasattr(self.video_capture, 'capture_single_frame_alpaca') and self.video_capture.camera_type == 'alpaca':
+                # Get camera config for other parameters
+                camera_config = self.config.get_camera_config()
+                alpaca_config = camera_config.get('alpaca', {})
+                gain = alpaca_config.get('gain', None)
+                binning = alpaca_config.get('binning', [1, 1])
+                
+                frame_status = self.video_capture.capture_single_frame_alpaca(
+                    self.current_exposure, gain, binning
+                )
+            elif hasattr(self.video_capture, 'capture_single_frame'):
                 frame_status = self.video_capture.capture_single_frame()
-                if not frame_status.is_success:
-                    return error_status(f"Failed to capture test frame: {frame_status.message}")
-                
-                # Get frame data
-                frame_data = frame_status.data
-                if isinstance(frame_data, str):
-                    # Frame was saved to file, load it
-                    import cv2
-                    frame = cv2.imread(frame_data, cv2.IMREAD_GRAYSCALE)
-                else:
-                    # Frame is already in memory
-                    frame = frame_data
-                
-                # Analyze frame
-                analysis = self._analyze_frame(frame)
-                return success_status("Test frame captured", data=analysis)
-            
             else:
                 return error_status("Video capture does not support single frame capture")
+            
+            if not frame_status.is_success:
+                return error_status(f"Failed to capture test frame: {frame_status.message}")
+            
+            # Get frame data
+            frame_data = frame_status.data
+            if isinstance(frame_data, str):
+                # Frame was saved to file, load it
+                import cv2
+                frame = cv2.imread(frame_data, cv2.IMREAD_GRAYSCALE)
+            else:
+                # Frame is already in memory
+                frame = frame_data
+            
+            # Analyze frame
+            analysis = self._analyze_frame(frame)
+            return success_status("Test frame captured", data=analysis)
                 
         except Exception as e:
             self.logger.error(f"Error capturing test frame: {e}")
@@ -258,6 +278,26 @@ class FlatCapture:
             Dict containing frame analysis
         """
         try:
+            # Handle Status objects (should not happen, but just in case)
+            if hasattr(frame, 'data'):
+                self.logger.warning("Received Status object instead of frame data")
+                frame = frame.data
+            
+            # Ensure frame is a numpy array
+            if not isinstance(frame, np.ndarray):
+                self.logger.error(f"Frame is not a numpy array: {type(frame)}")
+                return {
+                    'mean_value': 0,
+                    'std_value': 0,
+                    'min_value': 0,
+                    'max_value': 0,
+                    'max_possible_count': 255,
+                    'mean_count_rate': 0,
+                    'frame_shape': (0, 0),
+                    'dtype': 'unknown',
+                    'error': f"Invalid frame type: {type(frame)}"
+                }
+            
             # Convert to float for analysis
             frame_float = frame.astype(np.float32)
             
@@ -328,19 +368,50 @@ class FlatCapture:
             captured_files = []
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
+            # Get camera config for other parameters
+            camera_config = self.config.get_camera_config()
+            if self.video_capture.camera_type == 'ascom':
+                ascom_config = camera_config.get('ascom', {})
+                gain = ascom_config.get('gain', None)
+                binning = ascom_config.get('binning', 1)
+            elif self.video_capture.camera_type == 'alpaca':
+                alpaca_config = camera_config.get('alpaca', {})
+                gain = alpaca_config.get('gain', None)
+                binning = alpaca_config.get('binning', [1, 1])
+            else:
+                gain = None
+                binning = 1
+            
             for i in range(self.num_flats):
                 # Generate filename
                 filename = f"flat_{timestamp}_{i+1:03d}.fits"
                 filepath = os.path.join(self.flat_output_dir, filename)
                 
-                # Capture frame
-                if hasattr(self.video_capture, 'capture_single_frame'):
+                # Capture frame with current exposure time
+                if hasattr(self.video_capture, 'capture_single_frame_ascom') and self.video_capture.camera_type == 'ascom':
+                    frame_status = self.video_capture.capture_single_frame_ascom(
+                        self.current_exposure, gain, binning
+                    )
+                elif hasattr(self.video_capture, 'capture_single_frame_alpaca') and self.video_capture.camera_type == 'alpaca':
+                    frame_status = self.video_capture.capture_single_frame_alpaca(
+                        self.current_exposure, gain, binning
+                    )
+                elif hasattr(self.video_capture, 'capture_single_frame'):
                     frame_status = self.video_capture.capture_single_frame()
-                    if frame_status.is_success:
+                else:
+                    self.logger.warning(f"Failed to capture flat {i+1}: No capture method available")
+                    continue
+                
+                if frame_status.is_success:
+                    # Save the frame
+                    save_status = self.video_capture.save_frame(frame_status.data, filepath)
+                    if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename}")
                     else:
-                        self.logger.warning(f"Failed to capture flat {i+1}: {frame_status.message}")
+                        self.logger.warning(f"Failed to save flat {i+1}: {save_status.message}")
+                else:
+                    self.logger.warning(f"Failed to capture flat {i+1}: {frame_status.message}")
                 
                 # Small delay between captures
                 time.sleep(0.1)

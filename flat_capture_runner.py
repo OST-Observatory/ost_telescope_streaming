@@ -196,9 +196,9 @@ Examples:
             flat_config['count_tolerance'] = args.tolerance
             logger.info(f"Count tolerance set to: {args.tolerance:.1%}")
         
-        # Initialize video capture
+        # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
-        video_capture = VideoCapture(config=config, logger=logger)
+        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False)
         
         if not video_capture.initialize():
             logger.error("Failed to initialize video capture")

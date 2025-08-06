@@ -124,10 +124,10 @@ def capture_darks_with_cooling(config, logger, camera=None):
             if not cooling_status.is_success:
                 return cooling_status
         
-        # Initialize video capture
+        # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
         from video_capture import VideoCapture
-        video_capture = VideoCapture(config=config, logger=logger)
+        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False)
         
         # Check if camera was initialized successfully
         if not video_capture.camera:
@@ -167,10 +167,10 @@ def capture_flats_with_cooling(config, logger, camera=None):
             if not cooling_status.is_success:
                 return cooling_status
         
-        # Initialize video capture
+        # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
         from video_capture import VideoCapture
-        video_capture = VideoCapture(config=config, logger=logger)
+        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False)
         
         # Check if camera was initialized successfully
         if not video_capture.camera:
