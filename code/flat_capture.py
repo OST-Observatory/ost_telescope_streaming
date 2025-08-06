@@ -255,41 +255,20 @@ class FlatCapture:
             if not frame_status.is_success:
                 return error_status(f"Failed to capture test frame: {frame_status.message}")
             
-            # Get frame data and convert to numpy array
+            # Get frame data - should be a numpy array from camera
             frame_data = frame_status.data
             
-            # Handle different frame data types
-            if isinstance(frame_data, str):
-                # Frame was saved to file, load it
-                import cv2
-                frame = cv2.imread(frame_data, cv2.IMREAD_GRAYSCALE)
-            elif isinstance(frame_data, list):
-                # Convert list to numpy array
-                frame = np.array(frame_data, dtype=np.float32)
-                self.logger.debug(f"Converted list to numpy array: shape={frame.shape}, dtype={frame.dtype}")
-            elif isinstance(frame_data, np.ndarray):
-                # Already a numpy array
+            # For calibration, we expect numpy arrays directly from the camera
+            if isinstance(frame_data, np.ndarray):
                 frame = frame_data
-            elif hasattr(frame_data, 'data'):
-                # Frame data is a Status object - extract the actual data
-                actual_data = frame_data.data
-                if isinstance(actual_data, list):
-                    frame = np.array(actual_data, dtype=np.float32)
-                    self.logger.debug(f"Extracted list from Status object and converted to numpy array: shape={frame.shape}")
-                elif isinstance(actual_data, np.ndarray):
-                    frame = actual_data
-                    self.logger.debug(f"Extracted numpy array from Status object: shape={frame.shape}")
-                else:
-                    self.logger.error(f"Unexpected data type in Status object: {type(actual_data)}")
-                    return error_status(f"Unexpected data type in Status object: {type(actual_data)}")
+                self.logger.debug(f"Using frame data directly: shape={frame.shape}, dtype={frame.dtype}")
+            elif hasattr(frame_data, 'data') and isinstance(frame_data.data, np.ndarray):
+                # Handle nested Status objects
+                frame = frame_data.data
+                self.logger.debug(f"Extracted frame from Status object: shape={frame.shape}, dtype={frame.dtype}")
             else:
-                # Try to convert to numpy array
-                try:
-                    frame = np.array(frame_data, dtype=np.float32)
-                    self.logger.debug(f"Converted {type(frame_data)} to numpy array: shape={frame.shape}")
-                except Exception as e:
-                    self.logger.error(f"Cannot convert frame data to numpy array: {e}")
-                    return error_status(f"Cannot convert frame data to numpy array: {e}")
+                self.logger.error(f"Unexpected frame data type: {type(frame_data)}")
+                return error_status(f"Unexpected frame data type: {type(frame_data)}")
             
             # Analyze frame
             analysis = self._analyze_frame(frame)
@@ -309,7 +288,7 @@ class FlatCapture:
             Dict containing frame analysis
         """
         try:
-            # Ensure frame is a numpy array
+            # Frame should already be a numpy array from _capture_test_frame
             if not isinstance(frame, np.ndarray):
                 self.logger.error(f"Frame is not a numpy array: {type(frame)}")
                 return {
@@ -324,25 +303,30 @@ class FlatCapture:
                     'error': f"Invalid frame type: {type(frame)}"
                 }
             
-            # Convert to float for analysis
-            frame_float = frame.astype(np.float32)
+            # Calculate statistics on original data (no conversion to float32)
+            mean_value = np.mean(frame)
+            std_value = np.std(frame)
+            min_value = np.min(frame)
+            max_value = np.max(frame)
             
-            # Calculate statistics
-            mean_value = np.mean(frame_float)
-            std_value = np.std(frame_float)
-            min_value = np.min(frame_float)
-            max_value = np.max(frame_float)
+            # Get bit depth from camera configuration
+            camera_config = self.config.get_camera_config()
+            bit_depth = camera_config.get('bit_depth', 16)  # Default to 16-bit
             
-            # Determine bit depth and max possible count
-            if frame.dtype == np.uint8:
-                max_possible_count = 255
-            elif frame.dtype == np.uint16:
-                max_possible_count = 65535
-            else:
-                max_possible_count = 255  # Default assumption
+            # Calculate maximum possible count based on bit depth
+            max_possible_count = (2 ** bit_depth) - 1
             
             # Calculate count rate as percentage of maximum
             count_rate = mean_value / max_possible_count
+            
+            # Add debug information to understand the values
+            self.logger.debug(f"Frame analysis: mean={mean_value:.2f}, max={max_value:.2f}, "
+                            f"bit_depth={bit_depth}, max_possible={max_possible_count}, count_rate={count_rate:.1%}")
+            
+            # Cap count rate at 100% for saturation
+            if count_rate > 1.0:
+                self.logger.warning(f"Count rate {count_rate:.1%} exceeds 100%, capping at 100% (saturation)")
+                count_rate = 1.0
             
             return {
                 'mean_value': mean_value,
@@ -429,8 +413,8 @@ class FlatCapture:
                     continue
                 
                 if frame_status.is_success:
-                    # Save the frame
-                    save_status = self.video_capture.save_frame(frame_status.data, filepath)
+                    # Save the frame directly as FITS (no OpenCV conversion for calibration)
+                    save_status = self.video_capture._save_fits_unified(frame_status.data, filepath)
                     if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename}")
