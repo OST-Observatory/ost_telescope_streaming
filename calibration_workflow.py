@@ -41,8 +41,8 @@ def initialize_cooling(config, logger):
     """Initialize cooling system."""
     try:
         # Get camera configuration
-        video_config = config.get_video_config()
-        camera_type = video_config.get('camera_type', 'opencv')
+        frame_config = config.get_frame_processing_config()
+        camera_type = frame_config.get('camera_type', 'opencv')
         
         if camera_type == 'opencv':
             logger.warning("Cooling not supported for OpenCV cameras")
@@ -51,7 +51,8 @@ def initialize_cooling(config, logger):
         # Create camera instance
         if camera_type == 'ascom':
             from ascom_camera import ASCOMCamera
-            ascom_config = video_config.get('ascom', {})
+            camera_config = config.get_camera_config()
+            ascom_config = camera_config.get('ascom', {})
             camera = ASCOMCamera(
                 driver_id=ascom_config.get('driver_id'),
                 config=config,
@@ -59,7 +60,8 @@ def initialize_cooling(config, logger):
             )
         elif camera_type == 'alpaca':
             from alpaca_camera import AlpycaCameraWrapper
-            alpaca_config = video_config.get('alpaca', {})
+            camera_config = config.get_camera_config()
+            alpaca_config = camera_config.get('alpaca', {})
             camera = AlpycaCameraWrapper(
                 host=alpaca_config.get('host', 'localhost'),
                 port=alpaca_config.get('port', 11111),
@@ -122,8 +124,20 @@ def capture_darks_with_cooling(config, logger, camera=None):
             if not cooling_status.is_success:
                 return cooling_status
         
-        # Create dark capture instance
+        # Initialize video capture
+        logger.info("Initializing video capture...")
+        from video_capture import VideoCapture
+        video_capture = VideoCapture(config=config, logger=logger)
+        
+        if not video_capture.initialize():
+            logger.error("Failed to initialize video capture")
+            return error_status("Failed to initialize video capture")
+        
+        # Create dark capture instance and initialize it
         dark_capture = DarkCapture(config, logger)
+        if not dark_capture.initialize(video_capture):
+            logger.error("Failed to initialize dark capture")
+            return error_status("Failed to initialize dark capture")
         
         # Capture dark frames
         logger.info("Starting dark frame capture...")
@@ -152,8 +166,20 @@ def capture_flats_with_cooling(config, logger, camera=None):
             if not cooling_status.is_success:
                 return cooling_status
         
-        # Create flat capture instance
+        # Initialize video capture
+        logger.info("Initializing video capture...")
+        from video_capture import VideoCapture
+        video_capture = VideoCapture(config=config, logger=logger)
+        
+        if not video_capture.initialize():
+            logger.error("Failed to initialize video capture")
+            return error_status("Failed to initialize video capture")
+        
+        # Create flat capture instance and initialize it
         flat_capture = FlatCapture(config, logger)
+        if not flat_capture.initialize(video_capture):
+            logger.error("Failed to initialize flat capture")
+            return error_status("Failed to initialize flat capture")
         
         # Capture flat frames
         logger.info("Starting flat frame capture...")
