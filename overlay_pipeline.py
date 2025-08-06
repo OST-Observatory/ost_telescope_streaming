@@ -210,10 +210,22 @@ Examples:
         except KeyboardInterrupt:
             logger.info("\nStopping observation session...")
             
+            # Set running to False to stop the main loop
+            runner.running = False
+            
             # Stop observation with warmup if enabled (this will wait for warmup to complete)
             stop_status = runner.stop_observation()
             if stop_status.is_success:
                 logger.info("✅ Observation session stopped successfully")
+                
+                # Wait for warmup to complete if it was started
+                if runner.cooling_manager and runner.cooling_manager.is_warming_up:
+                    logger.info("🔥 Waiting for warmup to complete...")
+                    warmup_status = runner.cooling_manager.wait_for_warmup_completion(timeout=600)
+                    if warmup_status.is_success:
+                        logger.info("🔥 Warmup completed successfully")
+                    else:
+                        logger.warning(f"Warmup issue: {warmup_status.message}")
                 
                 # Finalize shutdown after warmup is complete
                 finalize_status = runner.finalize_shutdown()
@@ -225,6 +237,10 @@ Examples:
                 logger.warning(f"Session stop: {stop_status.message}")
             
             logger.info("Stopped by user")
+            
+        except Exception as e:
+            logger.error(f"Error: {e}")
+            sys.exit(1)
             
     except KeyboardInterrupt:
         logger.info("\nStopped by user")

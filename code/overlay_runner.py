@@ -304,6 +304,14 @@ class OverlayRunner:
                 
                 while self.running:
                     try:
+                        # Check if we need to wait for warmup
+                        if self.cooling_manager and self.cooling_manager.is_warming_up:
+                            self.logger.info("🔥 Warmup in progress, pausing main loop...")
+                            while self.cooling_manager.is_warming_up and self.running:
+                                time.sleep(5)  # Check every 5 seconds
+                            if self.cooling_manager.is_warming_up:
+                                self.logger.info("🔥 Warmup completed, resuming main loop")
+                        
                         # Read coordinates
                         mount_status = self.mount.get_coordinates()
                         
