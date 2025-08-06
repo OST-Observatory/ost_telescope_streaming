@@ -98,13 +98,18 @@ class FlatCapture:
         try:
             self.video_capture = video_capture
             
-            # Get current exposure time as starting point
-            if hasattr(video_capture, 'get_exposure_time'):
-                self.current_exposure = video_capture.get_exposure_time()
-                self.logger.info(f"Current exposure time: {self.current_exposure}s")
+            # Get current exposure time as starting point from config
+            camera_config = self.config.get_camera_config()
+            if video_capture.camera_type == 'ascom':
+                ascom_config = camera_config.get('ascom', {})
+                self.current_exposure = ascom_config.get('exposure_time', self.min_exposure)
+            elif video_capture.camera_type == 'alpaca':
+                alpaca_config = camera_config.get('alpaca', {})
+                self.current_exposure = alpaca_config.get('exposure_time', self.min_exposure)
             else:
                 self.current_exposure = self.min_exposure
-                self.logger.warning("Could not get current exposure time, using minimum")
+            
+            self.logger.info(f"Starting exposure time: {self.current_exposure}s")
             
             self.logger.info(f"Flat capture initialized with target count rate: {self.target_count_rate:.1%}")
             return True
@@ -198,12 +203,10 @@ class FlatCapture:
                 
                 self.current_exposure = new_exposure
                 
-                # Set new exposure time
-                if hasattr(self.video_capture, 'set_exposure_time'):
-                    self.video_capture.set_exposure_time(self.current_exposure)
-                    time.sleep(0.1)  # Allow camera to adjust
-                else:
-                    self.logger.warning("Cannot set exposure time, using current value")
+                # Note: Exposure time will be set in the next capture call
+                # No need to set it separately as it's passed to capture methods
+                self.logger.debug(f"Updated exposure time to {self.current_exposure:.6f}s")
+                time.sleep(0.1)  # Allow camera to adjust
             
             return warning_status(f"Could not achieve target count rate after {self.max_adjustment_attempts} attempts")
             
@@ -250,15 +253,29 @@ class FlatCapture:
             if not frame_status.is_success:
                 return error_status(f"Failed to capture test frame: {frame_status.message}")
             
-            # Get frame data
+            # Get frame data and convert to numpy array
             frame_data = frame_status.data
+            
+            # Handle different frame data types
             if isinstance(frame_data, str):
                 # Frame was saved to file, load it
                 import cv2
                 frame = cv2.imread(frame_data, cv2.IMREAD_GRAYSCALE)
-            else:
-                # Frame is already in memory
+            elif isinstance(frame_data, list):
+                # Convert list to numpy array
+                frame = np.array(frame_data, dtype=np.float32)
+                self.logger.debug(f"Converted list to numpy array: shape={frame.shape}, dtype={frame.dtype}")
+            elif isinstance(frame_data, np.ndarray):
+                # Already a numpy array
                 frame = frame_data
+            else:
+                # Try to convert to numpy array
+                try:
+                    frame = np.array(frame_data, dtype=np.float32)
+                    self.logger.debug(f"Converted {type(frame_data)} to numpy array: shape={frame.shape}")
+                except Exception as e:
+                    self.logger.error(f"Cannot convert frame data to numpy array: {e}")
+                    return error_status(f"Cannot convert frame data to numpy array: {e}")
             
             # Analyze frame
             analysis = self._analyze_frame(frame)
@@ -278,11 +295,6 @@ class FlatCapture:
             Dict containing frame analysis
         """
         try:
-            # Handle Status objects (should not happen, but just in case)
-            if hasattr(frame, 'data'):
-                self.logger.warning("Received Status object instead of frame data")
-                frame = frame.data
-            
             # Ensure frame is a numpy array
             if not isinstance(frame, np.ndarray):
                 self.logger.error(f"Frame is not a numpy array: {type(frame)}")
