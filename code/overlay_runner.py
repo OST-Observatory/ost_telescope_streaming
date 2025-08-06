@@ -116,19 +116,25 @@ class OverlayRunner:
             
             # Stop cooling with warmup if enabled
             if self.cooling_manager:
-                # Stop status monitor first
+                # Shutdown cooling manager first (starts warmup if cooling was active)
+                shutdown_status = self.cooling_manager.shutdown()
+                if shutdown_status.is_success:
+                    self.logger.info("🌡️  Cooling manager shutdown initiated")
+                    
+                    # If warmup was started, wait for it to complete
+                    if self.cooling_manager.is_warming_up:
+                        warmup_status = self.cooling_manager.wait_for_warmup_completion(timeout=600)
+                        if not warmup_status.is_success:
+                            self.logger.warning(f"Warmup issue: {warmup_status.message}")
+                else:
+                    self.logger.warning(f"Failed to shutdown cooling manager: {shutdown_status.message}")
+                
+                # Now stop the status monitor
                 stop_status = self.cooling_manager.stop_status_monitor()
                 if stop_status.is_success:
                     self.logger.info("🌡️  Cooling status monitor stopped")
                 else:
                     self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
-                
-                # Shutdown cooling manager (starts warmup if cooling was active)
-                shutdown_status = self.cooling_manager.shutdown()
-                if shutdown_status.is_success:
-                    self.logger.info("🌡️  Cooling manager shutdown initiated")
-                else:
-                    self.logger.warning(f"Failed to shutdown cooling manager: {shutdown_status.message}")
             
             # Stop video processor observation session
             if self.video_processor:

@@ -426,20 +426,56 @@ class CoolingManager:
             if self.is_cooling:
                 warmup_status = self.start_warmup()
                 if warmup_status.is_success:
-                    self.logger.info("🔥 Warmup started - status monitor will continue to show progress")
+                    self.logger.info("🔥 Warmup started successfully")
                     return success_status("Warmup started successfully")
                 else:
                     return warmup_status
             else:
-                # Stop monitoring if no cooling was active
-                self.monitoring = False
-                if self.monitor_thread:
-                    self.monitor_thread.join(timeout=5)
+                self.logger.info("No active cooling to warm up")
                 return success_status("Cooling manager shutdown complete")
                 
         except Exception as e:
             self.logger.error(f"Failed to shutdown cooling manager: {e}")
             return error_status(f"Failed to shutdown cooling manager: {e}")
+    
+    def wait_for_warmup_completion(self, timeout: int = 600) -> Status:
+        """Wait for warmup to complete with progress updates.
+        
+        Args:
+            timeout: Maximum wait time in seconds (default: 10 minutes)
+            
+        Returns:
+            Status: Success or error status
+        """
+        try:
+            if not self.is_warming_up:
+                return success_status("No warmup in progress")
+            
+            self.logger.info(f"🔥 Waiting for warmup to complete (timeout: {timeout}s)")
+            start_time = datetime.now()
+            
+            while self.is_warming_up:
+                elapsed = (datetime.now() - start_time).total_seconds()
+                if elapsed > timeout:
+                    self.logger.warning(f"🔥 Warmup timeout after {timeout}s, stopping")
+                    self.stop_warmup()
+                    return warning_status(f"Warmup timeout after {timeout}s")
+                
+                # Get current temperature
+                status = self.get_cooling_status()
+                current_temp = status.get('temperature')
+                
+                if current_temp is not None:
+                    self.logger.info(f"🔥 Warmup progress: {current_temp:.1f}°C → {self.warmup_final_temp:.1f}°C (elapsed: {elapsed:.0f}s)")
+                
+                time.sleep(30)  # Check every 30 seconds
+            
+            self.logger.info("🔥 Warmup completed successfully")
+            return success_status("Warmup completed successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error waiting for warmup completion: {e}")
+            return error_status(f"Error waiting for warmup completion: {e}")
 
 
 def create_cooling_manager(camera, config, logger=None) -> CoolingManager:
