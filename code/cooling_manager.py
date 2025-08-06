@@ -51,6 +51,16 @@ class CoolingManager:
         self.monitor_thread = None
         self.monitoring = False
         
+        # Auto-start cooling if enabled
+        enable_cooling = cooling_config.get('enable_cooling', False)
+        if enable_cooling and self.target_temp is not None and self.camera.can_set_ccd_temperature:
+            self.logger.info(f"Auto-starting cooling to {self.target_temp}°C")
+            self.set_target_temperature(self.target_temp)
+        elif enable_cooling and not self.camera.can_set_ccd_temperature:
+            self.logger.warning("Cooling enabled but camera does not support cooling")
+        elif not enable_cooling:
+            self.logger.info("Cooling disabled in configuration")
+        
     def set_target_temperature(self, target_temp: float) -> Status:
         """Set target temperature and start cooling.
         
@@ -266,7 +276,7 @@ class CoolingManager:
         try:
             status = {
                 'temperature': self.camera.ccd_temperature,
-                'target_temperature': self.camera.set_ccd_temperature,
+                'target_temperature': self.target_temp,  # Use configured target temperature
                 'cooler_power': self.camera.cooler_power,
                 'cooler_on': self.camera.cooler_on,
                 'is_cooling': self.is_cooling,

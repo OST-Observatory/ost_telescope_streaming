@@ -174,6 +174,11 @@ Examples:
                 camera_cooling = camera_config.get('cooling', {})
                 camera_cooling['target_temperature'] = args.cooling_temp
                 logger.info(f"Cooling target temperature set to {args.cooling_temp}°C")
+            else:
+                # Use config value if no command line argument provided
+                cooling_config = camera_config.get('cooling', {})
+                target_temp = cooling_config.get('target_temperature', -10.0)
+                logger.info(f"Using config cooling target temperature: {target_temp}°C")
             
             if args.wait_for_cooling:
                 cooling_config['wait_for_cooling'] = True
