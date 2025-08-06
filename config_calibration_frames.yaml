@@ -149,7 +149,7 @@ camera:
     host: "localhost"
     port: 11111
     device_id: 0
-    exposure_time: 5.0  # Manual exposure time in seconds
+    exposure_time: 2.0  # Manual exposure time in seconds
     gain: 100.0  # Gain setting
     offset: 50  # Offset setting (0-255 typically)
     readout_mode: 0  # Readout mode (camera-specific)

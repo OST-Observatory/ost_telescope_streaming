@@ -270,6 +270,18 @@ class FlatCapture:
             elif isinstance(frame_data, np.ndarray):
                 # Already a numpy array
                 frame = frame_data
+            elif hasattr(frame_data, 'data'):
+                # Frame data is a Status object - extract the actual data
+                actual_data = frame_data.data
+                if isinstance(actual_data, list):
+                    frame = np.array(actual_data, dtype=np.float32)
+                    self.logger.debug(f"Extracted list from Status object and converted to numpy array: shape={frame.shape}")
+                elif isinstance(actual_data, np.ndarray):
+                    frame = actual_data
+                    self.logger.debug(f"Extracted numpy array from Status object: shape={frame.shape}")
+                else:
+                    self.logger.error(f"Unexpected data type in Status object: {type(actual_data)}")
+                    return error_status(f"Unexpected data type in Status object: {type(actual_data)}")
             else:
                 # Try to convert to numpy array
                 try:
