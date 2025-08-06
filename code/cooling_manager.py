@@ -368,7 +368,7 @@ class CoolingManager:
                                 temp_status = "📈"
                             else:
                                 temp_status = "📉"
-                            temp_str += f" (Target: {target_temp:.1f}°C, Diff: {temp_diff:+.1f}°C) {temp_status}"
+                            temp_str += f" (Target: {target_temp:.1f}°C, Diff: {temp_diff:+5.1f}°C) {temp_status}"
                         
                         # Format cooler power display
                         power_str = ""
