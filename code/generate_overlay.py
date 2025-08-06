@@ -48,6 +48,14 @@ class OverlayGenerator:
         self.text_color = tuple(self.display_config.get('text_color', [255, 255, 255]))
         self.marker_size = self.display_config.get('marker_size', 5)
         self.text_offset = self.display_config.get('text_offset', [8, -8])
+        
+        # Info panel settings
+        self.info_panel_config = self.overlay_config.get('info_panel', {})
+        self.info_panel_enabled = self.info_panel_config.get('enabled', True)
+        
+        # Title settings
+        self.title_config = self.overlay_config.get('title', {})
+        self.title_enabled = self.title_config.get('enabled', True)
 
     def get_font(self):
         """Loads an available font for the current system."""
@@ -130,6 +138,243 @@ class OverlayGenerator:
             raise ValueError(f"RA must be between 0 and 360 degrees, not {ra}")
         if not (-90 <= dec <= 90):
             raise ValueError(f"Dec must be between -90 and 90 degrees, not {dec}")
+    
+    def _get_info_panel_font(self, size: int = None):
+        """Get font for info panel with specified size."""
+        font_size = size or self.info_panel_config.get('font_size', 12)
+        
+        font_paths = []
+        system = platform.system().lower()
+
+        if system == "windows":
+            font_paths = self.platform_config.get('fonts', {}).get('windows', ['arial.ttf'])
+        elif system == "linux":
+            font_paths = self.platform_config.get('fonts', {}).get('linux', [])
+        elif system == "darwin":  # macOS
+            font_paths = self.platform_config.get('fonts', {}).get('macos', [])
+
+        for font_path in font_paths:
+            try:
+                return ImageFont.truetype(font_path, font_size)
+            except (IOError, OSError):
+                continue
+
+        # Fallback to default font
+        return ImageFont.load_default()
+    
+    def _get_title_font(self, size: int = None):
+        """Get font for title with specified size."""
+        font_size = size or self.title_config.get('font_size', 18)
+        
+        font_paths = []
+        system = platform.system().lower()
+
+        if system == "windows":
+            font_paths = self.platform_config.get('fonts', {}).get('windows', ['arial.ttf'])
+        elif system == "linux":
+            font_paths = self.platform_config.get('fonts', {}).get('linux', [])
+        elif system == "darwin":  # macOS
+            font_paths = self.platform_config.get('fonts', {}).get('macos', [])
+
+        for font_path in font_paths:
+            try:
+                return ImageFont.truetype(font_path, font_size)
+            except (IOError, OSError):
+                continue
+
+        # Fallback to default font
+        return ImageFont.load_default()
+    
+    def _format_coordinates(self, ra_deg: float, dec_deg: float) -> str:
+        """Format coordinates in HH:MM:SS.SS +DD:MM:SS.S format."""
+        from astropy.coordinates import Angle
+        
+        ra_angle = Angle(ra_deg, unit='deg')
+        dec_angle = Angle(dec_deg, unit='deg')
+        
+        ra_str = ra_angle.to_string(unit='hourangle', sep=':', precision=2)
+        dec_str = dec_angle.to_string(unit='deg', sep=':', precision=1)
+        
+        return f"RA: {ra_str} | Dec: {dec_str}"
+    
+    def _get_telescope_info(self) -> str:
+        """Get telescope information from config."""
+        telescope_config = self.config.get_telescope_config()
+        focal_length = telescope_config.get('focal_length', 'Unknown')
+        aperture = telescope_config.get('aperture', 'Unknown')
+        focal_ratio = telescope_config.get('focal_ratio', 'Unknown')
+        telescope_type = telescope_config.get('type', 'Unknown')
+        
+        return f"Telescope: {aperture}mm {telescope_type} (f/{focal_ratio}, {focal_length}mm FL)"
+    
+    def _get_camera_info(self) -> str:
+        """Get camera information from config."""
+        camera_config = self.config.get_camera_config()
+        camera_type = camera_config.get('camera_type', 'Unknown')
+        sensor_width = camera_config.get('sensor_width', 'Unknown')
+        sensor_height = camera_config.get('sensor_height', 'Unknown')
+        pixel_size = camera_config.get('pixel_size', 'Unknown')
+        bit_depth = camera_config.get('bit_depth', 'Unknown')
+        
+        return f"Camera: {camera_type.upper()} ({sensor_width}×{sensor_height}mm, {pixel_size}μm, {bit_depth}bit)"
+    
+    def _get_fov_info(self, fov_width_deg: float, fov_height_deg: float) -> str:
+        """Get field of view information."""
+        fov_width_arcmin = fov_width_deg * 60
+        fov_height_arcmin = fov_height_deg * 60
+        
+        return f"FOV: {fov_width_deg:.2f}°×{fov_height_deg:.2f}° ({fov_width_arcmin:.1f}'×{fov_height_arcmin:.1f}')"
+    
+    def _draw_info_panel(self, draw, img_size: Tuple[int, int], ra_deg: float, dec_deg: float, 
+                        fov_width_deg: float, fov_height_deg: float, position_angle_deg: float = 0.0):
+        """Draw information panel on the overlay."""
+        if not self.info_panel_enabled:
+            return
+        
+        # Get panel configuration
+        position = self.info_panel_config.get('position', 'top_right')
+        width = self.info_panel_config.get('width', 300)
+        padding = self.info_panel_config.get('padding', 10)
+        line_spacing = self.info_panel_config.get('line_spacing', 5)
+        background_color = tuple(self.info_panel_config.get('background_color', [0, 0, 0, 180]))
+        border_color = tuple(self.info_panel_config.get('border_color', [255, 255, 255, 255]))
+        border_width = self.info_panel_config.get('border_width', 2)
+        text_color = tuple(self.info_panel_config.get('text_color', [255, 255, 255, 255]))
+        title_color = tuple(self.info_panel_config.get('title_color', [255, 255, 0, 255]))
+        
+        # Get fonts
+        info_font = self._get_info_panel_font()
+        
+        # Prepare text lines
+        lines = []
+        
+        # Title
+        lines.append(("INFO PANEL", title_color))
+        lines.append(("", text_color))  # Empty line
+        
+        # Timestamp
+        if self.info_panel_config.get('show_timestamp', True):
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            lines.append((f"Time: {timestamp}", text_color))
+        
+        # Coordinates
+        if self.info_panel_config.get('show_coordinates', True):
+            coord_str = self._format_coordinates(ra_deg, dec_deg)
+            lines.append((coord_str, text_color))
+        
+        # Position angle
+        if position_angle_deg != 0.0:
+            lines.append((f"Position Angle: {position_angle_deg:.1f}°", text_color))
+        
+        # Telescope info
+        if self.info_panel_config.get('show_telescope_info', True):
+            lines.append(("", text_color))  # Empty line
+            lines.append((self._get_telescope_info(), text_color))
+        
+        # Camera info
+        if self.info_panel_config.get('show_camera_info', True):
+            lines.append((self._get_camera_info(), text_color))
+        
+        # FOV info
+        if self.info_panel_config.get('show_fov_info', True):
+            lines.append(("", text_color))  # Empty line
+            lines.append((self._get_fov_info(fov_width_deg, fov_height_deg), text_color))
+        
+        # Calculate panel height
+        text_bbox = info_font.getbbox("A")
+        line_height = text_bbox[3] - text_bbox[1] + line_spacing
+        panel_height = len(lines) * line_height + 2 * padding
+        
+        # Calculate panel position
+        if position == 'top_left':
+            panel_x = padding
+            panel_y = padding
+        elif position == 'top_right':
+            panel_x = img_size[0] - width - padding
+            panel_y = padding
+        elif position == 'bottom_left':
+            panel_x = padding
+            panel_y = img_size[1] - panel_height - padding
+        elif position == 'bottom_right':
+            panel_x = img_size[0] - width - padding
+            panel_y = img_size[1] - panel_height - padding
+        else:
+            panel_x = padding
+            panel_y = padding
+        
+        # Draw background rectangle
+        background_rect = [panel_x, panel_y, panel_x + width, panel_y + panel_height]
+        draw.rectangle(background_rect, fill=background_color)
+        
+        # Draw border
+        if border_width > 0:
+            border_rect = [panel_x - border_width, panel_y - border_width, 
+                          panel_x + width + border_width, panel_y + panel_height + border_width]
+            draw.rectangle(border_rect, outline=border_color, width=border_width)
+        
+        # Draw text lines
+        y_offset = panel_y + padding
+        for line_text, color in lines:
+            if line_text:  # Skip empty lines
+                draw.text((panel_x + padding, y_offset), line_text, fill=color, font=info_font)
+            y_offset += line_height
+    
+    def _draw_title(self, draw, img_size: Tuple[int, int]):
+        """Draw title/header on the overlay."""
+        if not self.title_enabled:
+            return
+        
+        # Get title configuration
+        title_text = self.title_config.get('text', 'OST Telescope Streaming')
+        position = self.title_config.get('position', 'top_center')
+        font_size = self.title_config.get('font_size', 18)
+        font_color = tuple(self.title_config.get('font_color', [255, 255, 0, 255]))
+        background_color = tuple(self.title_config.get('background_color', [0, 0, 0, 180]))
+        padding = self.title_config.get('padding', 10)
+        border_color = tuple(self.title_config.get('border_color', [255, 255, 255, 255]))
+        border_width = self.title_config.get('border_width', 1)
+        
+        # Get font
+        title_font = self._get_title_font(font_size)
+        
+        # Get text size
+        text_bbox = title_font.getbbox(title_text)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        
+        # Calculate title box dimensions
+        box_width = text_width + 2 * padding
+        box_height = text_height + 2 * padding
+        
+        # Calculate position
+        if position == 'top_center':
+            box_x = (img_size[0] - box_width) // 2
+            box_y = padding
+        elif position == 'top_left':
+            box_x = padding
+            box_y = padding
+        elif position == 'top_right':
+            box_x = img_size[0] - box_width - padding
+            box_y = padding
+        else:
+            box_x = padding
+            box_y = padding
+        
+        # Draw background rectangle
+        background_rect = [box_x, box_y, box_x + box_width, box_y + box_height]
+        draw.rectangle(background_rect, fill=background_color)
+        
+        # Draw border
+        if border_width > 0:
+            border_rect = [box_x - border_width, box_y - border_width, 
+                          box_x + box_width + border_width, box_y + box_height + border_width]
+            draw.rectangle(border_rect, outline=border_color, width=border_width)
+        
+        # Draw text
+        text_x = box_x + padding
+        text_y = box_y + padding
+        draw.text((text_x, text_y), title_text, fill=font_color, font=title_font)
 
     def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                         fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
@@ -213,6 +458,10 @@ class OverlayGenerator:
             img = Image.new("RGBA", img_size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
             font = self.get_font()
+            
+            # Draw title and info panel first (so they appear behind objects)
+            self._draw_title(draw, img_size)
+            self._draw_info_panel(draw, img_size, ra_deg, dec_deg, fov_w, fov_h, pa_deg)
 
             # Process objects
             objects_drawn = 0

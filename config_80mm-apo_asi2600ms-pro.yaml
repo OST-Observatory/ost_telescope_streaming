@@ -172,6 +172,38 @@ overlay:
     text_color: [255, 255, 255]
     marker_size: 5
     text_offset: [8, -8]
+  
+  # Information panel settings
+  info_panel:
+    enabled: true
+    position: "top_right"  # "top_left", "top_right", "bottom_left", "bottom_right"
+    width: 300
+    background_color: [0, 0, 0, 180]  # RGBA with transparency
+    border_color: [255, 255, 255, 255]
+    border_width: 2
+    padding: 10
+    line_spacing: 5
+    font_size: 12
+    text_color: [255, 255, 255, 255]
+    title_color: [255, 255, 0, 255]  # Yellow for title
+    show_timestamp: true
+    show_coordinates: true
+    show_telescope_info: true
+    show_camera_info: true
+    show_fov_info: true
+    show_plate_solve_info: true
+  
+  # Title/Header settings
+  title:
+    enabled: true
+    text: "OST Telescope Streaming - 80mm APO + ASI2600MC Pro"
+    position: "top_center"  # "top_center", "top_left", "top_right"
+    font_size: 18
+    font_color: [255, 255, 0, 255]  # Yellow
+    background_color: [0, 0, 0, 180]  # Semi-transparent black
+    padding: 10
+    border_color: [255, 255, 255, 255]
+    border_width: 1
 
 # =============================================================================
 # LOGGING CONFIGURATION

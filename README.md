@@ -7,8 +7,11 @@ A comprehensive astronomical telescope streaming and overlay system with plate-s
 - **Real-time Video Capture**: Support for ASCOM cameras and OpenCV
 - **Plate-Solving**: Automated coordinate determination using PlateSolve2
 - **Astronomical Overlays**: Generate overlays showing stars, deep sky objects, and annotations
+- **Information Panel**: Display camera/telescope parameters and field of view information
+- **Configurable Title**: Customizable header text for overlays
 - **Image Combination**: Combine overlays with captured telescope images
 - **Mount Integration**: ASCOM mount support for coordinate tracking
+- **Camera Cooling**: Advanced cooling management with thermal shock prevention
 - **Configurable**: Flexible configuration system for all components
 
 ## Quick Start
@@ -142,6 +145,7 @@ plate_solve:
 
 - [ASCOM Camera Guide](docs/ascom_camera_guide.md)
 - [Image Combination Guide](docs/image_combination_guide.md)
+- [Overlay Information Panel Guide](docs/overlay_info_panel_guide.md)
 
 ## Requirements
 
