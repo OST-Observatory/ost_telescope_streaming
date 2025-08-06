@@ -246,6 +246,37 @@ class VideoProcessor:
         self.logger.info("Video processor stopped")
         return success_status("Video processor stopped", details={'is_running': False})
     
+    def stop_processing_only(self) -> VideoProcessingStatus:
+        """Stoppt nur die Verarbeitung, lässt aber die Kamera-Verbindung offen.
+        
+        This method stops the processing loop and capture operations but keeps
+        the camera connection alive for cooling operations.
+        
+        Returns:
+            VideoProcessingStatus: Status-Objekt mit Stopinformation.
+        """
+        self.is_running = False
+        if self.processing_thread:
+            self.processing_thread.join(timeout=5.0)
+        if self.video_capture:
+            self.video_capture.stop_capture()
+        self.logger.info("Video processor processing stopped (camera connection maintained)")
+        return success_status("Video processor processing stopped", details={'is_running': False})
+    
+    def disconnect_camera(self) -> VideoProcessingStatus:
+        """Disconnect the camera after warmup is complete.
+        
+        This method should be called after warmup is complete to properly
+        disconnect the camera.
+        
+        Returns:
+            VideoProcessingStatus: Status-Objekt mit Disconnect-Information.
+        """
+        if self.video_capture:
+            self.video_capture.disconnect()
+            self.logger.info("Camera disconnected")
+        return success_status("Camera disconnected")
+    
     def start_observation_session(self) -> VideoProcessingStatus:
         """Start an observation session with cooling initialization.
         

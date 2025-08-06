@@ -117,14 +117,15 @@ class OverlayRunner:
             # Stop the main loop first
             self.running = False
             
-            # Stop video processor immediately to stop all captures
+            # Stop video processor processing immediately to stop all captures
+            # but keep camera connection alive for cooling operations
             if self.video_processor:
-                self.logger.info("Stopping video processor...")
-                stop_status = self.video_processor.stop()
+                self.logger.info("Stopping video processor processing...")
+                stop_status = self.video_processor.stop_processing_only()
                 if not stop_status.is_success:
                     self.logger.warning(f"Failed to stop video processor: {stop_status.message}")
                 else:
-                    self.logger.info("Video processor stopped successfully")
+                    self.logger.info("Video processor processing stopped successfully")
             
             # Stop cooling with warmup if enabled
             if self.cooling_manager:
@@ -162,8 +163,12 @@ class OverlayRunner:
         try:
             self.logger.info("Finalizing shutdown...")
             
-            # Video processor is already stopped in stop_observation()
-            # Just log completion
+            # Disconnect camera after warmup is complete
+            if self.video_processor:
+                disconnect_status = self.video_processor.disconnect_camera()
+                if not disconnect_status.is_success:
+                    self.logger.warning(f"Failed to disconnect camera: {disconnect_status.message}")
+            
             self.logger.info("Shutdown sequence completed")
             
             return success_status("Shutdown finalized successfully")
