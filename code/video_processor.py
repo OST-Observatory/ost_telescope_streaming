@@ -97,20 +97,20 @@ class VideoProcessor:
         self.processing_thread: Optional[threading.Thread] = None
         
         # Load configuration sections
-        self.video_config: dict[str, Any] = self.config.get_video_config()
+        self.frame_config: dict[str, Any] = self.config.get_frame_processing_config()
         self.plate_solve_config: dict[str, Any] = self.config.get_plate_solve_config()
         
-        # Video processing settings
-        self.video_enabled: bool = self.video_config.get('video_enabled', True)
+        # Frame processing settings
+        self.frame_enabled: bool = self.frame_config.get('enabled', True)
         self.capture_interval: int = self.config.get_plate_solve_config().get('min_solve_interval', 60)
-        self.save_frames: bool = self.video_config.get('save_plate_solve_frames', True)
-        self.frame_dir: Path = Path(self.video_config.get('plate_solve_dir', 'plate_solve_frames'))
+        self.save_frames: bool = self.frame_config.get('save_plate_solve_frames', True)
+        self.frame_dir: Path = Path(self.frame_config.get('plate_solve_dir', 'plate_solve_frames'))
         
         # Timestamp settings for frame filenames
-        self.use_timestamps: bool = self.video_config.get('use_timestamps', False)
-        self.timestamp_format: str = self.video_config.get('timestamp_format', '%Y%m%d_%H%M%S')
-        self.use_capture_count: bool = self.video_config.get('use_capture_count', True)
-        self.file_format: str = self.video_config.get('file_format', 'png')
+        self.use_timestamps: bool = self.frame_config.get('use_timestamps', False)
+        self.timestamp_format: str = self.frame_config.get('timestamp_format', '%Y%m%d_%H%M%S')
+        self.use_capture_count: bool = self.frame_config.get('use_capture_count', True)
+        self.file_format: str = self.frame_config.get('file_format', 'PNG')
         
         # Plate-solving settings
         self.solver_type: str = self.plate_solve_config.get('default_solver', 'platesolve2')
@@ -169,7 +169,7 @@ class VideoProcessor:
         success = True
         
         # Initialize video capture
-        if self.video_enabled:
+        if self.frame_enabled:
             try:
                 self.video_capture = VideoCapture(config=self.config, logger=self.logger)
                 self.logger.info("Video capture initialized")
@@ -222,7 +222,7 @@ class VideoProcessor:
         
         if not self.video_capture:
             self.logger.error("Video capture not available")
-            return error_status("Video capture not available", details={'video_enabled': self.video_enabled})
+            return error_status("Video capture not available", details={'frame_enabled': self.frame_enabled})
         
         # Video capture is already started in start_observation_session
         # Just start the processing loop
@@ -230,7 +230,7 @@ class VideoProcessor:
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
         self.logger.info("Video processing loop started")
-        return success_status("Video processing loop started", details={'video_enabled': self.video_enabled, 'is_running': True})
+        return success_status("Video processing loop started", details={'frame_enabled': self.frame_enabled, 'is_running': True})
     
     def stop(self) -> VideoProcessingStatus:
         """Stoppt die Videoverarbeitung.
@@ -266,18 +266,18 @@ class VideoProcessor:
             # Start video capture (but not the processing loop yet)
             if not self.video_capture:
                 self.logger.error("Video capture not available")
-                return error_status("Video capture not available", details={'video_enabled': self.video_enabled})
+                return error_status("Video capture not available", details={'frame_enabled': self.frame_enabled})
             
             capture_status = self.video_capture.start_capture()
             if not capture_status.is_success:
                 self.logger.error("Failed to start video capture")
-                return error_status("Failed to start video capture", details={'video_enabled': self.video_enabled})
+                return error_status("Failed to start video capture", details={'frame_enabled': self.frame_enabled})
             
             self.logger.info("Observation session initialized successfully")
             return success_status(
                 "Observation session initialized successfully",
                 details={
-                    'video_enabled': self.video_enabled,
+                    'frame_enabled': self.frame_enabled,
                     'is_running': False,  # Processing loop not started yet
                     'capture_interval': self.capture_interval,
                     'plate_solve_enabled': self.plate_solve_enabled
@@ -716,10 +716,10 @@ class VideoProcessor:
                     self.logger.debug("Video capture get_latest_frame_path returned no valid path")
             
             # Get the plate solve directory from config
-            plate_solve_dir = self.video_config.get('plate_solve_dir', 'plate_solve_frames')
+            plate_solve_dir = self.frame_config.get('plate_solve_dir', 'plate_solve_frames')
             
-            # Get the configured image format from video config
-            image_format = self.video_config.get('image_format', 'png').lower()
+            # Get the configured image format from frame config
+            image_format = self.frame_config.get('file_format', 'PNG').lower()
             if image_format.startswith('.'):
                 image_format = image_format[1:]  # Remove leading dot if present
             

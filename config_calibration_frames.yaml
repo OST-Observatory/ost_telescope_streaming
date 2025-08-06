@@ -113,10 +113,7 @@ master_frames:
 camera:
   # Camera type and basic settings
   camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
-  
-  # General camera settings
-  file_format: "FITS"  # File format for saved frames (fits, jpg, png, tiff, etc.)
-  
+
   # Sensor specifications (important for calibration)
   sensor_width: 23.5     # Sensor width in mm
   sensor_height: 15.7    # Sensor height in mm
@@ -166,10 +163,10 @@ camera:
     frame_rate: 30  # Frame rate
 
 # =============================================================================
-# VIDEO CONFIGURATION (Frame capture and processing)
+# FRAME PROCESSING CONFIGURATION (Image capture and processing)
 # =============================================================================
-video:
-  video_enabled: true
+frame_processing:
+  enabled: true
   
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
@@ -183,6 +180,7 @@ video:
   # Output settings
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files
+  file_format: "FITS"  # File format for saved frames (fits, jpg, png, tiff, etc.)
 
 # =============================================================================
 # OVERLAY CONFIGURATION (Disabled for calibration operations)

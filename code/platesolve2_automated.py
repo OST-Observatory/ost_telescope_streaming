@@ -182,7 +182,6 @@ class PlateSolve2Automated:
         """Calculate field of view from telescope and camera configuration."""
         telescope_config = self.config.get_telescope_config()
         camera_config = self.config.get_camera_config()
-        video_config = self.config.get_video_config()
         
         # Get focal length (mm)
         focal_length = telescope_config.get('focal_length', 1000)

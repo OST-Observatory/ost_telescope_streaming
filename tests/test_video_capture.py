@@ -23,7 +23,7 @@ def main():
     else:
         config = ConfigManager()
     
-    video_config = config.get_video_config()
+    video_config = config.get_frame_processing_config()
     
     # Recreate parser with the loaded configuration defaults
     parser = argparse.ArgumentParser(description="Video capture with ASCOM/Alpyca camera support")
@@ -31,31 +31,31 @@ def main():
     parser.add_argument("--camera-index", type=int, default=video_config['opencv']['camera_index'],
                        help="Camera device index (OpenCV)")
     parser.add_argument("--camera-type", choices=['opencv', 'ascom', 'alpaca'], 
-                       default=video_config['camera_type'],
+                       default=config.get_camera_config().get('camera_type', 'opencv'),
                        help="Camera type: opencv for regular cameras, ascom for classic ASCOM, alpaca for Alpyca")
-    parser.add_argument("--ascom-driver", default=video_config['ascom']['ascom_driver'],
+    parser.add_argument("--ascom-driver", default=config.get_camera_config().get('ascom', {}).get('ascom_driver', 'ASCOM.MyCamera.Camera'),
                        help="ASCOM driver ID (astro cameras)")
-    parser.add_argument("--alpaca-host", default=video_config['alpaca']['host'],
+    parser.add_argument("--alpaca-host", default=config.get_camera_config().get('alpaca', {}).get('host', 'localhost'),
                        help="Alpaca server host")
-    parser.add_argument("--alpaca-port", type=int, default=video_config['alpaca']['port'],
+    parser.add_argument("--alpaca-port", type=int, default=config.get_camera_config().get('alpaca', {}).get('port', 11111),
                        help="Alpaca server port")
-    parser.add_argument("--alpaca-device-id", type=int, default=video_config['alpaca']['device_id'],
+    parser.add_argument("--alpaca-device-id", type=int, default=config.get_camera_config().get('alpaca', {}).get('device_id', 0),
                        help="Alpaca camera device ID")
-    parser.add_argument("--width", type=int, default=video_config['opencv']['frame_width'],
+    parser.add_argument("--width", type=int, default=config.get_camera_config().get('opencv', {}).get('frame_width', 1920),
                        help="Frame width")
-    parser.add_argument("--height", type=int, default=video_config['opencv']['frame_height'],
+    parser.add_argument("--height", type=int, default=config.get_camera_config().get('opencv', {}).get('frame_height', 1080),
                        help="Frame height")
-    parser.add_argument("--fps", type=int, default=video_config['opencv']['fps'],
+    parser.add_argument("--fps", type=int, default=config.get_camera_config().get('opencv', {}).get('fps', 30),
                        help="Frame rate")
-    parser.add_argument("--exposure", type=float, default=video_config['opencv']['exposure_time'],
+    parser.add_argument("--exposure", type=float, default=config.get_camera_config().get('opencv', {}).get('exposure_time', 0.1),
                        help="Exposure time in seconds")
-    parser.add_argument("--gain", type=float, default=video_config['ascom']['gain'],
+    parser.add_argument("--gain", type=float, default=config.get_camera_config().get('ascom', {}).get('gain', 1.0),
                        help="Gain setting (ASCOM/Alpyca cameras)")
-    parser.add_argument("--offset", type=float, default=video_config['ascom']['offset'],
+    parser.add_argument("--offset", type=float, default=config.get_camera_config().get('ascom', {}).get('offset', 0.0),
                        help="Offset setting (ASCOM/Alpyca cameras)")
-    parser.add_argument("--readout-mode", type=int, default=video_config['ascom']['readout_mode'],
+    parser.add_argument("--readout-mode", type=int, default=config.get_camera_config().get('ascom', {}).get('readout_mode', 0),
                        help="Readout mode (ASCOM/Alpyca cameras)")
-    parser.add_argument("--binning", type=int, default=video_config['ascom']['binning'],
+    parser.add_argument("--binning", type=int, default=config.get_camera_config().get('ascom', {}).get('binning', 1),
                        help="Binning factor (1x1, 2x2, etc.)")
     parser.add_argument("--output", default="captured_frame.jpg",
                        help="Output filename")
@@ -75,12 +75,8 @@ def main():
         logger.setLevel(logging.DEBUG)  # Enable debug logging
         
         # Update config with command line arguments BEFORE creating VideoCapture
-        video_config['camera_type'] = args.camera_type
-        video_config['opencv']['camera_index'] = args.camera_index
-        video_config['ascom']['ascom_driver'] = args.ascom_driver
-        video_config['alpaca']['host'] = args.alpaca_host
-        video_config['alpaca']['port'] = args.alpaca_port
-        video_config['alpaca']['device_id'] = args.alpaca_device_id
+        # Note: These updates are now handled by the individual camera classes
+        # which read from the correct config sections
         
         capture = VideoCapture(config=config, logger=logger)
         
@@ -769,7 +765,7 @@ def main():
                     if camera.is_color_camera():
                         # Capture and debayer
                         # Get binning from CLI argument or config
-                        binning = args.binning if hasattr(args, 'binning') else video_config['ascom']['binning']
+                        binning = args.binning if hasattr(args, 'binning') else config.get_camera_config().get('ascom', {}).get('binning', 1)
                         
                         # Start exposure
                         expose_status = camera.expose(args.exposure, args.gain, binning)
@@ -808,7 +804,7 @@ def main():
                     print(f"ASCOM camera connected: {status.message}")
                     
                     # Get binning from CLI argument or config
-                    binning = args.binning if hasattr(args, 'binning') else video_config['ascom']['binning']
+                    binning = args.binning if hasattr(args, 'binning') else config.get_camera_config().get('ascom', {}).get('binning', 1)
                     
                     # Capture single frame with ASCOM camera
                     capture_status = capture.capture_single_frame_ascom(

@@ -989,9 +989,9 @@ class ASCOMCamera:
         """Setup optional separate filter wheel driver."""
         try:
             # Get filter wheel driver from config
-            video_config = self.config.get_video_config()
-            if 'filter_wheel_driver' in video_config.get('ascom', {}):
-                self.filter_wheel_driver_id = video_config['ascom']['filter_wheel_driver']
+            camera_config = self.config.get_camera_config()
+            if 'filter_wheel_driver' in camera_config.get('ascom', {}):
+                self.filter_wheel_driver_id = camera_config['ascom']['filter_wheel_driver']
                 self.logger.info(f"Filter wheel driver configured: {self.filter_wheel_driver_id}")
             else:
                 self.logger.debug("No separate filter wheel driver configured")

@@ -549,7 +549,7 @@ class AlpycaCameraWrapper:
 **File:** `code/config_manager.py`
 
 ```python
-def get_video_config(self):
+def get_frame_processing_config(self):
     """Get video configuration with Alpyca support."""
     video_config = self.config.get('video', {})
     
@@ -600,7 +600,7 @@ class CameraFactory:
     @staticmethod
     def create_camera(config, logger=None):
         """Create camera instance based on configuration."""
-        video_config = config.get_video_config()
+        video_config = config.get_frame_processing_config()
         camera_type = video_config.get('camera_type', 'opencv')
         
         if camera_type == 'alpaca':

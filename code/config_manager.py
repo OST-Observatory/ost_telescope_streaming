@@ -119,9 +119,13 @@ class ConfigManager:
                 'type': 'color',
                 'bit_depth': 8
             },
-            'video': {
-                'video_enabled': True,
+            'camera': {
                 'camera_type': 'opencv',
+                'sensor_width': 6.17,
+                'sensor_height': 4.55,
+                'pixel_size': 3.75,
+                'type': 'color',
+                'bit_depth': 8,
                 'opencv': {
                     'camera_index': 0,
                     'frame_width': 1920,  # Frame width in pixels
@@ -137,10 +141,25 @@ class ConfigManager:
                     'gain': 1.0,  # Gain setting
                     'binning': 1  # Binning factor (1x1, 2x2, etc.)
                 },
+                'alpaca': {
+                    'host': 'localhost',
+                    'port': 11111,
+                    'device_id': 0,
+                    'exposure_time': 0.1,  # Manual exposure time in seconds
+                    'gain': 1.0,  # Gain setting
+                    'binning': [1, 1]  # Binning factor [x, y] for Alpaca
+                }
+            },
+            'frame_processing': {
+                'enabled': True,
                 'use_timestamps': False,  # Enable timestamps in frame filenames
                 'timestamp_format': '%Y%m%d_%H%M%S',  # Timestamp format for filenames
                 'use_capture_count': False,  # Enable capture count in frame filenames
-                'file_format': 'png'  # File format for saved frames (jpg, png, tiff, etc.)
+                'auto_debayer': False,  # Auto-debayer color images
+                'debayer_method': 'RGGB',  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
+                'output_dir': 'captured_frames',  # Directory for captured frames
+                'cache_dir': 'cache',  # Directory for temporary files
+                'file_format': 'PNG'  # File format for saved frames (fits, jpg, png, tiff, etc.)
             },
             'plate_solve': {
                 'auto_solve': True,
@@ -278,7 +297,7 @@ class ConfigManager:
         # Set defaults for missing values
         defaults = {
             'camera_type': 'opencv',
-            'file_format': 'FITS',  # General file format
+            
             'sensor_width': 23.5,    # Sensor width in mm
             'sensor_height': 15.7,   # Sensor height in mm
             'pixel_size': 3.76,      # Pixel size in micrometers
@@ -334,13 +353,13 @@ class ConfigManager:
         
         return camera_config
     
-    def get_video_config(self):
-        """Get video configuration."""
-        video_config = self.config.get('video', {})
+    def get_frame_processing_config(self):
+        """Get frame processing configuration."""
+        frame_config = self.config.get('frame_processing', {})
         
         # Set defaults for missing values
         defaults = {
-            'video_enabled': True,
+            'enabled': True,
             'use_timestamps': False,
             'timestamp_format': '%Y%m%d_%H%M%S',
             'use_capture_count': False,
@@ -352,26 +371,21 @@ class ConfigManager:
         
         # Merge with defaults
         for key, default_value in defaults.items():
-            if key not in video_config:
-                video_config[key] = default_value
+            if key not in frame_config:
+                frame_config[key] = default_value
         
-        # Get camera type from camera config
-        camera_config = self.get_camera_config()
-        video_config['camera_type'] = camera_config.get('camera_type', 'opencv')
+        return frame_config
+    
+    def get_video_config(self):
+        """DEPRECATED: Use get_frame_processing_config() instead.
         
-        # Add camera-specific settings based on camera type
-        camera_type = video_config['camera_type']
-        if camera_type == 'ascom':
-            ascom_config = camera_config.get('ascom', {})
-            video_config['ascom'] = ascom_config
-        elif camera_type == 'alpaca':
-            alpaca_config = camera_config.get('alpaca', {})
-            video_config['alpaca'] = alpaca_config
-        elif camera_type == 'opencv':
-            opencv_config = camera_config.get('opencv', {})
-            video_config['opencv'] = opencv_config
-        
-        return video_config
+        This method is kept for backward compatibility but will be removed
+        in a future version.
+        """
+        import warnings
+        warnings.warn("get_video_config() is deprecated, use get_frame_processing_config() instead", 
+                     DeprecationWarning, stacklevel=2)
+        return self.get_frame_processing_config()
     
     def get_plate_solve_config(self) -> Dict[str, Any]:
         """Get the plate solving configuration.

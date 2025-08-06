@@ -45,9 +45,9 @@ class OverlayRunner:
         self.update_interval = overlay_config.get('update', {}).get('update_interval', 30)
         self.wait_for_plate_solve = overlay_config.get('wait_for_plate_solve', False)
         
-        # Video configuration
-        video_config = config.get_video_config()
-        self.video_enabled = video_config.get('video_enabled', False)
+        # Frame processing configuration
+        frame_config = config.get_frame_processing_config()
+        self.frame_enabled = frame_config.get('enabled', False)
         
         # Get cooling settings from camera config
         camera_config = config.get_camera_config()
@@ -72,7 +72,7 @@ class OverlayRunner:
     def _initialize_components(self):
         """Initialize video processor and cooling manager."""
         try:
-            if self.video_enabled and VIDEO_AVAILABLE:
+            if self.frame_enabled and VIDEO_AVAILABLE:
                 self.video_processor = VideoProcessor(self.config, self.logger)
                 
                 # Initialize cooling if enabled
@@ -213,7 +213,7 @@ class OverlayRunner:
                         self.logger.error(f"Error starting video processor: {e}")
                         self.video_processor = None
                 else:
-                    self.logger.info("Video processing disabled or not available")
+                    self.logger.info("Frame processing disabled or not available")
                 
                 consecutive_failures = 0
                 

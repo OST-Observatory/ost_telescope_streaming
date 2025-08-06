@@ -34,11 +34,11 @@ cp config.yaml my_config.yaml
 # Basic usage
 python overlay_pipeline.py
 
-# With video processing and image combination
-python overlay_pipeline.py --enable-video --wait-for-plate-solve
+# With frame processing and image combination
+python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve
 
 # With custom interval and debug logging
-python overlay_pipeline.py --enable-video --interval 60 --debug
+python overlay_pipeline.py --enable-frame-processing --interval 60 --debug
 ```
 
 ## Command Line Options
@@ -51,7 +51,7 @@ Options:
   --interval, -i SECONDS      Update interval in seconds (default: 30)
   --debug, -d                 Enable debug logging
   --wait-for-plate-solve      Wait for plate-solving results before generating overlays
-  --enable-video              Enable video processing and frame capture
+  --enable-frame-processing   Enable frame processing and image capture
   --log-level LEVEL           Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 ```
 
@@ -64,12 +64,12 @@ python overlay_pipeline.py --config my_config.yaml
 
 ### Full System with Image Combination
 ```bash
-python overlay_pipeline.py --enable-video --wait-for-plate-solve --interval 60
+python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve --interval 60
 ```
 
 ### Debug Mode
 ```bash
-python overlay_pipeline.py --enable-video --debug
+python overlay_pipeline.py --enable-frame-processing --debug
 ```
 
 ## Output Files
@@ -82,14 +82,25 @@ The system generates several types of files:
 
 ## Configuration
 
-### Video Configuration
+### Frame Processing Configuration
 ```yaml
-video:
-  video_enabled: true
-  camera_type: "opencv"  # or "ascom"
-  opencv:
-    frame_width: 1920
-    frame_height: 1080
+frame_processing:
+  enabled: true
+  auto_debayer: true
+  output_dir: "captured_frames"
+  cache_dir: "cache"
+```
+
+### Camera Configuration
+```yaml
+camera:
+  camera_type: "alpaca"  # or "ascom", "opencv"
+  alpaca:
+    host: "localhost"
+    port: 11111
+    device_id: 0
+    exposure_time: 10.0
+    gain: 100.0
 ```
 
 ### Overlay Configuration

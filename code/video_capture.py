@@ -30,18 +30,18 @@ class VideoCapture:
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         
-        # Video configuration
-        video_config = config.get_video_config()
-        self.camera_type = video_config.get('camera_type', 'opencv')
-        self.camera_index = video_config.get('camera_index', 0)
-        self.exposure_time = video_config.get('exposure_time', 1.0)
-        self.gain = video_config.get('gain', 100.0)
-        self.offset = video_config.get('offset', 50.0)
-        self.readout_mode = video_config.get('readout_mode', 0)
-        self.binning = video_config.get('binning', [1, 1])
-        self.frame_rate = video_config.get('frame_rate', 30)
-        self.resolution = video_config.get('resolution', [1920, 1080])
-        self.video_enabled = video_config.get('video_enabled', True)
+        # Frame processing configuration
+        frame_config = config.get_frame_processing_config()
+        self.camera_type = config.get_camera_config().get('camera_type', 'opencv')
+        self.camera_index = config.get_camera_config().get('opencv', {}).get('camera_index', 0)
+        self.exposure_time = config.get_camera_config().get('opencv', {}).get('exposure_time', 1.0)
+        self.gain = config.get_camera_config().get('ascom', {}).get('gain', 100.0)
+        self.offset = config.get_camera_config().get('ascom', {}).get('offset', 50.0)
+        self.readout_mode = config.get_camera_config().get('ascom', {}).get('readout_mode', 0)
+        self.binning = config.get_camera_config().get('ascom', {}).get('binning', 1)
+        self.frame_rate = config.get_camera_config().get('opencv', {}).get('fps', 30)
+        self.resolution = config.get_camera_config().get('opencv', {}).get('resolution', [1920, 1080])
+        self.frame_enabled = frame_config.get('enabled', True)
         
         # Cooling configuration
         cooling_config = self.config.get_camera_config().get('cooling', {})
@@ -84,7 +84,7 @@ class VideoCapture:
         """Create necessary output directories."""
         try:
             # Create captured frames directory
-            output_dir = Path(self.config.get_video_config().get('output_directory', 'captured_frames'))
+            output_dir = Path(self.config.get_frame_processing_config().get('output_dir', 'captured_frames'))
             output_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Output directory ready: {output_dir}")
             
@@ -109,7 +109,7 @@ class VideoCapture:
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
             self.cap.set(cv2.CAP_PROP_FPS, self.frame_rate)
             
-            if not self.enable_cooling: # OpenCV cameras don't have auto-exposure
+            if not self.enable_cooling:  # OpenCV cameras don't have auto-exposure
                 self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
                 # Convert seconds to OpenCV exposure units (typically microseconds)
                 exposure_cv = int(self.exposure_time * 1000000)  # Convert seconds to microseconds
@@ -151,7 +151,7 @@ class VideoCapture:
                     native_height = cam.camera.CameraYSize
                     
                     # Get binning from config
-                    ascom_config = self.config.get_video_config().get('ascom', {})
+                    ascom_config = self.config.get_camera_config().get('ascom', {})
                     binning = ascom_config.get('binning', 1)
                     
                     # Calculate effective dimensions with binning

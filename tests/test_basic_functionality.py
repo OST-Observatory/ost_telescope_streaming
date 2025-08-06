@@ -51,12 +51,12 @@ def test_configuration(config) -> bool:
         # Test new configuration sections
         telescope_config = config.get_telescope_config()
         camera_config = config.get_camera_config()
-        video_config = config.get_video_config()
+        video_config = config.get_frame_processing_config()
         plate_solve_config = config.get_plate_solve_config()
         
         print(f"Telescope focal length: {telescope_config.get('focal_length', 'N/A')}mm")
         print(f"Camera sensor: {camera_config.get('sensor_width', 'N/A')}mm x {camera_config.get('sensor_height', 'N/A')}mm")
-        print(f"Video enabled: {video_config.get('video_enabled', True)}")
+        print(f"Frame processing enabled: {video_config.get('enabled', True)}")
         print(f"Plate solving enabled: {plate_solve_config.get('auto_solve', False)}")
         print(f"PlateSolve 2 path: {plate_solve_config.get('platesolve2_path', 'Not set')}")
         

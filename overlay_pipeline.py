@@ -34,8 +34,8 @@ Examples:
   # Run with debug logging
   python overlay_pipeline.py --debug
   
-  # Run with video processing and plate-solving
-  python overlay_pipeline.py --enable-video --wait-for-plate-solve
+  # Run with frame processing and plate-solving
+  python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve
         """
     )
     
@@ -66,9 +66,9 @@ Examples:
     )
     
     parser.add_argument(
-        '--enable-video',
+        '--enable-frame-processing',
         action='store_true',
-        help='Enable video processing and frame capture'
+        help='Enable frame processing and image capture'
     )
     
     parser.add_argument(
@@ -150,10 +150,10 @@ Examples:
             overlay_config['wait_for_plate_solve'] = True
             logger.info("Waiting for plate-solving results enabled")
         
-        if args.enable_video:
-            video_config = config.get_video_config()
-            video_config['video_enabled'] = True
-            logger.info("Video processing enabled")
+        if args.enable_frame_processing:
+            frame_config = config.get_frame_processing_config()
+            frame_config['enabled'] = True
+            logger.info("Frame processing enabled")
         
         # Handle cooling configuration
         if args.enable_cooling:
@@ -184,6 +184,8 @@ Examples:
         runner = OverlayRunner(config=config, logger=logger)
         
         logger.info("Starting Overlay Runner with image combination...")
+        if args.enable_frame_processing:
+            logger.info("Frame processing enabled")
         if args.enable_cooling:
             logger.info("Cooling management enabled")
         logger.info("Press Ctrl+C to stop")

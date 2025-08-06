@@ -23,15 +23,14 @@ class CameraFactory:
             Camera instance or error status
         """
         try:
-            video_config = config.get_video_config()
-            camera_type = video_config.get('camera_type', 'opencv')
+            camera_type = config.get_camera_config().get('camera_type', 'opencv')
             
             logger = logger or logging.getLogger(__name__)
             logger.info(f"Creating camera of type: {camera_type}")
             
             if camera_type == 'alpaca':
                 from alpaca_camera import AlpycaCameraWrapper
-                alpaca_config = video_config.get('alpaca', {})
+                alpaca_config = config.get_camera_config().get('alpaca', {})
                 camera = AlpycaCameraWrapper(
                     host=alpaca_config.get('host', 'localhost'),
                     port=alpaca_config.get('port', 11111),
@@ -44,7 +43,7 @@ class CameraFactory:
                 
             elif camera_type == 'ascom':
                 from ascom_camera import ASCOMCamera
-                ascom_config = video_config.get('ascom', {})
+                ascom_config = config.get_camera_config().get('ascom', {})
                 camera = ASCOMCamera(
                     driver_id=ascom_config.get('ascom_driver', 'ASCOM.ASICamera2.Camera'),
                     config=config,
@@ -110,8 +109,8 @@ class CameraFactory:
             Status: Success or error status with validation details
         """
         try:
-            video_config = config.get_video_config()
-            camera_type = video_config.get('camera_type', 'opencv')
+            video_config = config.get_frame_processing_config()
+            camera_type = config.get_camera_config().get('camera_type', 'opencv')
             
             validation_results = {
                 'camera_type': camera_type,
