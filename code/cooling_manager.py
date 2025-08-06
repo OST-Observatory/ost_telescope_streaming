@@ -467,6 +467,12 @@ class CoolingManager:
                 
                 if current_temp is not None:
                     self.logger.info(f"🔥 Warmup progress: {current_temp:.1f}°C → {self.warmup_final_temp:.1f}°C (elapsed: {elapsed:.0f}s)")
+                    
+                    # Check if temperature is already above target (warmup complete)
+                    if current_temp >= self.warmup_final_temp:
+                        self.logger.info(f"🔥 Warmup completed: Temperature {current_temp:.1f}°C is above target {self.warmup_final_temp:.1f}°C")
+                        self.stop_warmup()
+                        return success_status("Warmup completed successfully")
                 
                 time.sleep(30)  # Check every 30 seconds
             
