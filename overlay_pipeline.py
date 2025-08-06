@@ -2,6 +2,8 @@ import logging
 import sys
 import argparse
 import os
+import threading
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -10,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
 from overlay_runner import OverlayRunner
+
+
 
 def main():
     """Command-line interface for the overlay runner with image combination functionality.
@@ -36,6 +40,9 @@ Examples:
   
   # Run with frame processing and plate-solving
   python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve
+  
+  # Run with cooling and status monitoring
+  python overlay_pipeline.py --enable-cooling --cooling-temp -10.0 --cooling-status-interval 15
         """
     )
     
@@ -109,6 +116,8 @@ Examples:
         default='INFO',
         help='Logging level (default: INFO)'
     )
+    
+
     
     args = parser.parse_args()
     

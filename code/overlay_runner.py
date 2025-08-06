@@ -76,9 +76,26 @@ class OverlayRunner:
                 self.video_processor = VideoProcessor(self.config, self.logger)
                 
                 # Initialize cooling if enabled
-                if self.enable_cooling and hasattr(self.video_processor, 'cooling_manager'):
-                    self.cooling_manager = self.video_processor.cooling_manager
-                    self.logger.info("Cooling manager initialized")
+                if self.enable_cooling:
+                    # Try to get cooling manager from video processor
+                    if hasattr(self.video_processor, 'video_capture') and self.video_processor.video_capture:
+                        if hasattr(self.video_processor.video_capture, 'cooling_manager') and self.video_processor.video_capture.cooling_manager:
+                            self.cooling_manager = self.video_processor.video_capture.cooling_manager
+                            self.logger.info("Cooling manager initialized from video capture")
+                            
+                            # Start cooling status monitor automatically
+                            cooling_config = self.config.get_camera_config().get('cooling', {})
+                            status_interval = cooling_config.get('status_interval', 30)
+                            
+                            monitor_status = self.cooling_manager.start_status_monitor(interval=status_interval)
+                            if monitor_status.is_success:
+                                self.logger.info(f"🌡️  Cooling status monitor started automatically (interval: {status_interval}s)")
+                            else:
+                                self.logger.warning(f"Failed to start cooling status monitor: {monitor_status.message}")
+                        else:
+                            self.logger.warning("Cooling enabled but no cooling manager available in video capture")
+                    else:
+                        self.logger.warning("Cooling enabled but video capture not available")
                 
                 # Start observation session immediately
                 session_status = self.video_processor.start_observation_session()
@@ -112,6 +129,14 @@ class OverlayRunner:
         """Stop observation session with optional warmup."""
         try:
             self.logger.info("Stopping observation session...")
+            
+            # Stop cooling status monitor if running
+            if self.cooling_manager:
+                stop_status = self.cooling_manager.stop_status_monitor()
+                if stop_status.is_success:
+                    self.logger.info("🌡️  Cooling status monitor stopped")
+                else:
+                    self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
             
             # Stop video processor observation session
             if self.video_processor:

@@ -39,6 +39,9 @@ python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve
 
 # With custom interval and debug logging
 python overlay_pipeline.py --enable-frame-processing --interval 60 --debug
+
+# With cooling enabled (status monitoring is automatic)
+python overlay_pipeline.py --enable-cooling --cooling-temp -10.0
 ```
 
 ## Command Line Options
@@ -101,6 +104,13 @@ camera:
     device_id: 0
     exposure_time: 10.0
     gain: 100.0
+  
+  # Cooling Configuration
+  cooling:
+    enable_cooling: true
+    target_temperature: -10.0
+    wait_for_cooling: true
+    status_interval: 30  # Status update interval in seconds
 ```
 
 ### Overlay Configuration

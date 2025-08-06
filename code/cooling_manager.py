@@ -287,6 +287,122 @@ class CoolingManager:
             self.logger.error(f"Failed to get cooling status: {e}")
             return {'error': str(e)}
     
+    def start_status_monitor(self, interval: int = 30, callback=None) -> Status:
+        """Start periodic cooling status monitoring.
+        
+        Args:
+            interval: Update interval in seconds
+            callback: Optional callback function(status_data) for status updates
+            
+        Returns:
+            Status: Success or error status
+        """
+        try:
+            if self.monitoring:
+                return warning_status("Status monitor already running")
+            
+            self.monitoring = True
+            self.monitor_thread = threading.Thread(
+                target=self._status_monitor_loop,
+                args=(interval, callback),
+                daemon=True
+            )
+            self.monitor_thread.start()
+            
+            self.logger.info(f"🌡️  Cooling status monitor started (interval: {interval}s)")
+            return success_status(f"Cooling status monitor started (interval: {interval}s)")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start status monitor: {e}")
+            return error_status(f"Failed to start status monitor: {e}")
+    
+    def stop_status_monitor(self) -> Status:
+        """Stop cooling status monitoring."""
+        try:
+            if not self.monitoring:
+                return success_status("Status monitor not running")
+            
+            self.monitoring = False
+            if self.monitor_thread:
+                self.monitor_thread.join(timeout=5.0)
+            
+            self.logger.info("🌡️  Cooling status monitor stopped")
+            return success_status("Cooling status monitor stopped")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to stop status monitor: {e}")
+            return error_status(f"Failed to stop status monitor: {e}")
+    
+    def _status_monitor_loop(self, interval: int, callback=None):
+        """Internal status monitoring loop."""
+        try:
+            while self.monitoring:
+                # Get current status
+                status_data = self.get_cooling_status()
+                
+                if 'error' not in status_data:
+                    # Format status for display
+                    temperature = status_data.get('temperature')
+                    target_temp = status_data.get('target_temperature')
+                    cooler_power = status_data.get('cooler_power')
+                    cooler_on = status_data.get('cooler_on')
+                    
+                    if temperature is not None:
+                        # Format temperature display
+                        temp_str = f"{temperature:.1f}°C"
+                        if target_temp is not None:
+                            temp_diff = temperature - target_temp
+                            if abs(temp_diff) <= 1.0:
+                                temp_status = "✅"
+                            elif temp_diff > 0:
+                                temp_status = "📈"
+                            else:
+                                temp_status = "📉"
+                            temp_str += f" (Target: {target_temp:.1f}°C, Diff: {temp_diff:+.1f}°C) {temp_status}"
+                        
+                        # Format cooler power display
+                        power_str = ""
+                        if cooler_power is not None:
+                            if cooler_on:
+                                if cooler_power > 0:
+                                    power_str = f"❄️  Cooler: {cooler_power:.0f}%"
+                                else:
+                                    power_str = "❄️  Cooler: 0% (at target)"
+                            else:
+                                power_str = "❄️  Cooler: OFF"
+                        
+                        # Combine status information
+                        status_parts = [f"🌡️  Sensor: {temp_str}"]
+                        if power_str:
+                            status_parts.append(power_str)
+                        
+                        status_message = " | ".join(status_parts)
+                        
+                        # Log status
+                        self.logger.info(status_message)
+                        
+                        # Call callback if provided
+                        if callback:
+                            try:
+                                callback(status_data)
+                            except Exception as e:
+                                self.logger.warning(f"Callback error: {e}")
+                    else:
+                        self.logger.debug("🌡️  Cooling status: No temperature data available")
+                else:
+                    self.logger.debug("🌡️  Cooling status: No cooling data available")
+                
+                # Wait for next update or stop signal
+                for _ in range(interval):
+                    if not self.monitoring:
+                        break
+                    time.sleep(1)
+                    
+        except Exception as e:
+            self.logger.error(f"Error in status monitor loop: {e}")
+        finally:
+            self.monitoring = False
+    
     def shutdown(self) -> Status:
         """Shutdown cooling manager and start warmup."""
         try:

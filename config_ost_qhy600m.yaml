@@ -20,6 +20,7 @@ camera:
     enable_cooling: true           # Enable camera cooling
     target_temperature: -10.0      # Target temperature in Celsius
     wait_for_cooling: false        # Wait for target temperature before capture
+    status_interval: 30           # Status update interval in seconds
     cooling_timeout: 300           # Cooling timeout in seconds
     stabilization_tolerance: 1.0   # Temperature tolerance in Celsius
     warmup_rate: 2.0              # Warmup rate in °C per minute

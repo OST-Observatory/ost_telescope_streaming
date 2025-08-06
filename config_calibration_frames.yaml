@@ -131,6 +131,7 @@ camera:
     warmup_rate: 2.0          # Warmup rate in °C per minute
     warmup_final_temp: 15.0   # Final temperature for warmup
     warmup_at_end: true       # Start warmup when stopping observation
+    status_interval: 30       # Status update interval in seconds
   
   # ASCOM camera settings
   ascom:
