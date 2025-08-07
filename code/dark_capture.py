@@ -343,8 +343,15 @@ class DarkCapture:
                     self.logger.debug(f"Alpaca capture result: {type(frame_status)}, success={getattr(frame_status, 'is_success', 'N/A')}")
                     if frame_status and hasattr(frame_status, 'data'):
                         self.logger.debug(f"Alpaca capture data type: {type(frame_status.data)}")
-                        if frame_status.data is not None and hasattr(frame_status.data, 'shape'):
-                            self.logger.debug(f"Alpaca capture data shape: {frame_status.data.shape}")
+                        if frame_status.data is not None:
+                            if hasattr(frame_status.data, 'shape'):
+                                self.logger.debug(f"Alpaca capture data shape: {frame_status.data.shape}")
+                            elif hasattr(frame_status.data, 'data'):
+                                self.logger.debug(f"Alpaca capture data has nested data: {type(frame_status.data.data)}")
+                                if frame_status.data.data is not None and hasattr(frame_status.data.data, 'shape'):
+                                    self.logger.debug(f"Alpaca capture nested data shape: {frame_status.data.data.shape}")
+                        else:
+                            self.logger.debug("Alpaca capture data is None")
                 elif hasattr(self.video_capture, 'capture_single_frame'):
                     self.logger.debug(f"Capturing generic frame: exposure={exposure_time:.3f}s")
                     frame_status = self.video_capture.capture_single_frame()
@@ -371,17 +378,45 @@ class DarkCapture:
                         self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None")
                         continue
                     
-                    # Handle nested Status objects
-                    if hasattr(frame_data, 'data'):
+                    # Handle nested Status objects - extract recursively until we get actual data
+                    extraction_level = 0
+                    while hasattr(frame_data, 'data') and frame_data is not None:
+                        self.logger.debug(f"Extraction level {extraction_level}: Found nested Status object, extracting data...")
+                        old_frame_data = frame_data
                         frame_data = frame_data.data
+                        extraction_level += 1
+                        self.logger.debug(f"Extraction level {extraction_level}: Extracted data type: {type(frame_data)}")
+                        
                         # Get details from nested status if available
-                        if hasattr(frame_status.data, 'details'):
-                            frame_details.update(frame_status.data.details)
+                        if hasattr(old_frame_data, 'details'):
+                            frame_details.update(old_frame_data.details)
+                            self.logger.debug(f"Updated frame_details from nested status: {frame_details}")
+                        
+                        # Prevent infinite loop
+                        if extraction_level > 5:
+                            self.logger.error(f"Too many nested Status objects (level {extraction_level}), stopping extraction")
+                            break
                     
                     # Final check for None after nested extraction
                     if frame_data is None:
                         self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None after extraction")
+                        self.logger.debug(f"Original frame_status.data: {frame_status.data}")
+                        if hasattr(frame_status.data, 'data'):
+                            self.logger.debug(f"frame_status.data.data: {frame_status.data.data}")
                         continue
+                    
+                    # Validate that we have actual image data (numpy array)
+                    if not isinstance(frame_data, np.ndarray):
+                        self.logger.warning(f"Failed to capture dark {i+1}: frame_data is not a numpy array: {type(frame_data)}")
+                        self.logger.debug(f"frame_data: {frame_data}")
+                        continue
+                    
+                    # Validate that the array has the expected shape
+                    if len(frame_data.shape) < 2:
+                        self.logger.warning(f"Failed to capture dark {i+1}: frame_data has invalid shape: {frame_data.shape}")
+                        continue
+                    
+                    self.logger.debug(f"Successfully extracted image data: shape={frame_data.shape}, dtype={frame_data.dtype}")
                     
                     # Ensure we have the exposure time in frame details
                     if 'exposure_time_s' not in frame_details:
