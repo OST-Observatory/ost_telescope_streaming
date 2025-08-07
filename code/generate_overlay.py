@@ -56,6 +56,10 @@ class OverlayGenerator:
         # Title settings
         self.title_config = self.overlay_config.get('title', {})
         self.title_enabled = self.title_config.get('enabled', True)
+        
+        # Secondary FOV settings
+        self.secondary_fov_config = self.overlay_config.get('secondary_fov', {})
+        self.secondary_fov_enabled = self.secondary_fov_config.get('enabled', False)
 
     def get_font(self):
         """Loads an available font for the current system."""
@@ -375,6 +379,258 @@ class OverlayGenerator:
         text_x = box_x + padding
         text_y = box_y + padding
         draw.text((text_x, text_y), title_text, fill=font_color, font=title_font)
+    
+    def _calculate_secondary_fov(self) -> Tuple[float, float]:
+        """Calculate secondary telescope field of view in degrees."""
+        if not self.secondary_fov_enabled:
+            return 0.0, 0.0
+        
+        fov_type = self.secondary_fov_config.get('type', 'camera')
+        telescope_config = self.secondary_fov_config.get('telescope', {})
+        focal_length = telescope_config.get('focal_length', 1000)
+        
+        if fov_type == 'camera':
+            # Camera-based FOV calculation
+            camera_config = self.secondary_fov_config.get('camera', {})
+            sensor_width = camera_config.get('sensor_width', 10.0)
+            sensor_height = camera_config.get('sensor_height', 10.0)
+            
+            # Calculate FOV in degrees
+            fov_width_deg = (sensor_width / focal_length) * 57.2958  # Convert radians to degrees
+            fov_height_deg = (sensor_height / focal_length) * 57.2958
+            
+            return fov_width_deg, fov_height_deg
+            
+        elif fov_type == 'eyepiece':
+            # Eyepiece-based FOV calculation
+            eyepiece_config = self.secondary_fov_config.get('eyepiece', {})
+            eyepiece_fl = eyepiece_config.get('focal_length', 25)
+            afov = eyepiece_config.get('afov', 68)
+            
+            # Calculate magnification
+            magnification = focal_length / eyepiece_fl
+            
+            # Calculate true field of view
+            tfov = afov / magnification
+            
+            # For eyepiece, assume circular FOV
+            return tfov, tfov
+        
+        return 0.0, 0.0
+    
+    def _get_secondary_fov_label(self) -> str:
+        """Get label text for secondary FOV."""
+        if not self.secondary_fov_enabled:
+            return ""
+        
+        fov_type = self.secondary_fov_config.get('type', 'camera')
+        telescope_config = self.secondary_fov_config.get('telescope', {})
+        focal_length = telescope_config.get('focal_length', 1000)
+        aperture = telescope_config.get('aperture', 200)
+        telescope_type = telescope_config.get('type', 'reflector')
+        
+        if fov_type == 'camera':
+            camera_config = self.secondary_fov_config.get('camera', {})
+            sensor_width = camera_config.get('sensor_width', 10.0)
+            sensor_height = camera_config.get('sensor_height', 10.0)
+            pixel_size = camera_config.get('pixel_size', 5.0)
+            
+            return f"Secondary: {aperture}mm {telescope_type} + {sensor_width}×{sensor_height}mm sensor"
+            
+        elif fov_type == 'eyepiece':
+            eyepiece_config = self.secondary_fov_config.get('eyepiece', {})
+            eyepiece_fl = eyepiece_config.get('focal_length', 25)
+            afov = eyepiece_config.get('afov', 68)
+            
+            return f"Secondary: {aperture}mm {telescope_type} + {eyepiece_fl}mm ({afov}° AFOV)"
+        
+        return "Secondary FOV"
+    
+    def _draw_secondary_fov(self, draw, img_size: Tuple[int, int], center_ra_deg: float, 
+                           center_dec_deg: float, fov_width_deg: float, fov_height_deg: float,
+                           position_angle_deg: float = 0.0, is_flipped: bool = False):
+        """Draw secondary telescope field of view overlay."""
+        if not self.secondary_fov_enabled:
+            return
+        
+        # Get secondary FOV dimensions
+        secondary_fov_w, secondary_fov_h = self._calculate_secondary_fov()
+        if secondary_fov_w <= 0 or secondary_fov_h <= 0:
+            return
+        
+        # Get display settings
+        display_config = self.secondary_fov_config.get('display', {})
+        color = tuple(display_config.get('color', [0, 255, 255, 255]))
+        line_width = display_config.get('line_width', 2)
+        style = display_config.get('style', 'dashed')
+        show_label = display_config.get('show_label', True)
+        label_color = tuple(display_config.get('label_color', [0, 255, 255, 255]))
+        label_font_size = display_config.get('label_font_size', 10)
+        label_offset = display_config.get('label_offset', [5, 5])
+        
+        # Get position offset
+        offset_config = self.secondary_fov_config.get('position_offset', {})
+        ra_offset_arcmin = offset_config.get('ra_offset_arcmin', 0.0)
+        dec_offset_arcmin = offset_config.get('dec_offset_arcmin', 0.0)
+        
+        # Calculate offset in degrees
+        ra_offset_deg = ra_offset_arcmin / 60.0
+        dec_offset_deg = dec_offset_arcmin / 60.0
+        
+        # Apply offset to center coordinates
+        offset_center_ra = center_ra_deg + ra_offset_deg
+        offset_center_dec = center_dec_deg + dec_offset_deg
+        
+        # Calculate pixel scale
+        scale_x = (fov_width_deg * 60) / img_size[0]   # arcmin per pixel in X
+        scale_y = (fov_height_deg * 60) / img_size[1]  # arcmin per pixel in Y
+        
+        # Calculate secondary FOV size in pixels
+        secondary_fov_w_px = (secondary_fov_w * 60) / scale_x
+        secondary_fov_h_px = (secondary_fov_h * 60) / scale_y
+        
+        # Calculate center position in pixels
+        center_coord = SkyCoord(ra=offset_center_ra * u.deg, dec=offset_center_dec * u.deg, frame='icrs')
+        main_center_coord = SkyCoord(ra=center_ra_deg * u.deg, dec=center_dec_deg * u.deg, frame='icrs')
+        
+        # Calculate angular separation
+        delta_ra = (offset_center_ra - center_ra_deg) * u.deg.to(u.arcmin) * np.cos(center_dec_deg * np.pi / 180)
+        delta_dec = (offset_center_dec - center_dec_deg) * u.deg.to(u.arcmin)
+        
+        # Convert to radians for rotation
+        pa_rad = np.radians(position_angle_deg)
+        
+        # Apply rotation matrix
+        cos_pa = np.cos(pa_rad)
+        sin_pa = np.sin(pa_rad)
+        
+        # Rotate the coordinates
+        delta_ra_rot = delta_ra * cos_pa + delta_dec * sin_pa
+        delta_dec_rot = -delta_ra * sin_pa + delta_dec * cos_pa
+        
+        # Convert to pixel coordinates
+        center_x = img_size[0] / 2 + delta_ra_rot / scale_x
+        center_y = img_size[1] / 2 - delta_dec_rot / scale_y
+        
+        # Apply flip correction if needed
+        if is_flipped:
+            center_x = img_size[0] - center_x
+        
+        # Check if secondary FOV is within image bounds
+        half_width = secondary_fov_w_px / 2
+        half_height = secondary_fov_h_px / 2
+        
+        if (center_x - half_width > img_size[0] or center_x + half_width < 0 or
+            center_y - half_height > img_size[1] or center_y + half_height < 0):
+            # Secondary FOV is completely outside image bounds
+            return
+        
+        # Draw secondary FOV
+        fov_type = self.secondary_fov_config.get('type', 'camera')
+        
+        if fov_type == 'camera':
+            # Draw rectangular FOV for camera
+            left = center_x - half_width
+            top = center_y - half_height
+            right = center_x + half_width
+            bottom = center_y + half_height
+            
+            # Clip to image bounds
+            left = max(0, min(left, img_size[0]))
+            top = max(0, min(top, img_size[1]))
+            right = max(0, min(right, img_size[0]))
+            bottom = max(0, min(bottom, img_size[1]))
+            
+            # Draw rectangle
+            if style == 'dashed':
+                # Draw dashed rectangle
+                dash_length = 10
+                # Top line
+                for x in range(int(left), int(right), dash_length * 2):
+                    end_x = min(x + dash_length, right)
+                    draw.line([(x, top), (end_x, top)], fill=color, width=line_width)
+                # Bottom line
+                for x in range(int(left), int(right), dash_length * 2):
+                    end_x = min(x + dash_length, right)
+                    draw.line([(x, bottom), (end_x, bottom)], fill=color, width=line_width)
+                # Left line
+                for y in range(int(top), int(bottom), dash_length * 2):
+                    end_y = min(y + dash_length, bottom)
+                    draw.line([(left, y), (left, end_y)], fill=color, width=line_width)
+                # Right line
+                for y in range(int(top), int(bottom), dash_length * 2):
+                    end_y = min(y + dash_length, bottom)
+                    draw.line([(right, y), (right, end_y)], fill=color, width=line_width)
+            else:
+                # Draw solid rectangle
+                draw.rectangle([left, top, right, bottom], outline=color, width=line_width)
+        
+        elif fov_type == 'eyepiece':
+            # Draw circular FOV for eyepiece
+            radius = min(half_width, half_height)
+            
+            # Clip to image bounds
+            left = center_x - radius
+            top = center_y - radius
+            right = center_x + radius
+            bottom = center_y + radius
+            
+            if (left < img_size[0] and right > 0 and top < img_size[1] and bottom > 0):
+                # Draw circle
+                if style == 'dashed':
+                    # Draw dashed circle (approximation with arcs)
+                    import math
+                    segments = 32
+                    for i in range(segments):
+                        angle1 = i * 2 * math.pi / segments
+                        angle2 = (i + 1) * 2 * math.pi / segments
+                        
+                        # Only draw every other segment for dashed effect
+                        if i % 2 == 0:
+                            x1 = center_x + radius * math.cos(angle1)
+                            y1 = center_y + radius * math.sin(angle1)
+                            x2 = center_x + radius * math.cos(angle2)
+                            y2 = center_y + radius * math.sin(angle2)
+                            
+                            # Clip to image bounds
+                            if (0 <= x1 <= img_size[0] and 0 <= y1 <= img_size[1] and
+                                0 <= x2 <= img_size[0] and 0 <= y2 <= img_size[1]):
+                                draw.line([(x1, y1), (x2, y2)], fill=color, width=line_width)
+                else:
+                    # Draw solid circle
+                    draw.ellipse([left, top, right, bottom], outline=color, width=line_width)
+        
+        # Draw label if enabled
+        if show_label:
+            label_text = self._get_secondary_fov_label()
+            if label_text:
+                # Get label font
+                label_font = self._get_info_panel_font(label_font_size)
+                
+                # Calculate label position
+                label_x = center_x + label_offset[0]
+                label_y = center_y + label_offset[1]
+                
+                # Ensure label is within image bounds
+                label_x = max(10, min(label_x, img_size[0] - 200))
+                label_y = max(10, min(label_y, img_size[1] - 20))
+                
+                # Draw label background for better readability
+                text_bbox = label_font.getbbox(label_text)
+                text_width = text_bbox[2] - text_bbox[0]
+                text_height = text_bbox[3] - text_bbox[1]
+                
+                bg_left = label_x - 2
+                bg_top = label_y - 2
+                bg_right = label_x + text_width + 2
+                bg_bottom = label_y + text_height + 2
+                
+                # Draw background
+                draw.rectangle([bg_left, bg_top, bg_right, bg_bottom], 
+                             fill=(0, 0, 0, 180))
+                
+                # Draw text
+                draw.text((label_x, label_y), label_text, fill=label_color, font=label_font)
 
     def generate_overlay(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
                         fov_width_deg: Optional[float] = None, fov_height_deg: Optional[float] = None,
@@ -462,6 +718,9 @@ class OverlayGenerator:
             # Draw title and info panel first (so they appear behind objects)
             self._draw_title(draw, img_size)
             self._draw_info_panel(draw, img_size, ra_deg, dec_deg, fov_w, fov_h, pa_deg)
+            
+            # Draw secondary FOV overlay
+            self._draw_secondary_fov(draw, img_size, ra_deg, dec_deg, fov_w, fov_h, pa_deg, is_flipped)
 
             # Process objects
             objects_drawn = 0

@@ -204,6 +204,45 @@ overlay:
     padding: 10
     border_color: [255, 255, 255, 255]
     border_width: 1
+  
+  # Secondary telescope FOV overlay settings
+  secondary_fov:
+    enabled: false  # Enable/disable secondary FOV display
+    type: "camera"  # "camera" or "eyepiece"
+    
+    # Secondary telescope parameters
+    telescope:
+      focal_length: 3454  # Focal length in mm
+      aperture: 508       # Aperture in mm
+      type: "reflector"   # Telescope type
+    
+    # For camera-based FOV
+    camera:
+      sensor_width: 36.0   # Sensor width in mm
+      sensor_height: 24.0  # Sensor height in mm
+      pixel_size: 3.76     # Pixel size in micrometers
+      type: "mono"         # Camera type (mono/color)
+    
+    # For eyepiece-based FOV
+    eyepiece:
+      focal_length: 36     # Eyepiece focal length in mm
+      afov: 68             # Apparent Field of View in degrees
+    
+    # Display settings
+    display:
+      color: [0, 255, 255, 255]  # Cyan color (RGBA)
+      line_width: 2
+      style: "dashed"      # "solid", "dashed", "dotted"
+      opacity: 180         # Transparency (0-255)
+      show_label: true     # Show FOV label
+      label_color: [0, 255, 255, 255]  # Label color
+      label_font_size: 10
+      label_offset: [5, 5]  # Label offset from FOV border
+    
+    # Position offset (if secondary telescope is not perfectly aligned)
+    position_offset:
+      ra_offset_arcmin: 0.0   # RA offset in arcminutes
+      dec_offset_arcmin: 0.0  # Dec offset in arcminutes
 
 # =============================================================================
 # LOGGING CONFIGURATION
