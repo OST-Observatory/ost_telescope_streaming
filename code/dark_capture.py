@@ -136,11 +136,37 @@ class DarkCapture:
             if not flat_files:
                 return None
             
-            # For now, return a default value
-            # In a full implementation, you would read the FITS headers
-            # to extract the actual exposure time
-            self.logger.info("Flat files found, using default exposure time")
-            return 1.0
+            # Try to read exposure time from FITS headers
+            try:
+                import astropy.io.fits as fits
+                
+                # Check first few flat files for exposure time
+                for filename in flat_files[:3]:  # Check first 3 files
+                    filepath = os.path.join(flat_dir, filename)
+                    try:
+                        with fits.open(filepath) as hdul:
+                            header = hdul[0].header
+                            exp_time = header.get('EXPTIME')
+                            if exp_time is not None:
+                                self.logger.info(f"Detected flat exposure time from {filename}: {exp_time}s")
+                                return float(exp_time)
+                    except Exception as e:
+                        self.logger.debug(f"Could not read {filename}: {e}")
+                        continue
+                
+                # If no exposure time found in headers, try to extract from filename
+                # Look for patterns like flat_YYYYMMDD_HHMMSS_001.fits
+                for filename in flat_files:
+                    # For now, return a reasonable default
+                    # In a full implementation, you might parse the filename or use other methods
+                    pass
+                
+                self.logger.warning("Could not detect exposure time from FITS headers, using default")
+                return 1.0
+                
+            except ImportError:
+                self.logger.warning("Astropy not available, cannot read FITS headers")
+                return 1.0
             
         except Exception as e:
             self.logger.warning(f"Could not detect flat exposure time: {e}")
@@ -178,10 +204,22 @@ class DarkCapture:
             for exposure_time in exposure_times:
                 self.logger.info(f"Capturing darks for {exposure_time:.3f}s exposure...")
                 
-                # Set exposure time
-                if hasattr(self.video_capture, 'set_exposure_time'):
-                    self.video_capture.set_exposure_time(exposure_time)
-                    time.sleep(0.1)  # Allow camera to adjust
+                # Set exposure time on camera if possible
+                if hasattr(self.video_capture, 'camera') and self.video_capture.camera:
+                    if hasattr(self.video_capture.camera, 'exposure_time'):
+                        old_exposure = getattr(self.video_capture.camera, 'exposure_time', 'unknown')
+                        self.video_capture.camera.exposure_time = exposure_time
+                        self.logger.debug(f"Set camera exposure time: {old_exposure} → {exposure_time}s")
+                    elif hasattr(self.video_capture.camera, 'set_exposure_time'):
+                        self.video_capture.camera.set_exposure_time(exposure_time)
+                        self.logger.debug(f"Set camera exposure time via set_exposure_time: {exposure_time}s")
+                    else:
+                        self.logger.debug(f"Camera does not support exposure time setting, will use parameter in capture method")
+                else:
+                    self.logger.debug(f"No camera available for exposure time setting, will use parameter in capture method")
+                
+                # Allow camera to adjust
+                time.sleep(0.2)
                 
                 # Capture darks for this exposure time
                 result = self._capture_dark_series(exposure_time)
@@ -254,6 +292,7 @@ class DarkCapture:
             # Create exposure-specific subdirectory
             exp_dir = os.path.join(self.dark_output_dir, f"exp_{exposure_time:.3f}s")
             os.makedirs(exp_dir, exist_ok=True)
+            self.logger.debug(f"Created/verified directory: {exp_dir}")
             
             for i in range(self.num_darks):
                 # Generate filename
@@ -265,6 +304,7 @@ class DarkCapture:
                     filename = f"dark_{timestamp}_{i+1:03d}.fits"
                 
                 filepath = os.path.join(exp_dir, filename)
+                self.logger.debug(f"Will save to: {filepath}")
                 
                 # Capture frame with specific exposure time
                 if hasattr(self.video_capture, 'capture_single_frame_ascom') and self.video_capture.camera_type == 'ascom':
@@ -274,6 +314,7 @@ class DarkCapture:
                     gain = ascom_config.get('gain', None)
                     binning = ascom_config.get('binning', 1)
                     
+                    self.logger.debug(f"Capturing ASCOM frame: exposure={exposure_time:.3f}s, gain={gain}, binning={binning}")
                     frame_status = self.video_capture.capture_single_frame_ascom(
                         exposure_time, gain, binning
                     )
@@ -284,10 +325,12 @@ class DarkCapture:
                     gain = alpaca_config.get('gain', None)
                     binning = alpaca_config.get('binning', [1, 1])
                     
+                    self.logger.debug(f"Capturing Alpaca frame: exposure={exposure_time:.3f}s, gain={gain}, binning={binning}")
                     frame_status = self.video_capture.capture_single_frame_alpaca(
                         exposure_time, gain, binning
                     )
                 elif hasattr(self.video_capture, 'capture_single_frame'):
+                    self.logger.debug(f"Capturing generic frame: exposure={exposure_time:.3f}s")
                     frame_status = self.video_capture.capture_single_frame()
                 else:
                     self.logger.warning(f"Failed to capture dark {i+1}: No capture method available")
@@ -324,6 +367,12 @@ class DarkCapture:
                     if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured dark {i+1}/{self.num_darks}: {filename} (exposure: {exposure_time:.3f}s)")
+                        # Verify file was actually created
+                        if os.path.exists(filepath):
+                            file_size = os.path.getsize(filepath)
+                            self.logger.debug(f"File created successfully: {filepath} ({file_size} bytes)")
+                        else:
+                            self.logger.warning(f"File was not created despite success status: {filepath}")
                     else:
                         self.logger.warning(f"Failed to save dark {i+1}: {save_status.message}")
                 else:
@@ -358,10 +407,16 @@ class DarkCapture:
         try:
             self.logger.info("Capturing bias frames only...")
             
-            # Set minimum exposure time
-            if hasattr(self.video_capture, 'set_exposure_time'):
-                self.video_capture.set_exposure_time(self.min_exposure)
-                time.sleep(0.1)
+            # Set minimum exposure time on camera if possible
+            if hasattr(self.video_capture, 'camera') and self.video_capture.camera:
+                if hasattr(self.video_capture.camera, 'exposure_time'):
+                    self.video_capture.camera.exposure_time = self.min_exposure
+                    self.logger.debug(f"Set camera exposure time to {self.min_exposure}s")
+                elif hasattr(self.video_capture.camera, 'set_exposure_time'):
+                    self.video_capture.camera.set_exposure_time(self.min_exposure)
+                    self.logger.debug(f"Set camera exposure time to {self.min_exposure}s")
+            
+            time.sleep(0.2)  # Allow camera to adjust
             
             # Capture bias frames
             result = self._capture_dark_series(self.min_exposure)
@@ -386,10 +441,16 @@ class DarkCapture:
         try:
             self.logger.info(f"Capturing science darks for {self.science_exposure_time:.3f}s exposure...")
             
-            # Set science exposure time
-            if hasattr(self.video_capture, 'set_exposure_time'):
-                self.video_capture.set_exposure_time(self.science_exposure_time)
-                time.sleep(0.1)
+            # Set science exposure time on camera if possible
+            if hasattr(self.video_capture, 'camera') and self.video_capture.camera:
+                if hasattr(self.video_capture.camera, 'exposure_time'):
+                    self.video_capture.camera.exposure_time = self.science_exposure_time
+                    self.logger.debug(f"Set camera exposure time to {self.science_exposure_time}s")
+                elif hasattr(self.video_capture.camera, 'set_exposure_time'):
+                    self.video_capture.camera.set_exposure_time(self.science_exposure_time)
+                    self.logger.debug(f"Set camera exposure time to {self.science_exposure_time}s")
+            
+            time.sleep(0.2)  # Allow camera to adjust
             
             # Capture science darks
             result = self._capture_dark_series(self.science_exposure_time)
