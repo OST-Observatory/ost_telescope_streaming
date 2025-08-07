@@ -558,18 +558,36 @@ class FlatCapture:
                     continue
                 
                 if frame_status.is_success:
-                    # Extract frame data from Status object
+                    # Extract frame data and details from Status object
                     frame_data = frame_status.data
+                    frame_details = getattr(frame_status, 'details', {})
                     
                     # Handle nested Status objects
                     if hasattr(frame_data, 'data'):
                         frame_data = frame_data.data
+                        # Get details from nested status if available
+                        if hasattr(frame_status.data, 'details'):
+                            frame_details.update(frame_status.data.details)
                     
-                    # Save the frame directly as FITS (no OpenCV conversion for calibration)
-                    save_status = self.video_capture._save_fits_unified(frame_data, filepath)
+                    # Ensure we have the current exposure time in frame details
+                    if 'exposure_time_s' not in frame_details:
+                        frame_details['exposure_time_s'] = self.current_exposure
+                    
+                    # Ensure we have gain and binning information
+                    if 'gain' not in frame_details and gain is not None:
+                        frame_details['gain'] = gain
+                    if 'binning' not in frame_details and binning is not None:
+                        frame_details['binning'] = binning
+                    
+                    # Create a Status object with both data and details for FITS saving
+                    from status import success_status
+                    frame_with_details = success_status("Frame captured", data=frame_data, details=frame_details)
+                    
+                    # Save the frame directly as FITS with proper details
+                    save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
                     if save_status.is_success:
                         captured_files.append(filepath)
-                        self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename}")
+                        self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename} (exposure: {self.current_exposure:.3f}s)")
                     else:
                         self.logger.warning(f"Failed to save flat {i+1}: {save_status.message}")
                 else:

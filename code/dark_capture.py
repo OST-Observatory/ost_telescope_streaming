@@ -266,14 +266,68 @@ class DarkCapture:
                 
                 filepath = os.path.join(exp_dir, filename)
                 
-                # Capture frame
-                if hasattr(self.video_capture, 'capture_single_frame'):
+                # Capture frame with specific exposure time
+                if hasattr(self.video_capture, 'capture_single_frame_ascom') and self.video_capture.camera_type == 'ascom':
+                    # Get camera config for other parameters
+                    camera_config = self.config.get_camera_config()
+                    ascom_config = camera_config.get('ascom', {})
+                    gain = ascom_config.get('gain', None)
+                    binning = ascom_config.get('binning', 1)
+                    
+                    frame_status = self.video_capture.capture_single_frame_ascom(
+                        exposure_time, gain, binning
+                    )
+                elif hasattr(self.video_capture, 'capture_single_frame_alpaca') and self.video_capture.camera_type == 'alpaca':
+                    # Get camera config for other parameters
+                    camera_config = self.config.get_camera_config()
+                    alpaca_config = camera_config.get('alpaca', {})
+                    gain = alpaca_config.get('gain', None)
+                    binning = alpaca_config.get('binning', [1, 1])
+                    
+                    frame_status = self.video_capture.capture_single_frame_alpaca(
+                        exposure_time, gain, binning
+                    )
+                elif hasattr(self.video_capture, 'capture_single_frame'):
                     frame_status = self.video_capture.capture_single_frame()
-                    if frame_status.is_success:
+                else:
+                    self.logger.warning(f"Failed to capture dark {i+1}: No capture method available")
+                    continue
+                
+                if frame_status.is_success:
+                    # Extract frame data and details from Status object
+                    frame_data = frame_status.data
+                    frame_details = getattr(frame_status, 'details', {})
+                    
+                    # Handle nested Status objects
+                    if hasattr(frame_data, 'data'):
+                        frame_data = frame_data.data
+                        # Get details from nested status if available
+                        if hasattr(frame_status.data, 'details'):
+                            frame_details.update(frame_status.data.details)
+                    
+                    # Ensure we have the exposure time in frame details
+                    if 'exposure_time_s' not in frame_details:
+                        frame_details['exposure_time_s'] = exposure_time
+                    
+                    # Ensure we have gain and binning information
+                    if 'gain' not in frame_details and gain is not None:
+                        frame_details['gain'] = gain
+                    if 'binning' not in frame_details and binning is not None:
+                        frame_details['binning'] = binning
+                    
+                    # Create a Status object with both data and details for FITS saving
+                    from status import success_status
+                    frame_with_details = success_status("Frame captured", data=frame_data, details=frame_details)
+                    
+                    # Save the frame as FITS with proper details
+                    save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
+                    if save_status.is_success:
                         captured_files.append(filepath)
-                        self.logger.debug(f"Captured dark {i+1}/{self.num_darks}: {filename}")
+                        self.logger.debug(f"Captured dark {i+1}/{self.num_darks}: {filename} (exposure: {exposure_time:.3f}s)")
                     else:
-                        self.logger.warning(f"Failed to capture dark {i+1}: {frame_status.message}")
+                        self.logger.warning(f"Failed to save dark {i+1}: {save_status.message}")
+                else:
+                    self.logger.warning(f"Failed to capture dark {i+1}: {frame_status.message}")
                 
                 # Small delay between captures
                 time.sleep(0.1)

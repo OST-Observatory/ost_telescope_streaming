@@ -979,6 +979,28 @@ class VideoCapture:
                     header['XBINNING'] = self.camera.bin_x
                     header['YBINNING'] = self.camera.bin_y
             
+            # Additional fallback: try to get exposure time from config if still missing
+            if 'EXPTIME' not in header:
+                camera_config = self.config.get_camera_config()
+                if self.camera_type == 'ascom':
+                    ascom_config = camera_config.get('ascom', {})
+                    config_exposure = ascom_config.get('exposure_time')
+                    if config_exposure is not None:
+                        header['EXPTIME'] = config_exposure
+                        self.logger.debug(f"Using exposure time from ASCOM config: {config_exposure}s")
+                elif self.camera_type == 'alpaca':
+                    alpaca_config = camera_config.get('alpaca', {})
+                    config_exposure = alpaca_config.get('exposure_time')
+                    if config_exposure is not None:
+                        header['EXPTIME'] = config_exposure
+                        self.logger.debug(f"Using exposure time from Alpaca config: {config_exposure}s")
+            
+            # Log warning if exposure time is still missing
+            if 'EXPTIME' not in header:
+                self.logger.warning("Could not determine exposure time for FITS header")
+            else:
+                self.logger.debug(f"FITS header exposure time: {header['EXPTIME']}s")
+            
             # Temperature information
             if hasattr(self.camera, 'ccdtemperature'):
                 header['CCD-TEMP'] = self.camera.ccdtemperature
