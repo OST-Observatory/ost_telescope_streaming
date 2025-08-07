@@ -341,6 +341,10 @@ class DarkCapture:
                         exposure_time, gain, binning
                     )
                     self.logger.debug(f"Alpaca capture result: {type(frame_status)}, success={getattr(frame_status, 'is_success', 'N/A')}")
+                    if frame_status and hasattr(frame_status, 'data'):
+                        self.logger.debug(f"Alpaca capture data type: {type(frame_status.data)}")
+                        if frame_status.data is not None and hasattr(frame_status.data, 'shape'):
+                            self.logger.debug(f"Alpaca capture data shape: {frame_status.data.shape}")
                 elif hasattr(self.video_capture, 'capture_single_frame'):
                     self.logger.debug(f"Capturing generic frame: exposure={exposure_time:.3f}s")
                     frame_status = self.video_capture.capture_single_frame()
@@ -359,6 +363,9 @@ class DarkCapture:
                     frame_data = frame_status.data
                     frame_details = getattr(frame_status, 'details', {})
                     
+                    self.logger.debug(f"Frame status data type: {type(frame_data)}")
+                    self.logger.debug(f"Frame status details: {frame_details}")
+                    
                     # Check if frame_data is None
                     if frame_data is None:
                         self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None")
@@ -370,6 +377,11 @@ class DarkCapture:
                         # Get details from nested status if available
                         if hasattr(frame_status.data, 'details'):
                             frame_details.update(frame_status.data.details)
+                    
+                    # Final check for None after nested extraction
+                    if frame_data is None:
+                        self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None after extraction")
+                        continue
                     
                     # Ensure we have the exposure time in frame details
                     if 'exposure_time_s' not in frame_details:
@@ -383,10 +395,26 @@ class DarkCapture:
                     
                     # Create a Status object with both data and details for FITS saving
                     from status import success_status
+                    
+                    # Ensure frame_data is not None before creating status
+                    if frame_data is None:
+                        self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None before creating status")
+                        continue
+                    
                     frame_with_details = success_status("Frame captured", data=frame_data, details=frame_details)
+                    self.logger.debug(f"Created frame_with_details: {type(frame_with_details)}")
                     
                     # Save the frame as FITS with proper details
+                    self.logger.debug(f"Saving frame to: {filepath}")
+                    self.logger.debug(f"Frame data type: {type(frame_data)}")
+                    self.logger.debug(f"Frame data shape: {getattr(frame_data, 'shape', 'N/A')}")
+                    
                     save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
+                    
+                    if save_status is None:
+                        self.logger.warning(f"Failed to save dark {i+1}: save_status is None")
+                        continue
+                    
                     if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured dark {i+1}/{self.num_darks}: {filename} (exposure: {exposure_time:.3f}s)")
@@ -401,10 +429,19 @@ class DarkCapture:
                 else:
                     self.logger.warning(f"Failed to capture dark {i+1}: {frame_status.message}")
                 
-                # Small delay between captures
-                time.sleep(0.1)
+                                    # Small delay between captures
+                    time.sleep(0.1)
+                    
+                    # Debug: Print progress every 10 frames
+                    if (i + 1) % 10 == 0:
+                        self.logger.info(f"Dark capture progress: {i + 1}/{self.num_darks} frames processed")
             
             self.logger.info(f"Dark series for {exposure_time:.3f}s completed: {len(captured_files)}/{self.num_darks} frames")
+            
+            # Ensure captured_files is a list
+            if not isinstance(captured_files, list):
+                self.logger.warning(f"captured_files is not a list: {type(captured_files)}, converting to empty list")
+                captured_files = []
             
             return success_status(
                 f"Dark series for {exposure_time:.3f}s captured: {len(captured_files)} frames",
