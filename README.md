@@ -10,6 +10,7 @@ A comprehensive astronomical telescope streaming and overlay system with plate-s
 - **Information Panel**: Display camera/telescope parameters and field of view information
 - **Configurable Title**: Customizable header text for overlays
 - **Secondary FOV Overlay**: Display field of view of a second telescope (camera or eyepiece)
+- **Ellipse Overlays**: Realistic representation of galaxies and nebulae based on actual dimensions
 - **Image Combination**: Combine overlays with captured telescope images
 - **Mount Integration**: ASCOM mount support for coordinate tracking
 - **Camera Cooling**: Advanced cooling management with thermal shock prevention
@@ -148,6 +149,7 @@ plate_solve:
 - [Image Combination Guide](docs/image_combination_guide.md)
 - [Overlay Information Panel Guide](docs/overlay_info_panel_guide.md)
 - [Secondary FOV Overlay Guide](docs/secondary_fov_guide.md)
+- [Ellipse Overlay Guide](docs/ellipse_overlay_guide.md)
 
 ## Requirements
 

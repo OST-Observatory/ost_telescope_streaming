@@ -380,6 +380,163 @@ class OverlayGenerator:
         text_y = box_y + padding
         draw.text((text_x, text_y), title_text, fill=font_color, font=title_font)
     
+    def _draw_ellipse_for_object(self, draw, center_x: int, center_y: int, 
+                                dim_maj_arcmin: float, dim_min_arcmin: float, 
+                                pa_deg: float, img_size: Tuple[int, int], 
+                                fov_width_deg: float, fov_height_deg: float,
+                                position_angle_deg: float = 0.0, is_flipped: bool = False,
+                                color: Tuple[int, int, int, int] = None, 
+                                line_width: int = 2):
+        """Draw an ellipse for a deep-sky object based on its dimensions.
+        
+        Args:
+            draw: PIL ImageDraw object
+            center_x, center_y: Center coordinates in pixels
+            dim_maj_arcmin: Major axis in arcminutes
+            dim_min_arcmin: Minor axis in arcminutes
+            pa_deg: Position angle in degrees (from SIMBAD)
+            img_size: Image size in pixels
+            fov_width_deg, fov_height_deg: Field of view in degrees
+            position_angle_deg: Image rotation angle
+            is_flipped: Whether image is flipped
+            color: Ellipse color (RGBA)
+            line_width: Line width
+        """
+        if color is None:
+            color = tuple(self.object_color)
+        
+        # Calculate pixel scale
+        scale_x = (fov_width_deg * 60) / img_size[0]   # arcmin per pixel in X
+        scale_y = (fov_height_deg * 60) / img_size[1]  # arcmin per pixel in Y
+        
+        # Convert arcminutes to pixels
+        major_axis_px = dim_maj_arcmin / scale_x
+        minor_axis_px = dim_min_arcmin / scale_y
+        
+        # Skip if ellipse is too small to be visible
+        if major_axis_px < 3 or minor_axis_px < 3:
+            return False
+        
+        # Calculate total rotation (object PA + image rotation)
+        total_rotation_deg = pa_deg + position_angle_deg
+        
+        # Apply flip correction if needed
+        if is_flipped:
+            total_rotation_deg = -total_rotation_deg
+        
+        # Convert to radians
+        rotation_rad = np.radians(total_rotation_deg)
+        
+        # Calculate bounding box for the ellipse
+        # We need to find the extreme points of the rotated ellipse
+        cos_rot = np.cos(rotation_rad)
+        sin_rot = np.sin(rotation_rad)
+        
+        # Calculate the maximum extent in x and y directions
+        max_x_extent = np.sqrt((major_axis_px * cos_rot)**2 + (minor_axis_px * sin_rot)**2)
+        max_y_extent = np.sqrt((major_axis_px * sin_rot)**2 + (minor_axis_px * cos_rot)**2)
+        
+        # Calculate bounding box
+        left = center_x - max_x_extent
+        top = center_y - max_y_extent
+        right = center_x + max_x_extent
+        bottom = center_y + max_y_extent
+        
+        # Check if ellipse is within image bounds
+        if (left > img_size[0] or right < 0 or top > img_size[1] or bottom < 0):
+            return False
+        
+        # Clip to image bounds
+        left = max(0, min(left, img_size[0]))
+        top = max(0, min(top, img_size[1]))
+        right = max(0, min(right, img_size[0]))
+        bottom = max(0, min(bottom, img_size[1]))
+        
+        # For PIL, we need to draw the ellipse as a polygon approximation
+        # since PIL doesn't support rotated ellipses directly
+        num_points = 32
+        points = []
+        
+        for i in range(num_points):
+            angle = 2 * np.pi * i / num_points
+            
+            # Parametric equation of ellipse
+            x = major_axis_px * np.cos(angle)
+            y = minor_axis_px * np.sin(angle)
+            
+            # Apply rotation
+            x_rot = x * cos_rot - y * sin_rot
+            y_rot = x * sin_rot + y * cos_rot
+            
+            # Translate to center
+            px = center_x + x_rot
+            py = center_y + y_rot
+            
+            # Clip to image bounds
+            px = max(0, min(px, img_size[0] - 1))
+            py = max(0, min(py, img_size[1] - 1))
+            
+            points.append((px, py))
+        
+        # Draw the ellipse as a polygon
+        if len(points) >= 3:
+            draw.polygon(points, outline=color, width=line_width)
+            return True
+        
+        return False
+    
+    def _should_draw_ellipse(self, object_type: str) -> bool:
+        """Determine if an object should be drawn as an ellipse based on its type.
+        
+        Args:
+            object_type: SIMBAD object type
+            
+        Returns:
+            bool: True if object should be drawn as ellipse
+        """
+        # Object types that typically have measurable dimensions
+        ellipse_types = [
+            'G',      # Galaxy
+            'GlC',    # Globular Cluster
+            'OC',     # Open Cluster
+            'Neb',    # Nebula
+            'PN',     # Planetary Nebula
+            'SNR',    # Supernova Remnant
+            'HII',    # HII Region
+            'Cl*',    # Cluster
+            'Cld',    # Cloud
+            'ISM',    # Interstellar Medium
+            'MoC',    # Molecular Cloud
+            'RNe',    # Reflection Nebula
+            'DNe',    # Dark Nebula
+            'EmO',    # Emission Object
+            'Abs',    # Absorption
+            'Rad',    # Radio Source
+            'X',      # X-ray Source
+            'gLSB',   # Low Surface Brightness Galaxy
+            'AGN',    # Active Galactic Nucleus
+            'QSO',    # Quasar
+            'BLLac',  # BL Lacertae Object
+            'Sy1',    # Seyfert 1 Galaxy
+            'Sy2',    # Seyfert 2 Galaxy
+            'LINER',  # LINER
+            'H2G',    # HII Galaxy
+            'SBG',    # Starburst Galaxy
+            'LSB',    # Low Surface Brightness Galaxy
+            'dSph',   # Dwarf Spheroidal Galaxy
+            'dE',     # Dwarf Elliptical Galaxy
+            'dI',     # Dwarf Irregular Galaxy
+            'dS0',    # Dwarf S0 Galaxy
+            'dS',     # Dwarf Spiral Galaxy
+            'dSB',    # Dwarf Barred Spiral Galaxy
+            'dE,N',   # Dwarf Elliptical Galaxy with Nucleus
+            'dS0,N',  # Dwarf S0 Galaxy with Nucleus
+            'dS,N',   # Dwarf Spiral Galaxy with Nucleus
+            'dSB,N',  # Dwarf Barred Spiral Galaxy with Nucleus
+        ]
+        
+        return object_type in ellipse_types
+    
     def _calculate_secondary_fov(self) -> Tuple[float, float]:
         """Calculate secondary telescope field of view in degrees."""
         if not self.secondary_fov_enabled:
@@ -684,7 +841,7 @@ class OverlayGenerator:
             custom_simbad = Simbad()
             custom_simbad.reset_votable_fields()
             # Use new field names to avoid deprecation warnings
-            custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
+            custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id', 'dimensions', 'pa')
 
             # Radius is half-diagonal of field of view
             radius = ((fov_w**2 + fov_h**2)**0.5) / 2
@@ -768,9 +925,64 @@ class OverlayGenerator:
 
                     # Check if object is within image bounds
                     if 0 <= x <= img_size[0] and 0 <= y <= img_size[1]:
-                        draw.ellipse((x - self.marker_size, y - self.marker_size,
-                                    x + self.marker_size, y + self.marker_size),
-                                   outline=self.object_color, width=2)
+                        # Check if we should draw an ellipse for this object type
+                        object_type = row.get('otype', '') if 'otype' in row.colnames else ''
+                        should_draw_ellipse = self._should_draw_ellipse(object_type)
+                        
+                        # Check if we have dimension data for ellipse
+                        has_dimensions = False
+                        dim_maj = None
+                        dim_min = None
+                        pa = None
+                        
+                        if should_draw_ellipse:
+                            # Try to get dimension data
+                            if 'dimensions' in row.colnames and row['dimensions'] is not None:
+                                dimensions_str = str(row['dimensions'])
+                                if dimensions_str != '--' and dimensions_str.strip():
+                                    # Parse dimensions string (format: "major_axis x minor_axis")
+                                    try:
+                                        if 'x' in dimensions_str:
+                                            parts = dimensions_str.split('x')
+                                            if len(parts) == 2:
+                                                dim_maj = float(parts[0].strip())
+                                                dim_min = float(parts[1].strip())
+                                                has_dimensions = True
+                                        else:
+                                            # Single dimension (circular object)
+                                            dim_maj = float(dimensions_str)
+                                            dim_min = dim_maj
+                                            has_dimensions = True
+                                    except (ValueError, TypeError):
+                                        has_dimensions = False
+                            
+                            # Get position angle if available
+                            if 'pa' in row.colnames and row['pa'] is not None:
+                                pa_str = str(row['pa'])
+                                if pa_str != '--' and pa_str.strip():
+                                    try:
+                                        pa = float(pa_str)
+                                    except (ValueError, TypeError):
+                                        pa = 0.0
+                            else:
+                                pa = 0.0
+                        
+                        # Draw ellipse if we have dimension data
+                        if should_draw_ellipse and has_dimensions and dim_maj is not None and dim_min is not None:
+                            ellipse_drawn = self._draw_ellipse_for_object(
+                                draw, x, y, dim_maj, dim_min, pa or 0.0,
+                                img_size, fov_w, fov_h, pa_deg, is_flipped
+                            )
+                            if not ellipse_drawn:
+                                # Fallback to marker if ellipse drawing failed
+                                draw.ellipse((x - self.marker_size, y - self.marker_size,
+                                            x + self.marker_size, y + self.marker_size),
+                                           outline=self.object_color, width=2)
+                        else:
+                            # Draw standard marker
+                            draw.ellipse((x - self.marker_size, y - self.marker_size,
+                                        x + self.marker_size, y + self.marker_size),
+                                       outline=self.object_color, width=2)
 
                         # Safe name handling - try different possible column names
                         name = None
