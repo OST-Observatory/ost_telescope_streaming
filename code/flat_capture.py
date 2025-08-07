@@ -133,7 +133,13 @@ class FlatCapture:
             if not self.video_capture:
                 return error_status("Video capture not initialized")
             
+            # Ensure current_exposure is set
+            if self.current_exposure is None:
+                self.logger.warning("Current exposure not set, using default")
+                self.current_exposure = 2.0  # Default 2 second exposure
+            
             self.logger.info(f"Starting flat capture: {self.num_flats} frames, target count rate: {self.target_count_rate:.1%}")
+            self.logger.info(f"Initial exposure time: {self.current_exposure:.3f}s")
             
             # Step 1: Adjust exposure time to achieve target count rate
             adjustment_status = self._adjust_exposure_for_target()
@@ -256,23 +262,44 @@ class FlatCapture:
                 return error_status(f"Failed to capture test frame: {frame_status.message}")
             
             # Get frame data - handle Status objects from camera
-            frame_data = frame_status.data
-            
-            # For calibration, we expect numpy arrays from the camera
-            if isinstance(frame_data, np.ndarray):
-                frame = frame_data
+            frame = None
+            if isinstance(frame_status.data, np.ndarray):
+                frame = frame_status.data
                 self.logger.debug(f"Using frame data directly: shape={frame.shape}, dtype={frame.dtype}")
-            elif hasattr(frame_data, 'data') and isinstance(frame_data.data, np.ndarray):
+            elif hasattr(frame_status.data, 'data') and isinstance(frame_status.data.data, np.ndarray):
                 # Handle nested Status objects
-                frame = frame_data.data
+                frame = frame_status.data.data
                 self.logger.debug(f"Extracted frame from Status object: shape={frame.shape}, dtype={frame.dtype}")
-            elif isinstance(frame_data, list):
+            elif hasattr(frame_status.data, 'data') and hasattr(frame_status.data.data, 'data') and isinstance(frame_status.data.data.data, np.ndarray):
+                # Handle double-nested Status objects
+                frame = frame_status.data.data.data
+                self.logger.debug(f"Extracted frame from double-nested Status object: shape={frame.shape}, dtype={frame.dtype}")
+            elif isinstance(frame_status.data, list):
                 # Convert list to numpy array (for some camera types)
-                frame = np.array(frame_data)
+                frame = np.array(frame_status.data)
                 self.logger.debug(f"Converted list to numpy array: shape={frame.shape}, dtype={frame.dtype}")
             else:
-                self.logger.error(f"Unexpected frame data type: {type(frame_data)}")
-                return error_status(f"Unexpected frame data type: {type(frame_data)}")
+                # Try to extract data from Status object recursively
+                current_data = frame_status.data
+                depth = 0
+                while hasattr(current_data, 'data') and depth < 5:  # Prevent infinite recursion
+                    current_data = current_data.data
+                    depth += 1
+                    self.logger.debug(f"Extracting data at depth {depth}: {type(current_data)}")
+                    
+                    if isinstance(current_data, np.ndarray):
+                        frame = current_data
+                        self.logger.debug(f"Found numpy array at depth {depth}: shape={frame.shape}, dtype={frame.dtype}")
+                        break
+                    elif isinstance(current_data, list):
+                        frame = np.array(current_data)
+                        self.logger.debug(f"Found list at depth {depth}, converted to numpy array: shape={frame.shape}, dtype={frame.dtype}")
+                        break
+                
+                if frame is None:
+                    self.logger.error(f"Unexpected frame data type: {type(frame_status.data)}")
+                    self.logger.error(f"Frame data content: {frame_status.data}")
+                    return error_status(f"Unexpected frame data type: {type(frame_status.data)}")
             
             # Analyze frame
             analysis = self._analyze_frame(frame)
@@ -417,8 +444,15 @@ class FlatCapture:
                     continue
                 
                 if frame_status.is_success:
+                    # Extract frame data from Status object
+                    frame_data = frame_status.data
+                    
+                    # Handle nested Status objects
+                    if hasattr(frame_data, 'data'):
+                        frame_data = frame_data.data
+                    
                     # Save the frame directly as FITS (no OpenCV conversion for calibration)
-                    save_status = self.video_capture._save_fits_unified(frame_status.data, filepath)
+                    save_status = self.video_capture._save_fits_unified(frame_data, filepath)
                     if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename}")
