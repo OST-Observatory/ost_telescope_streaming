@@ -225,9 +225,15 @@ class DarkCapture:
                 result = self._capture_dark_series(exposure_time)
                 
                 if result.is_success:
-                    all_results[exposure_time] = result.data
-                    total_captured += len(result.data)
-                    self.logger.info(f"✅ Captured {len(result.data)} darks for {exposure_time:.3f}s")
+                    # Ensure result.data is a list, handle None case
+                    captured_files = result.data if result.data is not None else []
+                    if not isinstance(captured_files, list):
+                        self.logger.warning(f"Unexpected data type for captured files: {type(captured_files)}")
+                        captured_files = []
+                    
+                    all_results[exposure_time] = captured_files
+                    total_captured += len(captured_files)
+                    self.logger.info(f"✅ Captured {len(captured_files)} darks for {exposure_time:.3f}s")
                 else:
                     self.logger.warning(f"⚠️ Failed to capture darks for {exposure_time:.3f}s: {result.message}")
                     all_results[exposure_time] = []
@@ -289,6 +295,10 @@ class DarkCapture:
             captured_files = []
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
+            # Initialize gain and binning variables
+            gain = None
+            binning = None
+            
             # Create exposure-specific subdirectory
             exp_dir = os.path.join(self.dark_output_dir, f"exp_{exposure_time:.3f}s")
             os.makedirs(exp_dir, exist_ok=True)
@@ -318,6 +328,7 @@ class DarkCapture:
                     frame_status = self.video_capture.capture_single_frame_ascom(
                         exposure_time, gain, binning
                     )
+                    self.logger.debug(f"ASCOM capture result: {type(frame_status)}, success={getattr(frame_status, 'is_success', 'N/A')}")
                 elif hasattr(self.video_capture, 'capture_single_frame_alpaca') and self.video_capture.camera_type == 'alpaca':
                     # Get camera config for other parameters
                     camera_config = self.config.get_camera_config()
@@ -329,17 +340,29 @@ class DarkCapture:
                     frame_status = self.video_capture.capture_single_frame_alpaca(
                         exposure_time, gain, binning
                     )
+                    self.logger.debug(f"Alpaca capture result: {type(frame_status)}, success={getattr(frame_status, 'is_success', 'N/A')}")
                 elif hasattr(self.video_capture, 'capture_single_frame'):
                     self.logger.debug(f"Capturing generic frame: exposure={exposure_time:.3f}s")
                     frame_status = self.video_capture.capture_single_frame()
+                    self.logger.debug(f"Generic capture result: {type(frame_status)}, success={getattr(frame_status, 'is_success', 'N/A')}")
                 else:
                     self.logger.warning(f"Failed to capture dark {i+1}: No capture method available")
+                    continue
+                
+                # Check if frame_status is None or invalid
+                if frame_status is None:
+                    self.logger.warning(f"Failed to capture dark {i+1}: frame_status is None")
                     continue
                 
                 if frame_status.is_success:
                     # Extract frame data and details from Status object
                     frame_data = frame_status.data
                     frame_details = getattr(frame_status, 'details', {})
+                    
+                    # Check if frame_data is None
+                    if frame_data is None:
+                        self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None")
+                        continue
                     
                     # Handle nested Status objects
                     if hasattr(frame_data, 'data'):
