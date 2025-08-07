@@ -18,7 +18,7 @@ camera:
   # Cooling settings for ASCOM cameras
   cooling:
     enable_cooling: true           # Enable camera cooling
-    target_temperature: -10.0      # Target temperature in Celsius
+    target_temperature: -5.0      # Target temperature in Celsius
     wait_for_cooling: true         # Wait for target temperature before capture
     cooling_timeout: 300           # Cooling timeout in seconds
     stabilization_tolerance: 1.0   # Temperature tolerance in Celsius

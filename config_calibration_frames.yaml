@@ -124,7 +124,7 @@ camera:
   # Cooling settings
   cooling:
     enable_cooling: true
-    target_temperature: -10.0  # Target temperature in °C
+    target_temperature: -5.0  # Target temperature in °C
     wait_for_cooling: true     # Wait for temperature stabilization
     cooling_timeout: 1200       # Timeout for cooling stabilization in seconds
     stabilization_tolerance: 1.0  # Temperature tolerance in °C

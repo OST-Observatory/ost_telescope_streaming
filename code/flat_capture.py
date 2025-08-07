@@ -168,13 +168,20 @@ class FlatCapture:
             return error_status(f"Flat capture failed: {e}")
     
     def _adjust_exposure_for_target(self) -> Status:
-        """Adjust exposure time to achieve target count rate.
+        """Intelligent exposure adjustment to achieve target count rate.
+        
+        Uses adaptive step sizes and oscillation prevention for better convergence.
         
         Returns:
             Status: Success or error status
         """
         try:
-            self.logger.info("Adjusting exposure time for target count rate...")
+            self.logger.info("Starting intelligent exposure adjustment...")
+            
+            # Track previous values to detect oscillations
+            previous_exposures = []
+            previous_count_rates = []
+            oscillation_detected = False
             
             for attempt in range(self.max_adjustment_attempts):
                 # Capture a test frame
@@ -185,42 +192,149 @@ class FlatCapture:
                 # Analyze the frame
                 analysis = test_status.data
                 current_count_rate = analysis['mean_count_rate']
-                target_count = self.target_count_rate * analysis['max_possible_count']
+                
+                # Store history for oscillation detection
+                previous_exposures.append(self.current_exposure)
+                previous_count_rates.append(current_count_rate)
+                
+                # Keep only last 4 values for oscillation detection
+                if len(previous_exposures) > 4:
+                    previous_exposures.pop(0)
+                    previous_count_rates.pop(0)
                 
                 self.logger.info(f"Attempt {attempt + 1}: Exposure={self.current_exposure:.3f}s, "
                                f"Count rate={current_count_rate:.1%}, Target={self.target_count_rate:.1%}")
                 
                 # Check if we're within tolerance
                 if self._is_within_tolerance(current_count_rate, self.target_count_rate):
-                    self.logger.info(f"Target count rate achieved: {current_count_rate:.1%}")
+                    self.logger.info(f"✅ Target count rate achieved: {current_count_rate:.1%}")
                     return success_status("Exposure time adjusted successfully")
                 
-                # Adjust exposure time
+                # Calculate distance from target (as percentage)
+                distance_from_target = abs(current_count_rate - self.target_count_rate)
+                relative_distance = distance_from_target / self.target_count_rate
+                
+                # Detect oscillations (if we have enough history)
+                if len(previous_count_rates) >= 4:
+                    oscillation_detected = self._detect_oscillation(previous_count_rates, previous_exposures)
+                    if oscillation_detected:
+                        self.logger.warning("🔄 Oscillation detected! Using conservative adjustment...")
+                
+                # Calculate adaptive step size
+                step_factor = self._calculate_adaptive_step(relative_distance, oscillation_detected, attempt)
+                
+                # Determine adjustment direction and magnitude
                 if current_count_rate < self.target_count_rate:
                     # Too dark, increase exposure
-                    new_exposure = self.current_exposure * self.exposure_step_factor
-                    if new_exposure > self.max_exposure:
-                        self.logger.warning(f"Exposure would exceed maximum ({self.max_exposure}s)")
-                        break
+                    new_exposure = self.current_exposure * step_factor
+                    direction = "increase"
                 else:
                     # Too bright, decrease exposure
-                    new_exposure = self.current_exposure / self.exposure_step_factor
-                    if new_exposure < self.min_exposure:
-                        self.logger.warning(f"Exposure would be below minimum ({self.min_exposure}s)")
-                        break
+                    new_exposure = self.current_exposure / step_factor
+                    direction = "decrease"
+                
+                # Apply bounds checking
+                if new_exposure > self.max_exposure:
+                    self.logger.warning(f"Exposure would exceed maximum ({self.max_exposure}s), using maximum")
+                    new_exposure = self.max_exposure
+                elif new_exposure < self.min_exposure:
+                    self.logger.warning(f"Exposure would be below minimum ({self.min_exposure}s), using minimum")
+                    new_exposure = self.min_exposure
+                
+                # Log the adjustment
+                change_percent = ((new_exposure - self.current_exposure) / self.current_exposure) * 100
+                self.logger.info(f"Adjusting exposure: {self.current_exposure:.3f}s → {new_exposure:.3f}s "
+                               f"({change_percent:+.1f}%, {direction}, step_factor={step_factor:.2f})")
                 
                 self.current_exposure = new_exposure
                 
-                # Note: Exposure time will be set in the next capture call
-                # No need to set it separately as it's passed to capture methods
-                self.logger.debug(f"Updated exposure time to {self.current_exposure:.6f}s")
-                time.sleep(0.1)  # Allow camera to adjust
+                # Allow camera to adjust
+                time.sleep(0.2)  # Slightly longer delay for better stability
             
             return warning_status(f"Could not achieve target count rate after {self.max_adjustment_attempts} attempts")
             
         except Exception as e:
             self.logger.error(f"Error adjusting exposure: {e}")
             return error_status(f"Exposure adjustment failed: {e}")
+    
+    def _calculate_adaptive_step(self, relative_distance: float, oscillation_detected: bool, attempt: int) -> float:
+        """Calculate adaptive step size based on distance from target and oscillation state.
+        
+        Args:
+            relative_distance: Distance from target as fraction (0.0 = at target, 1.0 = 100% off)
+            oscillation_detected: Whether oscillation was detected
+            attempt: Current attempt number
+            
+        Returns:
+            float: Step factor to apply to exposure time
+        """
+        # Base step factors for different distance ranges
+        if relative_distance > 0.5:  # Very far from target (>50% off)
+            base_step = 2.0
+        elif relative_distance > 0.2:  # Far from target (20-50% off)
+            base_step = 1.5
+        elif relative_distance > 0.1:  # Moderate distance (10-20% off)
+            base_step = 1.3
+        elif relative_distance > 0.05:  # Close to target (5-10% off)
+            base_step = 1.15
+        else:  # Very close to target (<5% off)
+            base_step = 1.08
+        
+        # Reduce step size if oscillation detected
+        if oscillation_detected:
+            base_step = min(base_step, 1.2)  # Conservative step when oscillating
+        
+        # Gradually reduce step size with attempts (convergence)
+        attempt_factor = max(0.8, 1.0 - (attempt * 0.05))  # Reduce by 5% per attempt, minimum 0.8
+        
+        final_step = base_step * attempt_factor
+        
+        # Ensure reasonable bounds
+        final_step = max(1.05, min(2.5, final_step))
+        
+        return final_step
+    
+    def _detect_oscillation(self, count_rates: list, exposures: list) -> bool:
+        """Detect oscillation in count rates and exposures.
+        
+        Args:
+            count_rates: List of recent count rates
+            exposures: List of recent exposure times
+            
+        Returns:
+            bool: True if oscillation is detected
+        """
+        if len(count_rates) < 4 or len(exposures) < 4:
+            return False
+        
+        # Check for alternating pattern in count rates (crossing target)
+        target = self.target_count_rate
+        crossings = 0
+        for i in range(1, len(count_rates)):
+            if (count_rates[i-1] < target and count_rates[i] > target) or \
+               (count_rates[i-1] > target and count_rates[i] < target):
+                crossings += 1
+        
+        # Check for alternating exposure changes (increasing/decreasing pattern)
+        exposure_changes = []
+        for i in range(1, len(exposures)):
+            change = exposures[i] - exposures[i-1]
+            exposure_changes.append(change > 0)  # True if increasing
+        
+        alternating_exposures = 0
+        for i in range(1, len(exposure_changes)):
+            if exposure_changes[i] != exposure_changes[i-1]:
+                alternating_exposures += 1
+        
+        # Oscillation detected if:
+        # 1. Multiple crossings of target value, OR
+        # 2. Alternating exposure changes with small improvements
+        oscillation = (crossings >= 2) or (alternating_exposures >= 2 and len(count_rates) >= 4)
+        
+        if oscillation:
+            self.logger.debug(f"Oscillation indicators: crossings={crossings}, alternating_exposures={alternating_exposures}")
+        
+        return oscillation
     
     def _capture_test_frame(self) -> Status:
         """Capture a single test frame for exposure adjustment.
