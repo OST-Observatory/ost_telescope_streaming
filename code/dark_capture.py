@@ -348,8 +348,13 @@ class DarkCapture:
                                 self.logger.debug(f"Alpaca capture data shape: {frame_status.data.shape}")
                             elif hasattr(frame_status.data, 'data'):
                                 self.logger.debug(f"Alpaca capture data has nested data: {type(frame_status.data.data)}")
-                                if frame_status.data.data is not None and hasattr(frame_status.data.data, 'shape'):
-                                    self.logger.debug(f"Alpaca capture nested data shape: {frame_status.data.data.shape}")
+                                if frame_status.data.data is not None:
+                                    if hasattr(frame_status.data.data, 'shape'):
+                                        self.logger.debug(f"Alpaca capture nested data shape: {frame_status.data.data.shape}")
+                                    elif isinstance(frame_status.data.data, list):
+                                        self.logger.debug(f"Alpaca capture nested data is list with length: {len(frame_status.data.data)}")
+                                        if len(frame_status.data.data) > 0:
+                                            self.logger.debug(f"First element type: {type(frame_status.data.data[0])}")
                         else:
                             self.logger.debug("Alpaca capture data is None")
                 elif hasattr(self.video_capture, 'capture_single_frame'):
@@ -397,6 +402,16 @@ class DarkCapture:
                             self.logger.error(f"Too many nested Status objects (level {extraction_level}), stopping extraction")
                             break
                     
+                    # Convert list to numpy array if needed (like in flat_capture.py)
+                    if isinstance(frame_data, list):
+                        self.logger.debug(f"Converting list to numpy array: list length={len(frame_data)}")
+                        try:
+                            frame_data = np.array(frame_data)
+                            self.logger.debug(f"Successfully converted list to numpy array: shape={frame_data.shape}, dtype={frame_data.dtype}")
+                        except Exception as e:
+                            self.logger.error(f"Failed to convert list to numpy array: {e}")
+                            continue
+                    
                     # Final check for None after nested extraction
                     if frame_data is None:
                         self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None after extraction")
@@ -431,18 +446,30 @@ class DarkCapture:
                     # Create a Status object with both data and details for FITS saving
                     from status import success_status
                     
-                    # Ensure frame_data is not None before creating status
+                    # Ensure frame_data is not None and is a numpy array before creating status
                     if frame_data is None:
                         self.logger.warning(f"Failed to capture dark {i+1}: frame_data is None before creating status")
                         continue
                     
+                    if not isinstance(frame_data, np.ndarray):
+                        self.logger.error(f"Failed to capture dark {i+1}: frame_data is not a numpy array before creating status: {type(frame_data)}")
+                        continue
+                    
                     frame_with_details = success_status("Frame captured", data=frame_data, details=frame_details)
                     self.logger.debug(f"Created frame_with_details: {type(frame_with_details)}")
+                    self.logger.debug(f"frame_with_details.data type: {type(frame_with_details.data)}")
+                    self.logger.debug(f"frame_with_details.data shape: {getattr(frame_with_details.data, 'shape', 'N/A')}")
                     
                     # Save the frame as FITS with proper details
                     self.logger.debug(f"Saving frame to: {filepath}")
                     self.logger.debug(f"Frame data type: {type(frame_data)}")
                     self.logger.debug(f"Frame data shape: {getattr(frame_data, 'shape', 'N/A')}")
+                    self.logger.debug(f"Frame data dtype: {getattr(frame_data, 'dtype', 'N/A')}")
+                    
+                    # Ensure frame_data is a numpy array before saving
+                    if not isinstance(frame_data, np.ndarray):
+                        self.logger.error(f"Frame data is not a numpy array before saving: {type(frame_data)}")
+                        continue
                     
                     save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
                     
