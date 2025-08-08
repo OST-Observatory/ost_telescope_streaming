@@ -295,8 +295,8 @@ def main():
         logger.info("\nReceived interrupt signal, stopping calibration workflow...")
         
         try:
-            # Start warmup if cooling manager is available
-            if global_cooling_manager and not args.skip_warmup:
+            # Start warmup if cooling manager is available (but never for masters-only)
+            if global_cooling_manager and not args.skip_warmup and not args.masters_only:
                 logger.info("Starting warmup phase...")
                 # If a status monitor is running, stop it to prevent extra threads/logging
                 try:
@@ -349,8 +349,8 @@ def main():
         camera = None
         cooling_status = None
         
-        # Initialize cooling unless skipped
-        if not args.skip_cooling:
+        # Initialize cooling unless skipped or not needed (masters-only doesn't need camera/cooling)
+        if not args.skip_cooling and not args.masters_only:
             camera, cooling_status = initialize_cooling(config, logger)
             global_camera = camera  # Set global variable for signal handler
             
@@ -395,8 +395,8 @@ def main():
             else:
                 status = warning_status("Calibration workflow completed with some issues")
         
-        # Start warmup unless skipped
-        if not args.skip_warmup and camera:
+        # Start warmup unless skipped; never for masters-only
+        if not args.skip_warmup and camera and not args.masters_only:
             warmup_status = start_warmup(camera, config, logger)
             if not warmup_status.is_success:
                 logger.warning(f"Warmup failed: {warmup_status.message}")
