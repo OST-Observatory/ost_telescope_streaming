@@ -397,8 +397,8 @@ class CalibrationApplier:
                 offset = frame_info.get('offset')
                 readout_mode = frame_info.get('readout_mode')
             
-            self.logger.debug(f"Calibrating frame with exp={exposure_time:.3f}s, "
-                            f"gain={gain}, offset={offset}, readout={readout_mode}")
+            self.logger.debug(f"Calibrating frame with exp={exposure_time}, gain={gain}, offset={offset}, readout={readout_mode}")
+            self.logger.debug(f"Incoming frame_data type: {type(frame_data)}")
             
             # Unwrap Status objects or nested data
             raw = frame_data
@@ -428,6 +428,14 @@ class CalibrationApplier:
                     data=raw if isinstance(raw, np.ndarray) else None,
                     details={'calibration_applied': False, 'reason': 'invalid_frame_dtype'}
                 )
+            try:
+                self.logger.debug(
+                    f"Frame array ok: shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}, "
+                    f"min={float(np.nanmin(calibrated_frame)) if calibrated_frame.size else 'n/a'}, "
+                    f"max={float(np.nanmax(calibrated_frame)) if calibrated_frame.size else 'n/a'}"
+                )
+            except Exception:
+                pass
             calibration_details = {
                 'original_exposure_time': exposure_time,
                 'original_gain': gain,
@@ -454,6 +462,10 @@ class CalibrationApplier:
                         self.logger.warning(f"Could not convert master dark to float32 array: {conv_err}")
                         dark_arr = None
                     if dark_arr is not None:
+                        self.logger.debug(
+                            f"Master dark selected: file={master_dark.get('file')}, exp={master_dark.get('exposure_time')}, "
+                            f"shape={getattr(dark_arr, 'shape', None)}, dtype={getattr(dark_arr, 'dtype', None)}"
+                        )
                         if dark_arr.shape != calibrated_frame.shape:
                             self.logger.warning(
                                 f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}; skipping dark subtraction"
@@ -481,9 +493,27 @@ class CalibrationApplier:
             master_flat = self._find_best_master_flat(gain, offset, readout_mode)
             if master_flat:
                 # Avoid division by zero
-                flat_data = master_flat['data'].astype(np.float32)
-                flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
-                calibrated_frame = calibrated_frame / flat_data_safe
+                flat_data = master_flat['data']
+                try:
+                    flat_data = np.asarray(flat_data, dtype=np.float32)
+                except Exception as conv_err:
+                    self.logger.warning(f"Could not convert master flat to float32 array: {conv_err}")
+                    flat_data = None
+                if flat_data is None:
+                    self.logger.warning(f"Selected master flat has no data: {master_flat.get('file')}")
+                    flat_data_safe = None
+                else:
+                    self.logger.debug(
+                        f"Master flat selected: file={master_flat.get('file')}, shape={flat_data.shape}, dtype={flat_data.dtype}"
+                    )
+                    flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
+                if flat_data_safe is not None:
+                    if flat_data_safe.shape != calibrated_frame.shape:
+                        self.logger.warning(
+                            f"Master flat shape {flat_data_safe.shape} != frame shape {calibrated_frame.shape}; skipping flat correction"
+                        )
+                    else:
+                        calibrated_frame = calibrated_frame / flat_data_safe
                 calibration_details['flat_correction_applied'] = True
                 calibration_details['master_flat_used'] = master_flat['file']
                 calibration_details['master_flat_settings'] = {
