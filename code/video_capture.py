@@ -793,44 +793,55 @@ class VideoCapture:
                 self.logger.error(f"Astropy not available for FITS saving: {e}")
                 return error_status(f"Astropy not available for FITS saving: {e}")
             
-            # Get original data - handle Status objects properly
+            # Get original data - handle Status objects and merge details robustly
             image_data = None
             frame_details = {}
-            
+            merged_details = {}
+
+            # Merge top-level details if present
+            if hasattr(frame, 'details') and isinstance(getattr(frame, 'details', None), dict):
+                merged_details.update(frame.details)
+
             if hasattr(frame, 'data') and frame.data is not None:
                 # Frame is a status object with data
                 if hasattr(frame.data, 'data') and frame.data.data is not None:
                     # Nested Status object - extract the actual data
                     image_data = frame.data.data
-                    frame_details = getattr(frame.data, 'details', {})
+                    nested_details = getattr(frame.data, 'details', {})
+                    if isinstance(nested_details, dict):
+                        merged_details.update(nested_details)
                     self.logger.debug("Extracted data from nested status object")
                 elif hasattr(frame.data, 'is_success') and frame.data.is_success and hasattr(frame.data, 'data'):
                     # Nested success status object
                     image_data = frame.data.data
-                    frame_details = getattr(frame.data, 'details', {})
+                    nested_details = getattr(frame.data, 'details', {})
+                    if isinstance(nested_details, dict):
+                        merged_details.update(nested_details)
                     self.logger.debug("Extracted data from nested success status object")
                 else:
                     # Direct data in status object
                     image_data = frame.data
-                    frame_details = getattr(frame, 'details', {})
                     self.logger.debug("Extracted data from status object")
             elif hasattr(frame, 'is_success') and frame.is_success and hasattr(frame, 'data'):
                 # Frame is a success status object
                 if hasattr(frame.data, 'data') and frame.data.data is not None:
                     # Nested Status object - extract the actual data
                     image_data = frame.data.data
-                    frame_details = getattr(frame.data, 'details', {})
+                    nested_details = getattr(frame.data, 'details', {})
+                    if isinstance(nested_details, dict):
+                        merged_details.update(nested_details)
                     self.logger.debug("Extracted data from nested status object in success frame")
                 else:
                     # Direct data in success status object
                     image_data = frame.data
-                    frame_details = getattr(frame, 'details', {})
                     self.logger.debug("Extracted data from success status object")
             else:
                 # Frame is direct data
                 image_data = frame
-                frame_details = {}
+                merged_details = {}
                 self.logger.debug("Using direct frame data")
+
+            frame_details = merged_details
             
             # Validate that we have actual image data
             if image_data is None:
@@ -944,21 +955,32 @@ class VideoCapture:
             else:
                 header['COLORTYP'] = 'MONO'
             
-            # Exposure information - use actual values from frame details
+            # Exposure information - use actual values from frame details first
             actual_exposure_time = None
             if frame_details is not None:
                 if isinstance(frame_details, dict):
-                    # Check common keys for exposure time
-                    for key in ['exposure_time_s', 'exposure_time', 'EXPTIME', 'ExposureTime', 'exptime']:
+                    # Check common keys for exposure time (prefer seconds field)
+                    for key in [
+                        'exposure_time_s', 'exposure_time', 'EXPTIME', 'ExposureTime',
+                        'exptime', 'Exposure', 'exp_time', 'ExpTime', 'EXP'
+                    ]:
                         if key in frame_details and frame_details.get(key) is not None:
                             actual_exposure_time = frame_details.get(key)
                             break
                 else:
                     self.logger.debug(f"frame_details is not a dict: {type(frame_details)}")
-                
+
                 if actual_exposure_time is not None:
-                    header['EXPTIME'] = float(actual_exposure_time)
-                    self.logger.debug(f"Set EXPTIME from frame_details: {actual_exposure_time}s")
+                    try:
+                        header['EXPTIME'] = float(actual_exposure_time)
+                        self.logger.debug(f"Set EXPTIME from frame_details: {actual_exposure_time}s")
+                    except Exception:
+                        self.logger.warning(
+                            f"Could not convert exposure value to float: {actual_exposure_time}. Falling back to camera attribute if available"
+                        )
+                        if hasattr(self.camera, 'exposure_time'):
+                            header['EXPTIME'] = self.camera.exposure_time
+                            self.logger.debug(f"Set EXPTIME from camera attribute: {self.camera.exposure_time}s")
                 elif hasattr(self.camera, 'exposure_time'):
                     header['EXPTIME'] = self.camera.exposure_time
                     self.logger.debug(f"Set EXPTIME from camera attribute: {self.camera.exposure_time}s")
