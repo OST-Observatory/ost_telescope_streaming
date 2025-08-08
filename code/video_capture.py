@@ -941,12 +941,38 @@ class VideoCapture:
             if hasattr(self.camera, 'name'):
                 header['CAMNAME'] = self.camera.name
             
-            # Sensor information
-            if hasattr(self, 'sensor_width') and hasattr(self, 'sensor_height'):
-                header['XPIXSZ'] = self.pixel_size  # Pixel size in microns
-                header['YPIXSZ'] = self.pixel_size
+            # Sensor and optics information
+            try:
+                camera_cfg = self.config.get_camera_config()
+                telescope_cfg = self.config.get_telescope_config()
+                # Pixel size in microns
+                pixel_size_um = camera_cfg.get('pixel_size')
+                if pixel_size_um is not None:
+                    header['XPIXSZ'] = float(pixel_size_um)
+                    header['YPIXSZ'] = float(pixel_size_um)
+                # Sensor size in mm (optional, non-standard keys)
+                sensor_w_mm = camera_cfg.get('sensor_width')
+                sensor_h_mm = camera_cfg.get('sensor_height')
+                if sensor_w_mm is not None:
+                    header['SENSWID'] = float(sensor_w_mm)
+                if sensor_h_mm is not None:
+                    header['SENSHGT'] = float(sensor_h_mm)
+                # Focal length (mm)
+                focal_len = telescope_cfg.get('focal_length') if telescope_cfg else None
+                if focal_len is not None:
+                    header['FOCALLEN'] = float(focal_len)
+                # Pixel scale (arcsec/pixel)
+                try:
+                    pixscale = self.get_sampling_arcsec_per_pixel()
+                    if pixscale is not None:
+                        header['PIXSCALE'] = float(pixscale)
+                except Exception:
+                    pass
+                # Bayer offsets (keep defaults)
                 header['XBAYROFF'] = 0
                 header['YBAYROFF'] = 0
+            except Exception:
+                pass
             
             # Color camera information
             if is_color_camera and bayer_pattern:
@@ -992,7 +1018,24 @@ class VideoCapture:
                     header['GAIN'] = actual_gain
                 elif hasattr(self.camera, 'gain'):
                     header['GAIN'] = self.camera.gain
+                # Offset information
+                actual_offset = None
+                if isinstance(frame_details, dict):
+                    actual_offset = frame_details.get('offset')
+                if actual_offset is not None:
+                    header['OFFSET'] = actual_offset
+                elif hasattr(self.camera, 'offset'):
+                    header['OFFSET'] = getattr(self.camera, 'offset')
                 
+                # Readout mode information
+                actual_readout = None
+                if isinstance(frame_details, dict):
+                    actual_readout = frame_details.get('readout_mode')
+                if actual_readout is not None:
+                    header['READOUT'] = actual_readout
+                elif hasattr(self.camera, 'readout_mode'):
+                    header['READOUT'] = getattr(self.camera, 'readout_mode')
+
                 actual_binning = None
                 if isinstance(frame_details, dict):
                     actual_binning = frame_details.get('binning')
@@ -1012,6 +1055,10 @@ class VideoCapture:
                     header['EXPTIME'] = self.camera.exposure_time
                 if hasattr(self.camera, 'gain'):
                     header['GAIN'] = self.camera.gain
+                if hasattr(self.camera, 'offset'):
+                    header['OFFSET'] = getattr(self.camera, 'offset')
+                if hasattr(self.camera, 'readout_mode'):
+                    header['READOUT'] = getattr(self.camera, 'readout_mode')
                 if hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
                     header['XBINNING'] = self.camera.bin_x
                     header['YBINNING'] = self.camera.bin_y
@@ -1031,6 +1078,21 @@ class VideoCapture:
                     if config_exposure is not None:
                         header['EXPTIME'] = config_exposure
                         self.logger.debug(f"Using exposure time from Alpaca config: {config_exposure}s")
+
+            # Additional fallbacks for OFFSET/READOUT from config
+            camera_config = self.config.get_camera_config()
+            if 'OFFSET' not in header:
+                for sub in ('ascom', 'alpaca'):
+                    cfg = camera_config.get(sub, {})
+                    if 'offset' in cfg and cfg.get('offset') is not None:
+                        header['OFFSET'] = cfg.get('offset')
+                        break
+            if 'READOUT' not in header:
+                for sub in ('ascom', 'alpaca'):
+                    cfg = camera_config.get(sub, {})
+                    if 'readout_mode' in cfg and cfg.get('readout_mode') is not None:
+                        header['READOUT'] = cfg.get('readout_mode')
+                        break
             
             # Log warning if exposure time is still missing
             if 'EXPTIME' not in header:
@@ -1038,9 +1100,24 @@ class VideoCapture:
             else:
                 self.logger.debug(f"FITS header exposure time: {header['EXPTIME']}s")
             
-            # Temperature information
-            if hasattr(self.camera, 'ccdtemperature'):
-                header['CCD-TEMP'] = self.camera.ccdtemperature
+            # Temperature and cooling information
+            try:
+                if hasattr(self.camera, 'ccdtemperature'):
+                    header['CCD-TEMP'] = float(self.camera.ccdtemperature)
+                # Target set temperature (if available)
+                if hasattr(self.camera, 'set_ccd_temperature'):
+                    target = getattr(self.camera, 'set_ccd_temperature')
+                    if target is not None:
+                        header['CCD-TSET'] = float(target)
+                # Cooler power and state
+                if hasattr(self.camera, 'cooler_power'):
+                    cpwr = getattr(self.camera, 'cooler_power')
+                    if cpwr is not None:
+                        header['COOLPOW'] = float(cpwr)
+                if hasattr(self.camera, 'cooler_on'):
+                    header['COOLERON'] = bool(getattr(self.camera, 'cooler_on'))
+            except Exception:
+                pass
             
             # Timestamp
             header['DATE-OBS'] = Time.now().isot
