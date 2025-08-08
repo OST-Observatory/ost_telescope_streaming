@@ -428,6 +428,23 @@ class CalibrationApplier:
                     data=raw if isinstance(raw, np.ndarray) else None,
                     details={'calibration_applied': False, 'reason': 'invalid_frame_dtype'}
                 )
+            # Standardize orientation to long-side horizontal BEFORE calibration
+            try:
+                oriented = False
+                if calibrated_frame.ndim == 2:
+                    h, w = calibrated_frame.shape
+                    if h > w:
+                        calibrated_frame = calibrated_frame.T
+                        oriented = True
+                elif calibrated_frame.ndim == 3:
+                    h, w = calibrated_frame.shape[:2]
+                    if h > w:
+                        calibrated_frame = np.transpose(calibrated_frame, (1, 0, 2))
+                        oriented = True
+                if oriented:
+                    self.logger.debug("Standardized frame orientation to long-side horizontal before calibration")
+            except Exception as e_orient:
+                self.logger.debug(f"Orientation standardization skipped: {e_orient}")
             try:
                 self.logger.debug(
                     f"Frame array ok: shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}, "
@@ -466,15 +483,16 @@ class CalibrationApplier:
                             f"Master dark selected: file={master_dark.get('file')}, exp={master_dark.get('exposure_time')}, "
                             f"shape={getattr(dark_arr, 'shape', None)}, dtype={getattr(dark_arr, 'dtype', None)}"
                         )
-                        # Try to resolve orientation mismatch by transposing either image or dark
+                        # Try to resolve residual orientation mismatch in 2D case
                         applied_dark = False
                         if dark_arr.shape != calibrated_frame.shape:
-                            if dark_arr.T.shape == calibrated_frame.shape:
-                                self.logger.debug("Transposing master dark to match frame orientation")
-                                dark_arr = dark_arr.T
-                            elif calibrated_frame.T.shape == dark_arr.shape:
-                                self.logger.debug("Transposing frame to match master dark orientation")
-                                calibrated_frame = calibrated_frame.T
+                            if dark_arr.ndim == 2 and calibrated_frame.ndim == 2:
+                                if dark_arr.T.shape == calibrated_frame.shape:
+                                    self.logger.debug("Transposing master dark to match frame orientation (2D)")
+                                    dark_arr = dark_arr.T
+                                elif calibrated_frame.T.shape == dark_arr.shape:
+                                    self.logger.debug("Transposing frame to match master dark orientation (2D)")
+                                    calibrated_frame = calibrated_frame.T
                         if dark_arr.shape == calibrated_frame.shape:
                             calibrated_frame = calibrated_frame - dark_arr
                             applied_dark = True
@@ -519,14 +537,15 @@ class CalibrationApplier:
                     self.logger.debug(
                         f"Master flat selected: file={master_flat.get('file')}, shape={flat_data.shape}, dtype={flat_data.dtype}"
                     )
-                    # Try orientation fix similar to dark
+                    # Try orientation fix similar to dark (only for 2D)
                     if flat_data.shape != calibrated_frame.shape:
-                        if flat_data.T.shape == calibrated_frame.shape:
-                            self.logger.debug("Transposing master flat to match frame orientation")
-                            flat_data = flat_data.T
-                        elif calibrated_frame.T.shape == flat_data.shape:
-                            self.logger.debug("Transposing frame to match master flat orientation")
-                            calibrated_frame = calibrated_frame.T
+                        if flat_data.ndim == 2 and calibrated_frame.ndim == 2:
+                            if flat_data.T.shape == calibrated_frame.shape:
+                                self.logger.debug("Transposing master flat to match frame orientation (2D)")
+                                flat_data = flat_data.T
+                            elif calibrated_frame.T.shape == flat_data.shape:
+                                self.logger.debug("Transposing frame to match master flat orientation (2D)")
+                                calibrated_frame = calibrated_frame.T
                     flat_data_safe = None
                     if flat_data.shape == calibrated_frame.shape:
                         flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
