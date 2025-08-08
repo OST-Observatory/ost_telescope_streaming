@@ -398,7 +398,18 @@ class CalibrationApplier:
             # Apply dark subtraction with matching settings
             master_dark = self._find_best_master_dark(exposure_time, gain, offset, readout_mode)
             if master_dark:
-                calibrated_frame = calibrated_frame - master_dark['data'].astype(np.float32)
+                dark_data = master_dark.get('data')
+                if dark_data is None:
+                    self.logger.warning(f"Selected master dark has no data: {master_dark.get('file')}")
+                else:
+                    try:
+                        calibrated_frame = calibrated_frame - dark_data.astype(np.float32)
+                    except Exception:
+                        # Attempt to coerce shapes/dtypes
+                        dark_arr = np.array(dark_data, dtype=np.float32)
+                        if dark_arr.shape != calibrated_frame.shape:
+                            self.logger.warning(f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}, attempting broadcast-safe correction")
+                        calibrated_frame = calibrated_frame - dark_arr
                 calibration_details['dark_subtraction_applied'] = True
                 calibration_details['master_dark_used'] = master_dark['file']
                 calibration_details['master_dark_settings'] = {
