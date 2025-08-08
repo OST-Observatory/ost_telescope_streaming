@@ -466,13 +466,23 @@ class CalibrationApplier:
                             f"Master dark selected: file={master_dark.get('file')}, exp={master_dark.get('exposure_time')}, "
                             f"shape={getattr(dark_arr, 'shape', None)}, dtype={getattr(dark_arr, 'dtype', None)}"
                         )
+                        # Try to resolve orientation mismatch by transposing either image or dark
+                        applied_dark = False
                         if dark_arr.shape != calibrated_frame.shape:
+                            if dark_arr.T.shape == calibrated_frame.shape:
+                                self.logger.debug("Transposing master dark to match frame orientation")
+                                dark_arr = dark_arr.T
+                            elif calibrated_frame.T.shape == dark_arr.shape:
+                                self.logger.debug("Transposing frame to match master dark orientation")
+                                calibrated_frame = calibrated_frame.T
+                        if dark_arr.shape == calibrated_frame.shape:
+                            calibrated_frame = calibrated_frame - dark_arr
+                            applied_dark = True
+                        else:
                             self.logger.warning(
                                 f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}; skipping dark subtraction"
                             )
-                        else:
-                            calibrated_frame = calibrated_frame - dark_arr
-                calibration_details['dark_subtraction_applied'] = True
+                calibration_details['dark_subtraction_applied'] = bool('applied_dark' in locals() and applied_dark)
                 calibration_details['master_dark_used'] = master_dark['file']
                 calibration_details['master_dark_settings'] = {
                     'exposure_time': master_dark['exposure_time'],
@@ -480,11 +490,14 @@ class CalibrationApplier:
                     'offset': master_dark.get('offset'),
                     'readout_mode': master_dark.get('readout_mode')
                 }
-                self.logger.debug(f"Applied dark subtraction using {master_dark['file']} "
-                                f"(exp: {master_dark['exposure_time']:.3f}s, "
-                                f"gain: {master_dark.get('gain', 'N/A')}, "
-                                f"offset: {master_dark.get('offset', 'N/A')}, "
-                                f"readout: {master_dark.get('readout_mode', 'N/A')})")
+                if calibration_details['dark_subtraction_applied']:
+                    self.logger.debug(
+                        f"Applied dark subtraction using {master_dark['file']} "
+                        f"(exp: {master_dark['exposure_time']:.3f}s, "
+                        f"gain: {master_dark.get('gain', 'N/A')}, "
+                        f"offset: {master_dark.get('offset', 'N/A')}, "
+                        f"readout: {master_dark.get('readout_mode', 'N/A')})"
+                    )
             else:
                 self.logger.warning(f"No suitable master dark found for exp={exposure_time:.3f}s, "
                                   f"gain={gain}, offset={offset}, readout={readout_mode}")
@@ -506,25 +519,33 @@ class CalibrationApplier:
                     self.logger.debug(
                         f"Master flat selected: file={master_flat.get('file')}, shape={flat_data.shape}, dtype={flat_data.dtype}"
                     )
-                    flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
+                    # Try orientation fix similar to dark
+                    if flat_data.shape != calibrated_frame.shape:
+                        if flat_data.T.shape == calibrated_frame.shape:
+                            self.logger.debug("Transposing master flat to match frame orientation")
+                            flat_data = flat_data.T
+                        elif calibrated_frame.T.shape == flat_data.shape:
+                            self.logger.debug("Transposing frame to match master flat orientation")
+                            calibrated_frame = calibrated_frame.T
+                    flat_data_safe = None
+                    if flat_data.shape == calibrated_frame.shape:
+                        flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
                 if flat_data_safe is not None:
-                    if flat_data_safe.shape != calibrated_frame.shape:
-                        self.logger.warning(
-                            f"Master flat shape {flat_data_safe.shape} != frame shape {calibrated_frame.shape}; skipping flat correction"
-                        )
-                    else:
-                        calibrated_frame = calibrated_frame / flat_data_safe
-                calibration_details['flat_correction_applied'] = True
+                    calibrated_frame = calibrated_frame / flat_data_safe
+                    calibration_details['flat_correction_applied'] = True
                 calibration_details['master_flat_used'] = master_flat['file']
                 calibration_details['master_flat_settings'] = {
                     'gain': master_flat.get('gain'),
                     'offset': master_flat.get('offset'),
                     'readout_mode': master_flat.get('readout_mode')
                 }
-                self.logger.debug(f"Applied flat correction using {master_flat['file']} "
-                                f"(gain: {master_flat.get('gain', 'N/A')}, "
-                                f"offset: {master_flat.get('offset', 'N/A')}, "
-                                f"readout: {master_flat.get('readout_mode', 'N/A')})")
+                if calibration_details['flat_correction_applied']:
+                    self.logger.debug(
+                        f"Applied flat correction using {master_flat['file']} "
+                        f"(gain: {master_flat.get('gain', 'N/A')}, "
+                        f"offset: {master_flat.get('offset', 'N/A')}, "
+                        f"readout: {master_flat.get('readout_mode', 'N/A')})"
+                    )
             else:
                 self.logger.warning(f"No suitable master flat found for gain={gain}, "
                                   f"offset={offset}, readout={readout_mode}")
