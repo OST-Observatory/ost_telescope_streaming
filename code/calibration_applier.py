@@ -85,8 +85,13 @@ class CalibrationApplier:
             
             self.logger.info(f"Loading master frames from: {master_dir}")
             
-            # Load master bias
+            # Load master bias (support timestamped filenames)
             bias_path = master_dir / master_config.get('master_bias_filename', 'master_bias.fits')
+            if not bias_path.exists():
+                # Fallback: pick latest timestamped file
+                candidates = sorted(master_dir.glob('master_bias_*.fits'), key=lambda p: p.stat().st_mtime, reverse=True)
+                if candidates:
+                    bias_path = candidates[0]
             if bias_path.exists():
                 self.master_bias_cache = {
                     'data': self._load_fits_file(bias_path),
@@ -99,35 +104,41 @@ class CalibrationApplier:
             else:
                 self.logger.info(f"Master bias not found: {bias_path}")
             
-            # Load master darks (by exposure time)
-            dark_dir = master_dir / 'darks'
-            if dark_dir.exists():
-                self.master_dark_cache = {}
-                for dark_file in dark_dir.glob('master_dark_*.fits'):
+            # Load master darks (by exposure time) from root dir (and legacy 'darks' subdir)
+            self.master_dark_cache = {}
+            dark_sources = [master_dir]
+            legacy_dark_dir = master_dir / 'darks'
+            if legacy_dark_dir.exists():
+                dark_sources.append(legacy_dark_dir)
+            for source_dir in dark_sources:
+                for dark_file in source_dir.glob('master_dark_*.fits'):
                     try:
-                        # Extract exposure time from filename
-                        # Expected format: master_dark_1.0s.fits
+                        # Extract exposure time from filename like master_dark_1.000s_YYYYMMDD_*.fits
                         filename = dark_file.stem
-                        if 'master_dark_' in filename:
-                            exposure_str = filename.replace('master_dark_', '').replace('s', '')
-                            try:
-                                exposure_time = float(exposure_str)
-                                self.master_dark_cache[exposure_time] = {
-                                    'data': self._load_fits_file(dark_file),
-                                    'file': str(dark_file),
-                                    'exposure_time': exposure_time,
-                                    'gain': self._extract_camera_setting(dark_file, 'GAIN'),
-                                    'offset': self._extract_camera_setting(dark_file, 'OFFSET'),
-                                    'readout_mode': self._extract_camera_setting(dark_file, 'READOUT')
-                                }
-                                self.logger.info(f"Loaded master dark for {exposure_time}s: {dark_file}")
-                            except ValueError:
-                                self.logger.warning(f"Could not parse exposure time from filename: {dark_file}")
+                        import re
+                        m = re.match(r'^master_dark_(\d+(?:\.\d+)?)s(?:_.*)?$', filename)
+                        if m:
+                            exposure_time = float(m.group(1))
+                            self.master_dark_cache[exposure_time] = {
+                                'data': self._load_fits_file(dark_file),
+                                'file': str(dark_file),
+                                'exposure_time': exposure_time,
+                                'gain': self._extract_camera_setting(dark_file, 'GAIN'),
+                                'offset': self._extract_camera_setting(dark_file, 'OFFSET'),
+                                'readout_mode': self._extract_camera_setting(dark_file, 'READOUT')
+                            }
+                            self.logger.info(f"Loaded master dark for {exposure_time}s: {dark_file}")
+                        else:
+                            self.logger.warning(f"Unexpected master dark filename format: {dark_file.name}")
                     except Exception as e:
                         self.logger.warning(f"Failed to load master dark {dark_file}: {e}")
             
-            # Load master flat
+            # Load master flat (support timestamped filenames)
             flat_path = master_dir / master_config.get('master_flat_filename', 'master_flat.fits')
+            if not flat_path.exists():
+                candidates = sorted(master_dir.glob('master_flat_*.fits'), key=lambda p: p.stat().st_mtime, reverse=True)
+                if candidates:
+                    flat_path = candidates[0]
             if flat_path.exists():
                 self.master_flat_cache = {
                     'data': self._load_fits_file(flat_path),
