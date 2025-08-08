@@ -309,11 +309,9 @@ class MasterFrameCreator:
             Status: Success or error status with master dark path
         """
         try:
-            # Find all dark/bias files in the directory
-            dark_files = []
-            for ext in ['*.fits', '*.fit', '*.FITS', '*.FIT']:
-                dark_files.extend(glob.glob(os.path.join(exp_dir, ext)))
-            
+            # Find all dark/bias files in the directory (case-insensitive, de-duplicated)
+            dark_files = self._list_fits_files(exp_dir)
+
             if not dark_files:
                 return error_status(f"No dark files found in {exp_dir}")
             
@@ -359,15 +357,44 @@ class MasterFrameCreator:
         Returns:
             List of flat file paths
         """
-        flat_files = []
-        
         if not os.path.exists(self.flat_dir):
-            return flat_files
-        
-        for ext in ['*.fits', '*.fit', '*.FITS', '*.FIT']:
-            flat_files.extend(glob.glob(os.path.join(self.flat_dir, ext)))
-        
-        return sorted(flat_files)
+            return []
+
+        return self._list_fits_files(self.flat_dir)
+
+    def _list_fits_files(self, directory: str) -> List[str]:
+        """List FITS files in a directory (case-insensitive, unique).
+
+        Args:
+            directory: Directory to scan
+
+        Returns:
+            Sorted list of unique file paths
+        """
+        try:
+            if not os.path.isdir(directory):
+                return []
+
+            # Accept both .fits and .fit, case-insensitive
+            valid_exts = {'.fits', '.fit'}
+            seen = set()
+            files: List[str] = []
+
+            for entry in os.scandir(directory):
+                if not entry.is_file():
+                    continue
+                _, ext = os.path.splitext(entry.name)
+                if ext.lower() in valid_exts:
+                    # Normalize path for uniqueness (lowercase on Windows)
+                    norm = os.path.normcase(os.path.abspath(entry.path))
+                    if norm not in seen:
+                        seen.add(norm)
+                        files.append(entry.path)
+
+            return sorted(files)
+        except Exception as e:
+            self.logger.warning(f"Failed to list FITS files in {directory}: {e}")
+            return []
     
     def _determine_flat_exposure_time(self, flat_files: List[str]) -> Optional[float]:
         """Determine the exposure time used for flat frames.
