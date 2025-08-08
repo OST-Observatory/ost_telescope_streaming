@@ -60,19 +60,34 @@ class MasterFrameCreator:
         flat_config = self.config.get_flat_config()
         
         # Dark capture settings
-        self.dark_dir = dark_config.get('output_dir', 'darks')
+        # Resolve darks directory (support legacy key)
+        self.dark_dir = (
+            dark_config.get('output_dir')
+            or dark_config.get('output_directory')
+            or 'darks'
+        )
         self.num_darks = dark_config.get('num_darks', 40)
         self.science_exposure_time = dark_config.get('science_exposure_time', 5.0)
         self.min_exposure = dark_config.get('min_exposure', 0.001)
         self.exposure_factors = dark_config.get('exposure_factors', [0.5, 1.0, 2.0, 4.0])
         
         # Flat capture settings
-        self.flat_dir = flat_config.get('output_dir', 'flats')
+        # Resolve flats directory (support legacy key)
+        self.flat_dir = (
+            flat_config.get('output_dir')
+            or flat_config.get('output_directory')
+            or 'flats'
+        )
         self.num_flats = flat_config.get('num_flats', 40)
         
         # Master frame settings
         master_config = self.config.get_master_config()
-        self.master_output_dir = master_config.get('output_dir', 'master_frames')
+        # Resolve master output directory (support legacy key)
+        self.master_output_dir = (
+            master_config.get('output_dir')
+            or master_config.get('output_directory')
+            or 'master_frames'
+        )
         self.rejection_method = master_config.get('rejection_method', 'sigma_clip')  # 'sigma_clip' or 'minmax'
         self.sigma_threshold = master_config.get('sigma_threshold', 3.0)
         self.normalization_method = master_config.get('normalization_method', 'mean')  # 'mean', 'median', 'max'
@@ -83,19 +98,12 @@ class MasterFrameCreator:
     def _create_output_directories(self):
         """Create necessary output directories."""
         try:
-            # Create master frames directory
-            master_config = self.config.get_master_config()
-            output_dir = Path(master_config.get('output_directory', 'master_frames'))
+            # Only ensure the master output directory exists; no unused subfolders
+            output_dir = Path(self.master_output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Master frames directory ready: {output_dir}")
-            
-            # Create subdirectories
-            darks_dir = output_dir / 'darks'
-            darks_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.debug(f"Master darks directory ready: {darks_dir}")
-                
         except Exception as e:
-            self.logger.warning(f"Failed to create master output directories: {e}")
+            self.logger.warning(f"Failed to create master output directory: {e}")
     
     def create_all_master_frames(self) -> Status:
         """Create all master frames (darks and flats).
@@ -211,7 +219,7 @@ class MasterFrameCreator:
             
             self.logger.info(f"Found {len(flat_files)} flat files")
             
-            # Determine flat exposure time
+            # Determine flat exposure time from FITS headers
             flat_exposure_time = self._determine_flat_exposure_time(flat_files)
             if flat_exposure_time is None:
                 return error_status("Could not determine flat exposure time")
@@ -370,12 +378,28 @@ class MasterFrameCreator:
         Returns:
             Exposure time in seconds or None
         """
-        # Try to extract from first flat file
-        if flat_files:
-            # In a real implementation, read FITS header
-            # For now, return a default value
-            return 1.0
-        
+        # Read EXPTIME from the first few flat files using astropy
+        try:
+            import astropy.io.fits as fits
+        except Exception as e:
+            self.logger.warning(f"Astropy not available to read flat EXPTIME: {e}")
+            return None
+
+        for file_path in flat_files[:5]:
+            try:
+                with fits.open(file_path) as hdul:
+                    header = hdul[0].header
+                    exp = header.get('EXPTIME')
+                    if exp is not None:
+                        try:
+                            exp_val = float(exp)
+                            self.logger.info(f"Detected flat exposure from header {os.path.basename(file_path)}: {exp_val:.3f}s")
+                            return exp_val
+                        except Exception:
+                            continue
+            except Exception as e:
+                self.logger.debug(f"Failed to read EXPTIME from {file_path}: {e}")
+
         return None
     
     def _find_master_dark_for_exposure(self, exposure_time: float) -> Optional[str]:
@@ -619,13 +643,13 @@ class MasterFrameCreator:
             Image data as numpy array or None
         """
         try:
-            # Simplified FITS loading - in real implementation use astropy.io.fits
-            # For now, create dummy data for demonstration
-            import numpy as np
-            # This is a placeholder - replace with actual FITS loading
-            dummy_data = np.random.normal(1000, 100, (2048, 2048)).astype(np.float32)
-            return dummy_data
-            
+            import astropy.io.fits as fits
+            with fits.open(file_path) as hdul:
+                data = hdul[0].data
+                if data is None:
+                    return None
+                # Ensure float32 for processing
+                return data.astype(np.float32, copy=False)
         except Exception as e:
             self.logger.warning(f"Failed to load FITS file {file_path}: {e}")
             return None
@@ -644,14 +668,16 @@ class MasterFrameCreator:
             True if successful
         """
         try:
-            # Simplified FITS saving - in real implementation use astropy.io.fits
-            # For now, just create the file
-            with open(file_path, 'w') as f:
-                f.write(f"# {frame_type} with {exposure_time:.3f}s exposure\n")
-            
+            import astropy.io.fits as fits
+            # Convert to 32-bit float if not already
+            data_to_save = data.astype(np.float32, copy=False)
+            header = fits.Header()
+            header['EXPTIME'] = float(exposure_time)
+            header['FRAMETYP'] = frame_type
+            hdu = fits.PrimaryHDU(data_to_save, header=header)
+            hdu.writeto(file_path, overwrite=True)
             self.logger.info(f"Saved {frame_type} to {file_path}")
             return True
-            
         except Exception as e:
             self.logger.error(f"Failed to save FITS file {file_path}: {e}")
             return False
