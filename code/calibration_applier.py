@@ -359,8 +359,29 @@ class CalibrationApplier:
             self.logger.debug(f"Calibrating frame with exp={exposure_time:.3f}s, "
                             f"gain={gain}, offset={offset}, readout={readout_mode}")
             
-            # Start with original frame
-            calibrated_frame = frame_data.astype(np.float32)
+            # Unwrap Status objects or nested data
+            raw = frame_data
+            for _ in range(5):
+                if raw is None:
+                    break
+                if isinstance(raw, np.ndarray):
+                    break
+                if hasattr(raw, 'data'):
+                    raw = raw.data
+                    continue
+                if isinstance(raw, list):
+                    raw = np.array(raw)
+                break
+
+            if raw is None:
+                return error_status("No frame data provided for calibration")
+
+            # Start with original frame as float32
+            try:
+                calibrated_frame = raw.astype(np.float32)
+            except Exception:
+                # As a fallback try numpy conversion
+                calibrated_frame = np.array(raw, dtype=np.float32)
             calibration_details = {
                 'original_exposure_time': exposure_time,
                 'original_gain': gain,
