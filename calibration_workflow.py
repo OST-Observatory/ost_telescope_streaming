@@ -210,7 +210,7 @@ def create_master_frames(config, logger):
         
         # Create master frames
         logger.info("Creating master frames...")
-        status = master_creator.create_all_masters()
+        status = master_creator.create_all_master_frames()
         
         if status.is_success:
             logger.info("✅ Master frame creation completed successfully")
