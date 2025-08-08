@@ -191,7 +191,7 @@ class CalibrationApplier:
             self.logger.debug(f"Could not extract {keyword} from {fits_file.name}: {e}")
             return None
     
-    def _find_best_master_dark(self, exposure_time: float, gain: Optional[float] = None, 
+    def _find_best_master_dark(self, exposure_time: Optional[float], gain: Optional[float] = None, 
                               offset: Optional[int] = None, readout_mode: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Find the best matching master dark for the given exposure time and camera settings.
         
@@ -204,39 +204,73 @@ class CalibrationApplier:
         Returns:
             Dict with master dark data or None if no match found
         """
-        if not self.master_dark_cache:
+        # Guard against missing exposure time
+        try:
+            if exposure_time is not None:
+                exposure_time = float(exposure_time)
+        except Exception:
+            exposure_time = None
+
+        if exposure_time is None or not self.master_dark_cache:
             return None
         
         best_match = None
         best_score = float('inf')
+        # Track nearest by exposure as fallback if none within tolerance
+        nearest_dark = None
+        nearest_exp_diff = float('inf')
         
         for dark_info in self.master_dark_cache.values():
             # Check exposure time match
-            exp_diff = abs(dark_info['exposure_time'] - exposure_time)
+            try:
+                exp_diff = abs(float(dark_info['exposure_time']) - float(exposure_time))
+            except Exception:
+                # If exposure time cannot be compared, skip this dark
+                continue
+
+            # Track nearest by exposure regardless of full score
+            if exp_diff < nearest_exp_diff:
+                nearest_exp_diff = exp_diff
+                nearest_dark = dark_info
             
             # Check gain match (if both have gain info)
             gain_diff = 0
-            if gain is not None and 'gain' in dark_info:
-                gain_diff = abs(dark_info['gain'] - gain)
-            elif gain is not None:
-                # If dark doesn't have gain info, use a high penalty
-                gain_diff = 1000
+            if gain is not None:
+                dark_gain = dark_info.get('gain')
+                if dark_gain is not None:
+                    try:
+                        gain_diff = abs(float(dark_gain) - float(gain))
+                    except Exception:
+                        gain_diff = 1000
+                else:
+                    # If dark doesn't have gain info, use a high penalty
+                    gain_diff = 1000
             
             # Check offset match (if both have offset info)
             offset_diff = 0
-            if offset is not None and 'offset' in dark_info:
-                offset_diff = abs(dark_info['offset'] - offset)
-            elif offset is not None:
-                # If dark doesn't have offset info, use a high penalty
-                offset_diff = 1000
+            if offset is not None:
+                dark_offset = dark_info.get('offset')
+                if dark_offset is not None:
+                    try:
+                        offset_diff = abs(float(dark_offset) - float(offset))
+                    except Exception:
+                        offset_diff = 1000
+                else:
+                    # If dark doesn't have offset info, use a high penalty
+                    offset_diff = 1000
             
             # Check readout mode match (if both have readout mode info)
             readout_diff = 0
-            if readout_mode is not None and 'readout_mode' in dark_info:
-                readout_diff = abs(dark_info['readout_mode'] - readout_mode)
-            elif readout_mode is not None:
-                # If dark doesn't have readout mode info, use a high penalty
-                readout_diff = 1000
+            if readout_mode is not None:
+                dark_readout = dark_info.get('readout_mode')
+                if dark_readout is not None:
+                    try:
+                        readout_diff = abs(float(dark_readout) - float(readout_mode))
+                    except Exception:
+                        readout_diff = 1000
+                else:
+                    # If dark doesn't have readout mode info, use a high penalty
+                    readout_diff = 1000
             
             # Calculate weighted score (exposure time is most important)
             score = (exp_diff * 10.0 +  # Exposure time weight: 10
@@ -258,11 +292,18 @@ class CalibrationApplier:
                             f"gain: {best_match.get('gain', 'N/A')}, "
                             f"offset: {best_match.get('offset', 'N/A')}, "
                             f"readout: {best_match.get('readout_mode', 'N/A')})")
-        else:
-            self.logger.warning(f"No suitable master dark found for exp={exposure_time:.3f}s, "
-                              f"gain={gain}, offset={offset}, readout={readout_mode}")
+            return best_match
         
-        return best_match
+        # Fallback: use nearest by exposure time if nothing within tolerance
+        if nearest_dark is not None:
+            self.logger.warning(
+                f"No master dark within tolerance for exp={exposure_time:.3f}s; "
+                f"using nearest exposure {nearest_dark['exposure_time']:.3f}s (Δ={nearest_exp_diff:.3f}s)"
+            )
+            return nearest_dark
+        
+        self.logger.warning(f"No suitable master dark found for exp={exposure_time}, gain={gain}, offset={offset}, readout={readout_mode}")
+        return None
 
     def _find_best_master_flat(self, gain: Optional[float] = None, offset: Optional[int] = None, 
                               readout_mode: Optional[int] = None) -> Optional[Dict[str, Any]]:
