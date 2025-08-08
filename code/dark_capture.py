@@ -373,7 +373,8 @@ class DarkCapture:
                 if frame_status.is_success:
                     # Extract frame data and details from Status object
                     frame_data = frame_status.data
-                    frame_details = getattr(frame_status, 'details', {})
+                    # Ensure details is a dict, not None
+                    frame_details = getattr(frame_status, 'details', None) or {}
                     
                     self.logger.debug(f"Frame status data type: {type(frame_data)}")
                     self.logger.debug(f"Frame status details: {frame_details}")
@@ -393,8 +394,9 @@ class DarkCapture:
                         self.logger.debug(f"Extraction level {extraction_level}: Extracted data type: {type(frame_data)}")
                         
                         # Get details from nested status if available
-                        if hasattr(old_frame_data, 'details'):
-                            frame_details.update(old_frame_data.details)
+                        details_obj = getattr(old_frame_data, 'details', None)
+                        if isinstance(details_obj, dict):
+                            frame_details.update(details_obj)
                             self.logger.debug(f"Updated frame_details from nested status: {frame_details}")
                         
                         # Prevent infinite loop
@@ -488,8 +490,6 @@ class DarkCapture:
                             self.logger.warning(f"File was not created despite success status: {filepath}")
                     else:
                         self.logger.warning(f"Failed to save dark {i+1}: {save_status.message}")
-                else:
-                    self.logger.warning(f"Failed to capture dark {i+1}: {frame_status.message}")
                 
                                     # Small delay between captures
                     time.sleep(0.1)
