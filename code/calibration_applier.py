@@ -322,27 +322,42 @@ class CalibrationApplier:
         
         flat_info = self.master_flat_cache
         
-        # Check if flat has matching settings
+        # Check if flat has matching settings (robust to None/strings)
         gain_match = True
-        if gain is not None and 'gain' in flat_info:
-            gain_diff = abs(flat_info['gain'] - gain)
-            gain_match = gain_diff <= self.calibration_tolerance
-        elif gain is not None:
-            gain_match = False
+        if gain is not None:
+            flat_gain = flat_info.get('gain')
+            if flat_gain is not None:
+                try:
+                    gain_diff = abs(float(flat_gain) - float(gain))
+                    gain_match = gain_diff <= self.calibration_tolerance
+                except Exception:
+                    gain_match = False
+            else:
+                gain_match = False
         
         offset_match = True
-        if offset is not None and 'offset' in flat_info:
-            offset_diff = abs(flat_info['offset'] - offset)
-            offset_match = offset_diff <= self.calibration_tolerance
-        elif offset is not None:
-            offset_match = False
+        if offset is not None:
+            flat_offset = flat_info.get('offset')
+            if flat_offset is not None:
+                try:
+                    offset_diff = abs(float(flat_offset) - float(offset))
+                    offset_match = offset_diff <= self.calibration_tolerance
+                except Exception:
+                    offset_match = False
+            else:
+                offset_match = False
         
         readout_match = True
-        if readout_mode is not None and 'readout_mode' in flat_info:
-            readout_diff = abs(flat_info['readout_mode'] - readout_mode)
-            readout_match = readout_diff <= self.calibration_tolerance
-        elif readout_mode is not None:
-            readout_match = False
+        if readout_mode is not None:
+            flat_readout = flat_info.get('readout_mode')
+            if flat_readout is not None:
+                try:
+                    readout_diff = abs(float(flat_readout) - float(readout_mode))
+                    readout_match = readout_diff <= self.calibration_tolerance
+                except Exception:
+                    readout_match = False
+            else:
+                readout_match = False
         
         if gain_match and offset_match and readout_match:
             self.logger.debug(f"Using master flat: {flat_info['file']} "
@@ -577,9 +592,24 @@ class CalibrationApplier:
                     flat_data_safe = None
                     if flat_data.shape == calibrated_frame.shape:
                         flat_data_safe = np.where(flat_data > 0, flat_data, 1.0)
+                        try:
+                            self.logger.debug(
+                                f"Flat safe stats: min={float(np.nanmin(flat_data_safe)) if flat_data_safe.size else 'n/a'}, "
+                                f"max={float(np.nanmax(flat_data_safe)) if flat_data_safe.size else 'n/a'}"
+                            )
+                        except Exception:
+                            pass
                 if flat_data_safe is not None:
                     calibrated_frame = calibrated_frame / flat_data_safe
                     calibration_details['flat_correction_applied'] = True
+                    try:
+                        self.logger.debug(
+                            f"After flat: shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}, "
+                            f"min={float(np.nanmin(calibrated_frame)) if calibrated_frame.size else 'n/a'}, "
+                            f"max={float(np.nanmax(calibrated_frame)) if calibrated_frame.size else 'n/a'}"
+                        )
+                    except Exception:
+                        pass
                 calibration_details['master_flat_used'] = master_flat['file']
                 calibration_details['master_flat_settings'] = {
                     'gain': master_flat.get('gain'),
