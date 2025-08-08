@@ -377,11 +377,16 @@ class CalibrationApplier:
                 return error_status("No frame data provided for calibration")
 
             # Start with original frame as float32
+            # Ensure numeric ndarray for calibrated_frame
             try:
-                calibrated_frame = raw.astype(np.float32)
-            except Exception:
-                # As a fallback try numpy conversion
-                calibrated_frame = np.array(raw, dtype=np.float32)
+                calibrated_frame = np.asarray(raw, dtype=np.float32)
+            except Exception as conv_err:
+                self.logger.warning(f"Could not convert frame to float32 array: {conv_err}")
+                return warning_status(
+                    "No calibration applied (invalid frame data)",
+                    data=raw if isinstance(raw, np.ndarray) else None,
+                    details={'calibration_applied': False, 'reason': 'invalid_frame_dtype'}
+                )
             calibration_details = {
                 'original_exposure_time': exposure_time,
                 'original_gain': gain,
@@ -403,13 +408,17 @@ class CalibrationApplier:
                     self.logger.warning(f"Selected master dark has no data: {master_dark.get('file')}")
                 else:
                     try:
-                        calibrated_frame = calibrated_frame - dark_data.astype(np.float32)
-                    except Exception:
-                        # Attempt to coerce shapes/dtypes
-                        dark_arr = np.array(dark_data, dtype=np.float32)
+                        dark_arr = np.asarray(dark_data, dtype=np.float32)
+                    except Exception as conv_err:
+                        self.logger.warning(f"Could not convert master dark to float32 array: {conv_err}")
+                        dark_arr = None
+                    if dark_arr is not None:
                         if dark_arr.shape != calibrated_frame.shape:
-                            self.logger.warning(f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}, attempting broadcast-safe correction")
-                        calibrated_frame = calibrated_frame - dark_arr
+                            self.logger.warning(
+                                f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}; skipping dark subtraction"
+                            )
+                        else:
+                            calibrated_frame = calibrated_frame - dark_arr
                 calibration_details['dark_subtraction_applied'] = True
                 calibration_details['master_dark_used'] = master_dark['file']
                 calibration_details['master_dark_settings'] = {
