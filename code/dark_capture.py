@@ -64,7 +64,12 @@ class DarkCapture:
         self.min_exposure = dark_config.get('min_exposure', 0.001)  # 1ms for bias
         self.max_exposure = dark_config.get('max_exposure', 60.0)  # 60s max
         self.exposure_factors = dark_config.get('exposure_factors', [0.5, 1.0, 2.0, 4.0])
-        self.dark_output_dir = dark_config.get('output_dir', 'darks')
+        # Resolve output directory (support both new and legacy key)
+        self.dark_output_dir = (
+            dark_config.get('output_dir')
+            or dark_config.get('output_directory')
+            or 'darks'
+        )
         
         # Ensure output directory exists
         os.makedirs(self.dark_output_dir, exist_ok=True)
@@ -75,18 +80,10 @@ class DarkCapture:
     def _create_output_directories(self):
         """Create necessary output directories."""
         try:
-            # Create dark frames directory
-            dark_config = self.config.get_dark_config()
-            output_dir = Path(dark_config.get('output_directory', 'dark_frames'))
+            # Create dark frames directory (use resolved path)
+            output_dir = Path(self.dark_output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Dark frames directory ready: {output_dir}")
-            
-            # Create subdirectories for different exposure times
-            for exposure_time in dark_config.get('science_exposure_factors', [1.0]):
-                subdir = output_dir / f"{exposure_time}s"
-                subdir.mkdir(parents=True, exist_ok=True)
-                self.logger.debug(f"Dark subdirectory ready: {subdir}")
-                
         except Exception as e:
             self.logger.warning(f"Failed to create dark output directories: {e}")
     

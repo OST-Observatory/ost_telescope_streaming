@@ -65,7 +65,12 @@ class FlatCapture:
         self.max_exposure = flat_config.get('max_exposure', 10.0)  # 10s
         self.exposure_step_factor = flat_config.get('exposure_step_factor', 1.5)
         self.max_adjustment_attempts = flat_config.get('max_adjustment_attempts', 10)
-        self.flat_output_dir = flat_config.get('output_dir', 'flats')
+        # Resolve output directory (support both new and legacy key)
+        self.flat_output_dir = (
+            flat_config.get('output_dir')
+            or flat_config.get('output_directory')
+            or 'flats'
+        )
         
         # Ensure output directory exists
         os.makedirs(self.flat_output_dir, exist_ok=True)
@@ -77,9 +82,8 @@ class FlatCapture:
     def _create_output_directories(self):
         """Create necessary output directories."""
         try:
-            # Create flat frames directory
-            flat_config = self.config.get_flat_config()
-            output_dir = Path(flat_config.get('output_directory', 'flat_frames'))
+            # Create flat frames directory (use resolved path)
+            output_dir = Path(self.flat_output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Flat frames directory ready: {output_dir}")
                 
