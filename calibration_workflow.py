@@ -297,24 +297,24 @@ def main():
             # Start warmup if cooling manager is available
             if global_cooling_manager and not args.skip_warmup:
                 logger.info("Starting warmup phase...")
+                # If a status monitor is running, stop it to prevent extra threads/logging
+                try:
+                    global_cooling_manager.stop_status_monitor()
+                except Exception:
+                    pass
                 warmup_status = global_cooling_manager.start_warmup()
                 if warmup_status.is_success:
-                    logger.info("🔥 Warmup started successfully")
-                    
-                    # Wait for warmup to complete
-                    logger.info("🔥 Waiting for warmup to complete...")
-                    wait_status = global_cooling_manager.wait_for_warmup_completion(timeout=600)
-                    if wait_status.is_success:
-                        logger.info("🔥 Warmup completed successfully")
-                    else:
-                        logger.warning(f"Warmup issue: {wait_status.message}")
+                    logger.info("🔥 Warmup initiated (non-blocking). Exiting without waiting to avoid blocking on interrupt.")
                 else:
                     logger.warning(f"Warmup start: {warmup_status.message}")
             
             # Disconnect camera
             if global_camera:
-                global_camera.disconnect()
-                logger.info("Camera disconnected")
+                try:
+                    global_camera.disconnect()
+                    logger.info("Camera disconnected")
+                except Exception as e:
+                    logger.warning(f"Error disconnecting camera: {e}")
             
             logger.info("Calibration workflow stopped by user")
             sys.exit(0)
