@@ -945,20 +945,35 @@ class VideoCapture:
                 header['COLORTYP'] = 'MONO'
             
             # Exposure information - use actual values from frame details
+            actual_exposure_time = None
             if frame_details is not None:
-                actual_exposure_time = frame_details.get('exposure_time_s')
+                if isinstance(frame_details, dict):
+                    # Check common keys for exposure time
+                    for key in ['exposure_time_s', 'exposure_time', 'EXPTIME', 'ExposureTime', 'exptime']:
+                        if key in frame_details and frame_details.get(key) is not None:
+                            actual_exposure_time = frame_details.get(key)
+                            break
+                else:
+                    self.logger.debug(f"frame_details is not a dict: {type(frame_details)}")
+                
                 if actual_exposure_time is not None:
-                    header['EXPTIME'] = actual_exposure_time
+                    header['EXPTIME'] = float(actual_exposure_time)
+                    self.logger.debug(f"Set EXPTIME from frame_details: {actual_exposure_time}s")
                 elif hasattr(self.camera, 'exposure_time'):
                     header['EXPTIME'] = self.camera.exposure_time
+                    self.logger.debug(f"Set EXPTIME from camera attribute: {self.camera.exposure_time}s")
                 
-                actual_gain = frame_details.get('gain')
+                actual_gain = None
+                if isinstance(frame_details, dict):
+                    actual_gain = frame_details.get('gain')
                 if actual_gain is not None:
                     header['GAIN'] = actual_gain
                 elif hasattr(self.camera, 'gain'):
                     header['GAIN'] = self.camera.gain
                 
-                actual_binning = frame_details.get('binning')
+                actual_binning = None
+                if isinstance(frame_details, dict):
+                    actual_binning = frame_details.get('binning')
                 if actual_binning is not None:
                     if isinstance(actual_binning, list):
                         header['XBINNING'] = actual_binning[0]
