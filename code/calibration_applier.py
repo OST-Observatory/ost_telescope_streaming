@@ -496,6 +496,15 @@ class CalibrationApplier:
                         if dark_arr.shape == calibrated_frame.shape:
                             calibrated_frame = calibrated_frame - dark_arr
                             applied_dark = True
+                            # Debug: summarize frame after dark subtraction
+                            try:
+                                self.logger.debug(
+                                    f"After dark subtraction: shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}, "
+                                    f"min={float(np.nanmin(calibrated_frame)) if calibrated_frame.size else 'n/a'}, "
+                                    f"max={float(np.nanmax(calibrated_frame)) if calibrated_frame.size else 'n/a'}"
+                                )
+                            except Exception:
+                                pass
                         else:
                             self.logger.warning(
                                 f"Master dark shape {dark_arr.shape} != frame shape {calibrated_frame.shape}; skipping dark subtraction"
@@ -520,6 +529,25 @@ class CalibrationApplier:
                 self.logger.warning(f"No suitable master dark found for exp={exposure_time:.3f}s, "
                                   f"gain={gain}, offset={offset}, readout={readout_mode}")
             
+            # Validate calibrated_frame before flat correction
+            if not isinstance(calibrated_frame, np.ndarray):
+                self.logger.error(f"Calibrated frame has invalid type before flat correction: {type(calibrated_frame)}")
+                try:
+                    calibrated_frame = np.asarray(calibrated_frame, dtype=np.float32)
+                    self.logger.debug(f"Recovered calibrated frame to ndarray: shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}")
+                except Exception as conv_err:
+                    self.logger.error(f"Failed to recover calibrated frame to ndarray: {conv_err}")
+                    return error_status("Calibration failed: invalid frame after dark subtraction")
+
+            try:
+                self.logger.debug(
+                    f"Pre-flat: frame shape={calibrated_frame.shape}, dtype={calibrated_frame.dtype}, "
+                    f"min={float(np.nanmin(calibrated_frame)) if calibrated_frame.size else 'n/a'}, "
+                    f"max={float(np.nanmax(calibrated_frame)) if calibrated_frame.size else 'n/a'}"
+                )
+            except Exception:
+                pass
+
             # Apply flat correction with matching settings
             master_flat = self._find_best_master_flat(gain, offset, readout_mode)
             if master_flat:
