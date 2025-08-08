@@ -317,8 +317,13 @@ class MasterFrameCreator:
             
             self.logger.info(f"Found {len(dark_files)} dark files for {exposure_time:.3f}s exposure")
             
-            # Load and combine dark frames
-            master_dark = self._combine_frames(dark_files, f"dark_{exposure_time:.3f}s")
+            # Load and combine dark frames (streaming to avoid high memory usage)
+            master_dark = self._combine_frames_streaming_files(
+                dark_files,
+                frame_type=f"dark_{exposure_time:.3f}s",
+                rejection_method=self.rejection_method,
+                sigma_threshold=self.sigma_threshold
+            )
             
             if master_dark is None:
                 return error_status("Failed to combine dark frames")
@@ -485,24 +490,13 @@ class MasterFrameCreator:
             if master_dark is None:
                 return error_status(f"Failed to load master dark: {master_dark_path}")
             
-            # Load and dark-subtract flat frames
-            dark_subtracted_flats = []
-            
-            for flat_file in flat_files:
-                flat_data = self._load_fits_file(flat_file)
-                if flat_data is not None:
-                    # Dark subtraction
-                    dark_subtracted = flat_data.astype(np.float32) - master_dark.astype(np.float32)
-                    dark_subtracted_flats.append(dark_subtracted)
-            
-            if not dark_subtracted_flats:
-                return error_status("No valid flat frames after dark subtraction")
-            
-            self.logger.info(f"Dark-subtracted {len(dark_subtracted_flats)} flat frames")
-            
-            # Combine dark-subtracted flats
-            master_flat = self._combine_frames(
-                dark_subtracted_flats, f"flat_{exposure_time:.3f}s", is_data_list=True
+            # Combine dark-subtracted flats via streaming (apply subtraction on the fly)
+            master_flat = self._combine_flats_with_dark_streaming(
+                flat_files,
+                master_dark,
+                frame_type=f"flat_{exposure_time:.3f}s",
+                rejection_method=self.rejection_method,
+                sigma_threshold=self.sigma_threshold
             )
             
             if master_flat is None:
@@ -536,102 +530,256 @@ class MasterFrameCreator:
             self.logger.error(f"Error creating master flat: {e}")
             return error_status(f"Master flat creation failed: {e}")
     
-    def _combine_frames(self, files_or_data: Union[List[str], List[np.ndarray]], 
-                       frame_type: str, is_data_list: bool = False) -> Optional[np.ndarray]:
-        """Combine multiple frames using rejection and averaging.
-        
-        Args:
-            files_or_data: List of file paths or numpy arrays
-            frame_type: Type of frames being combined
-            is_data_list: True if input is list of numpy arrays
-            
-        Returns:
-            Combined frame as numpy array or None
+    def _combine_frames_streaming_files(
+        self,
+        files: List[str],
+        frame_type: str,
+        rejection_method: str,
+        sigma_threshold: float
+    ) -> Optional[np.ndarray]:
+        """Combine frames from file paths using streaming to reduce memory.
+
+        Supports 'sigma_clip' (two-pass Welford) and 'minmax' (two-pass exclude one
+        min and one max per pixel). Falls back to simple mean if frames < 3 or
+        unknown method.
         """
         try:
-            if is_data_list:
-                # Input is already list of numpy arrays
-                frames = files_or_data
-            else:
-                # Load frames from files
-                frames = []
-                for file_path in files_or_data:
-                    frame_data = self._load_fits_file(file_path)
-                    if frame_data is not None:
-                        frames.append(frame_data)
-            
-            if not frames:
+            if not files:
                 self.logger.error(f"No valid frames found for {frame_type}")
                 return None
-            
-            self.logger.info(f"Combining {len(frames)} {frame_type} frames...")
-            
-            # Stack frames
-            stacked = np.stack(frames, axis=0)
-            
-            # Apply rejection method
-            if self.rejection_method == 'sigma_clip':
-                combined = self._sigma_clip_combine(stacked)
-            elif self.rejection_method == 'minmax':
-                combined = self._minmax_combine(stacked)
+
+            # Peek first file for shape
+            first = self._load_fits_file(files[0])
+            if first is None:
+                return None
+            shape = first.shape
+
+            if rejection_method == 'sigma_clip':
+                return self._sigma_clip_combine_files(files, sigma_threshold, shape)
+            elif rejection_method == 'minmax':
+                return self._minmax_combine_files(files, shape)
             else:
-                # Default to median
-                combined = np.median(stacked, axis=0)
-            
-            self.logger.info(f"Combined {frame_type} frames successfully")
-            return combined
-            
+                # Simple mean (one pass)
+                self.logger.info(f"Combining {len(files)} {frame_type} frames with simple mean")
+                sum_img = np.zeros(shape, dtype=np.float64)
+                count = 0
+                for fp in files:
+                    arr = self._load_fits_file(fp)
+                    if arr is None:
+                        continue
+                    sum_img += arr
+                    count += 1
+                if count == 0:
+                    return None
+                return (sum_img / float(count)).astype(np.float32)
         except Exception as e:
             self.logger.error(f"Error combining {frame_type} frames: {e}")
             return None
     
-    def _sigma_clip_combine(self, stacked_frames: np.ndarray) -> np.ndarray:
-        """Combine frames using sigma clipping rejection.
-        
-        Args:
-            stacked_frames: Stacked frames as numpy array
-            
-        Returns:
-            Combined frame
-        """
-        # Simple sigma clipping implementation
-        mean = np.mean(stacked_frames, axis=0)
-        std = np.std(stacked_frames, axis=0)
-        
-        # Create mask for pixels within sigma threshold
-        mask = np.abs(stacked_frames - mean) <= (self.sigma_threshold * std)
-        
-        # Calculate mean of accepted pixels
-        combined = np.zeros_like(mean)
-        for i in range(stacked_frames.shape[1]):
-            for j in range(stacked_frames.shape[2]):
-                valid_pixels = stacked_frames[mask[:, i, j], i, j]
-                if len(valid_pixels) > 0:
-                    combined[i, j] = np.mean(valid_pixels)
-                else:
-                    combined[i, j] = mean[i, j]
-        
-        return combined
+    def _sigma_clip_combine_files(self, files: List[str], sigma: float, shape: Tuple[int, int]) -> Optional[np.ndarray]:
+        """Two-pass sigma clipping combine from files using Welford streaming."""
+        try:
+            self.logger.info(f"Sigma-clip combining {len(files)} frames (sigma={sigma})")
+            # First pass: mean and variance (Welford)
+            n = 0
+            mean = np.zeros(shape, dtype=np.float64)
+            M2 = np.zeros(shape, dtype=np.float64)
+            for fp in files:
+                arr = self._load_fits_file(fp)
+                if arr is None:
+                    continue
+                n += 1
+                delta = arr - mean
+                mean += delta / n
+                delta2 = arr - mean
+                M2 += delta * delta2
+            if n == 0:
+                return None
+            std = np.sqrt(np.maximum(M2 / max(n - 1, 1), 0.0))
+
+            # Second pass: accumulate within clip
+            sum_img = np.zeros(shape, dtype=np.float64)
+            count_img = np.zeros(shape, dtype=np.uint32)
+            threshold = sigma * std
+            for fp in files:
+                arr = self._load_fits_file(fp)
+                if arr is None:
+                    continue
+                mask = np.less_equal(np.abs(arr - mean), threshold)
+                sum_img += np.where(mask, arr, 0.0)
+                count_img += mask.astype(np.uint32)
+            count_nonzero = np.maximum(count_img, 1)
+            combined = (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
+            return combined
+        except Exception as e:
+            self.logger.error(f"Sigma-clip combine failed: {e}")
+            return None
     
-    def _minmax_combine(self, stacked_frames: np.ndarray) -> np.ndarray:
-        """Combine frames using min/max rejection.
-        
-        Args:
-            stacked_frames: Stacked frames as numpy array
-            
-        Returns:
-            Combined frame
-        """
-        # Sort along first axis
-        sorted_frames = np.sort(stacked_frames, axis=0)
-        
-        # Remove min and max values
-        n_frames = sorted_frames.shape[0]
-        if n_frames > 2:
-            trimmed = sorted_frames[1:-1, :, :]
-            return np.mean(trimmed, axis=0)
-        else:
-            return np.mean(sorted_frames, axis=0)
+    def _minmax_combine_files(self, files: List[str], shape: Tuple[int, int]) -> Optional[np.ndarray]:
+        """Two-pass min/max rejection combine from files (exclude one min and one max per pixel)."""
+        try:
+            self.logger.info(f"MinMax combining {len(files)} frames")
+            # First pass: per-pixel min and max
+            min_img = np.full(shape, np.inf, dtype=np.float32)
+            max_img = np.full(shape, -np.inf, dtype=np.float32)
+            n = 0
+            for fp in files:
+                arr = self._load_fits_file(fp)
+                if arr is None:
+                    continue
+                n += 1
+                np.minimum(min_img, arr, out=min_img)
+                np.maximum(max_img, arr, out=max_img)
+            if n == 0:
+                return None
+            if n <= 2:
+                # Not enough frames to reject extremes; simple mean
+                sum_img = np.zeros(shape, dtype=np.float64)
+                cnt = 0
+                for fp in files:
+                    arr = self._load_fits_file(fp)
+                    if arr is None:
+                        continue
+                    sum_img += arr
+                    cnt += 1
+                if cnt == 0:
+                    return None
+                return (sum_img / float(cnt)).astype(np.float32)
+
+            # Second pass: accumulate excluding exactly one min and one max per pixel
+            sum_img = np.zeros(shape, dtype=np.float64)
+            count_img = np.zeros(shape, dtype=np.uint32)
+            min_used = np.zeros(shape, dtype=bool)
+            max_used = np.zeros(shape, dtype=bool)
+            for fp in files:
+                arr = self._load_fits_file(fp)
+                if arr is None:
+                    continue
+                is_min = (arr == min_img) & (~min_used)
+                is_max = (arr == max_img) & (~max_used)
+                include = ~(is_min | is_max)
+                sum_img += np.where(include, arr, 0.0)
+                count_img += include.astype(np.uint32)
+                # Mark min/max used only where they occurred
+                min_used |= is_min
+                max_used |= is_max
+            # Avoid division by zero
+            count_nonzero = np.maximum(count_img, 1)
+            combined = (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
+            return combined
+        except Exception as e:
+            self.logger.error(f"MinMax combine failed: {e}")
+            return None
+
+    def _combine_flats_with_dark_streaming(
+        self,
+        flat_files: List[str],
+        master_dark: np.ndarray,
+        frame_type: str,
+        rejection_method: str,
+        sigma_threshold: float
+    ) -> Optional[np.ndarray]:
+        """Streaming combine for flats with on-the-fly dark subtraction."""
+        try:
+            if not flat_files:
+                return None
+            shape = master_dark.shape
+            if rejection_method == 'sigma_clip':
+                # First pass Welford on (flat - dark)
+                n = 0
+                mean = np.zeros(shape, dtype=np.float64)
+                M2 = np.zeros(shape, dtype=np.float64)
+                for fp in flat_files:
+                    flat = self._load_fits_file(fp)
+                    if flat is None:
+                        continue
+                    arr = flat - master_dark
+                    n += 1
+                    delta = arr - mean
+                    mean += delta / n
+                    delta2 = arr - mean
+                    M2 += delta * delta2
+                if n == 0:
+                    return None
+                std = np.sqrt(np.maximum(M2 / max(n - 1, 1), 0.0))
+
+                # Second pass accumulate
+                sum_img = np.zeros(shape, dtype=np.float64)
+                count_img = np.zeros(shape, dtype=np.uint32)
+                threshold = sigma_threshold * std
+                for fp in flat_files:
+                    flat = self._load_fits_file(fp)
+                    if flat is None:
+                        continue
+                    arr = flat - master_dark
+                    mask = np.less_equal(np.abs(arr - mean), threshold)
+                    sum_img += np.where(mask, arr, 0.0)
+                    count_img += mask.astype(np.uint32)
+                count_nonzero = np.maximum(count_img, 1)
+                return (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
+            elif rejection_method == 'minmax':
+                # First pass min/max
+                min_img = np.full(shape, np.inf, dtype=np.float32)
+                max_img = np.full(shape, -np.inf, dtype=np.float32)
+                n = 0
+                for fp in flat_files:
+                    flat = self._load_fits_file(fp)
+                    if flat is None:
+                        continue
+                    arr = flat - master_dark
+                    n += 1
+                    np.minimum(min_img, arr, out=min_img)
+                    np.maximum(max_img, arr, out=max_img)
+                if n == 0:
+                    return None
+                if n <= 2:
+                    sum_img = np.zeros(shape, dtype=np.float64)
+                    cnt = 0
+                    for fp in flat_files:
+                        flat = self._load_fits_file(fp)
+                        if flat is None:
+                            continue
+                        arr = flat - master_dark
+                        sum_img += arr
+                        cnt += 1
+                    if cnt == 0:
+                        return None
+                    return (sum_img / float(cnt)).astype(np.float32)
+
+                sum_img = np.zeros(shape, dtype=np.float64)
+                count_img = np.zeros(shape, dtype=np.uint32)
+                min_used = np.zeros(shape, dtype=bool)
+                max_used = np.zeros(shape, dtype=bool)
+                for fp in flat_files:
+                    flat = self._load_fits_file(fp)
+                    if flat is None:
+                        continue
+                    arr = flat - master_dark
+                    is_min = (arr == min_img) & (~min_used)
+                    is_max = (arr == max_img) & (~max_used)
+                    include = ~(is_min | is_max)
+                    sum_img += np.where(include, arr, 0.0)
+                    count_img += include.astype(np.uint32)
+                    min_used |= is_min
+                    max_used |= is_max
+                count_nonzero = np.maximum(count_img, 1)
+                return (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
+            else:
+                # Simple mean
+                sum_img = np.zeros(shape, dtype=np.float64)
+                cnt = 0
+                for fp in flat_files:
+                    flat = self._load_fits_file(fp)
+                    if flat is None:
+                        continue
+                    sum_img += (flat - master_dark)
+                    cnt += 1
+                if cnt == 0:
+                    return None
+                return (sum_img / float(cnt)).astype(np.float32)
+        except Exception as e:
+            self.logger.error(f"Combine flats with dark (streaming) failed: {e}")
+            return None
     
     def _normalize_master_flat(self, master_flat: np.ndarray) -> np.ndarray:
         """Normalize master flat frame.
