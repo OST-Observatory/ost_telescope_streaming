@@ -11,6 +11,7 @@ This script provides a complete calibration workflow including:
 """
 
 import sys
+import os
 import logging
 import argparse
 import time
@@ -311,13 +312,21 @@ def main():
             # Disconnect camera
             if global_camera:
                 try:
+                    # Try to abort any ongoing exposure if supported
+                    if hasattr(global_camera, 'abort_exposure'):
+                        try:
+                            global_camera.abort_exposure()
+                            logger.info("Aborted ongoing exposure")
+                        except Exception:
+                            pass
                     global_camera.disconnect()
                     logger.info("Camera disconnected")
                 except Exception as e:
                     logger.warning(f"Error disconnecting camera: {e}")
             
             logger.info("Calibration workflow stopped by user")
-            sys.exit(0)
+            # Force-terminate the process to avoid blocking threads from external libs
+            os._exit(0)
             
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
@@ -325,6 +334,12 @@ def main():
     
     # Set up signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
+    # On Windows, also handle SIGBREAK (Ctrl+Break) if available
+    if hasattr(signal, 'SIGBREAK'):
+        try:
+            signal.signal(signal.SIGBREAK, signal_handler)
+        except Exception:
+            pass
     
     try:
         # Load configuration
