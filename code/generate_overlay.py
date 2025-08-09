@@ -840,16 +840,45 @@ class OverlayGenerator:
             # Configure SIMBAD with robust field selection (handle Simbad field changes)
             custom_simbad = Simbad()
             custom_simbad.reset_votable_fields()
-            # Prefer explicit dimension fields if available
-            base_fields = ['ra', 'dec', 'V', 'otype', 'main_id',
-                           'dim_majaxis', 'dim_minaxis', 'dim_angle', 'dimensions']
-            # Try adding 'pa' (legacy/alt) but fall back gracefully if not supported
+            # Base fields always safe
+            base_fields = ['ra', 'dec', 'V', 'otype', 'main_id']
+            custom_simbad.add_votable_fields(*base_fields)
+            # Discover available fields dynamically
             try:
-                custom_simbad.add_votable_fields(*(base_fields + ['pa']))
-                pa_supported = True
+                vot = Simbad.list_votable_fields()
+                available = set()
+                try:
+                    # astroquery returns a table-like with 'name' column
+                    for row in vot:
+                        name = str(row['name']).strip()
+                        if name:
+                            available.add(name.lower())
+                except Exception:
+                    pass
             except Exception:
-                custom_simbad.add_votable_fields(*base_fields)
-                pa_supported = False
+                available = set()
+            
+            # Candidate synonyms per quantity
+            maj_candidates = ['dim_majaxis', 'majdiam', 'majdiameter', 'galdim_maj_axis', 'galdim_majaxis']
+            min_candidates = ['dim_minaxis', 'mindiam', 'mindiameter', 'galdim_min_axis', 'galdim_minaxis']
+            ang_candidates = ['dim_angle', 'pa', 'posang', 'galdim_pa']
+            dims_candidates = ['dimensions']
+
+            def pick_and_add(cands):
+                for c in cands:
+                    if c.lower() in available:
+                        try:
+                            custom_simbad.add_votable_fields(c)
+                            return c
+                        except Exception:
+                            continue
+                return None
+
+            picked_maj = pick_and_add(maj_candidates)
+            picked_min = pick_and_add(min_candidates)
+            picked_ang = pick_and_add(ang_candidates)
+            picked_dims = pick_and_add(dims_candidates)
+            pa_supported = (picked_ang is not None and picked_ang.lower() in ['pa', 'dim_angle', 'posang', 'galdim_pa'])
 
             # Radius is half-diagonal of field of view
             radius = ((fov_w**2 + fov_h**2)**0.5) / 2
@@ -944,25 +973,25 @@ class OverlayGenerator:
                         pa = None
                         
                         if should_draw_ellipse:
-                            # Prefer explicit numeric fields first
-                            if 'dim_majaxis' in row.colnames and row['dim_majaxis'] not in (None, '--'):
+                            # Prefer explicit numeric fields first (use whichever we successfully added)
+                            if picked_maj and picked_maj in row.colnames and row[picked_maj] not in (None, '--'):
                                 try:
-                                    dim_maj = float(row['dim_majaxis'])
+                                    dim_maj = float(row[picked_maj])
                                 except Exception:
                                     dim_maj = None
-                            if 'dim_minaxis' in row.colnames and row['dim_minaxis'] not in (None, '--'):
+                            if picked_min and picked_min in row.colnames and row[picked_min] not in (None, '--'):
                                 try:
-                                    dim_min = float(row['dim_minaxis'])
+                                    dim_min = float(row[picked_min])
                                 except Exception:
                                     dim_min = None
-                            if 'dim_angle' in row.colnames and row['dim_angle'] not in (None, '--'):
+                            if picked_ang and picked_ang in row.colnames and row[picked_ang] not in (None, '--'):
                                 try:
-                                    pa = float(row['dim_angle'])
+                                    pa = float(row[picked_ang])
                                 except Exception:
                                     pa = None
 
                             # Fallback to legacy combined string field
-                            if (dim_maj is None or dim_min is None) and 'dimensions' in row.colnames and row['dimensions'] is not None:
+                            if (dim_maj is None or dim_min is None) and ((picked_dims and picked_dims in row.colnames) or 'dimensions' in row.colnames):
                                 dimensions_str = str(row['dimensions'])
                                 if dimensions_str != '--' and dimensions_str.strip():
                                     try:
@@ -978,8 +1007,8 @@ class OverlayGenerator:
                                         pass
 
                             # Final fallback for PA via 'pa' field (if supported)
-                            if pa is None and pa_supported and 'pa' in row.colnames and row['pa'] is not None:
-                                pa_str = str(row['pa'])
+                            if pa is None and picked_ang and picked_ang in row.colnames and row[picked_ang] is not None:
+                                pa_str = str(row[picked_ang])
                                 if pa_str != '--' and pa_str.strip():
                                     try:
                                         pa = float(pa_str)
