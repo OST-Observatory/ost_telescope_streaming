@@ -837,11 +837,19 @@ class OverlayGenerator:
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
-            # Configure SIMBAD with updated field names
+            # Configure SIMBAD with robust field selection (handle Simbad field changes)
             custom_simbad = Simbad()
             custom_simbad.reset_votable_fields()
-            # Use new field names to avoid deprecation warnings
-            custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id', 'dimensions', 'pa')
+            # Prefer explicit dimension fields if available
+            base_fields = ['ra', 'dec', 'V', 'otype', 'main_id',
+                           'dim_majaxis', 'dim_minaxis', 'dim_angle', 'dimensions']
+            # Try adding 'pa' (legacy/alt) but fall back gracefully if not supported
+            try:
+                custom_simbad.add_votable_fields(*(base_fields + ['pa']))
+                pa_supported = True
+            except Exception:
+                custom_simbad.add_votable_fields(*base_fields)
+                pa_supported = False
 
             # Radius is half-diagonal of field of view
             radius = ((fov_w**2 + fov_h**2)**0.5) / 2
@@ -936,36 +944,50 @@ class OverlayGenerator:
                         pa = None
                         
                         if should_draw_ellipse:
-                            # Try to get dimension data
-                            if 'dimensions' in row.colnames and row['dimensions'] is not None:
+                            # Prefer explicit numeric fields first
+                            if 'dim_majaxis' in row.colnames and row['dim_majaxis'] not in (None, '--'):
+                                try:
+                                    dim_maj = float(row['dim_majaxis'])
+                                except Exception:
+                                    dim_maj = None
+                            if 'dim_minaxis' in row.colnames and row['dim_minaxis'] not in (None, '--'):
+                                try:
+                                    dim_min = float(row['dim_minaxis'])
+                                except Exception:
+                                    dim_min = None
+                            if 'dim_angle' in row.colnames and row['dim_angle'] not in (None, '--'):
+                                try:
+                                    pa = float(row['dim_angle'])
+                                except Exception:
+                                    pa = None
+
+                            # Fallback to legacy combined string field
+                            if (dim_maj is None or dim_min is None) and 'dimensions' in row.colnames and row['dimensions'] is not None:
                                 dimensions_str = str(row['dimensions'])
                                 if dimensions_str != '--' and dimensions_str.strip():
-                                    # Parse dimensions string (format: "major_axis x minor_axis")
                                     try:
                                         if 'x' in dimensions_str:
                                             parts = dimensions_str.split('x')
                                             if len(parts) == 2:
-                                                dim_maj = float(parts[0].strip())
-                                                dim_min = float(parts[1].strip())
-                                                has_dimensions = True
+                                                dim_maj = dim_maj or float(parts[0].strip())
+                                                dim_min = dim_min or float(parts[1].strip())
                                         else:
-                                            # Single dimension (circular object)
-                                            dim_maj = float(dimensions_str)
-                                            dim_min = dim_maj
-                                            has_dimensions = True
+                                            dim_maj = dim_maj or float(dimensions_str)
+                                            dim_min = dim_min or dim_maj
                                     except (ValueError, TypeError):
-                                        has_dimensions = False
-                            
-                            # Get position angle if available
-                            if 'pa' in row.colnames and row['pa'] is not None:
+                                        pass
+
+                            # Final fallback for PA via 'pa' field (if supported)
+                            if pa is None and pa_supported and 'pa' in row.colnames and row['pa'] is not None:
                                 pa_str = str(row['pa'])
                                 if pa_str != '--' and pa_str.strip():
                                     try:
                                         pa = float(pa_str)
                                     except (ValueError, TypeError):
-                                        pa = 0.0
-                            else:
-                                pa = 0.0
+                                        pa = None
+
+                            has_dimensions = (dim_maj is not None and dim_min is not None)
+                            pa = pa or 0.0
                         
                         # Draw ellipse if we have dimension data
                         if should_draw_ellipse and has_dimensions and dim_maj is not None and dim_min is not None:
