@@ -628,8 +628,12 @@ class CalibrationApplier:
                                   f"offset={offset}, readout={readout_mode}")
             
             # Determine if calibration was applied
-            calibration_applied = (calibration_details['dark_subtraction_applied'] or 
-                                 calibration_details['flat_correction_applied'])
+            calibration_applied = (
+                calibration_details['dark_subtraction_applied'] or
+                calibration_details['flat_correction_applied']
+            )
+            # Persist this as an explicit flag for downstream consumers
+            calibration_details['calibration_applied'] = calibration_applied
             
             if calibration_applied:
                 self.logger.info(f"Frame calibrated successfully: "
