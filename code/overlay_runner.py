@@ -65,6 +65,11 @@ class OverlayRunner:
         # Retry configuration
         self.max_retries = overlay_config.get('update', {}).get('max_retries', 3)
         self.retry_delay = overlay_config.get('update', {}).get('retry_delay', 5)
+
+        # Filename/timestamp settings for overlay outputs
+        # Keep in runner as it's used for overlay filenames below
+        self.use_timestamps = self.config.get_overlay_config().get('use_timestamps', False)
+        self.timestamp_format = self.config.get_overlay_config().get('timestamp_format', '%Y%m%d_%H%M%S')
         
         # Initialize components
         self._initialize_components()
