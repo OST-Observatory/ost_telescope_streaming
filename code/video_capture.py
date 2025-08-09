@@ -1094,6 +1094,34 @@ class VideoCapture:
                         header['READOUT'] = cfg.get('readout_mode')
                         break
             
+            # Calibration information (if available from upstream calibration)
+            try:
+                if isinstance(frame_details, dict):
+                    dark_applied = bool(frame_details.get('dark_subtraction_applied', False))
+                    flat_applied = bool(frame_details.get('flat_correction_applied', False))
+                    cal_parts = []
+                    if dark_applied:
+                        cal_parts.append('DARK')
+                    if flat_applied:
+                        cal_parts.append('FLAT')
+                    header['DARKCOR'] = dark_applied
+                    header['FLATCOR'] = flat_applied
+                    header['CALSTAT'] = ','.join(cal_parts) if cal_parts else 'NONE'
+
+                    # Master files used (store basename for brevity)
+                    if frame_details.get('master_dark_used'):
+                        try:
+                            header['MSTDARK'] = os.path.basename(str(frame_details.get('master_dark_used')))
+                        except Exception:
+                            header['MSTDARK'] = str(frame_details.get('master_dark_used'))
+                    if frame_details.get('master_flat_used'):
+                        try:
+                            header['MSTFLAT'] = os.path.basename(str(frame_details.get('master_flat_used')))
+                        except Exception:
+                            header['MSTFLAT'] = str(frame_details.get('master_flat_used'))
+            except Exception:
+                pass
+
             # Log warning if exposure time is still missing
             if 'EXPTIME' not in header:
                 self.logger.warning("Could not determine exposure time for FITS header")
