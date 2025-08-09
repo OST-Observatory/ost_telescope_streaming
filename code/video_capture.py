@@ -450,24 +450,22 @@ class VideoCapture:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
     
-    def get_current_frame(self) -> Optional[np.ndarray]:
-        """Returns the last captured frame."""
+    def get_current_frame(self) -> Optional[Any]:
+        """Returns the last captured frame.
+
+        Returns the full Status object when available (to preserve details for
+        FITS headers and calibration metadata). Falls back to raw ndarray for
+        sources that do not produce Status objects (e.g., OpenCV).
+        """
         with self.frame_lock:
             if self.current_frame is None:
                 return None
             
-            # Handle Status objects
-            if hasattr(self.current_frame, 'data'):
-                # It's a Status object, extract the data
-                frame_data = self.current_frame.data
-                if hasattr(frame_data, 'data'):
-                    # Nested Status object
-                    return frame_data.data
-                else:
-                    return frame_data
-            else:
-                # It's direct data
+            # If it's a Status-like object, return it directly to preserve details
+            if hasattr(self.current_frame, 'data') or hasattr(self.current_frame, 'is_success'):
                 return self.current_frame
+            # Otherwise return the raw data (e.g., OpenCV ndarray)
+            return self.current_frame
     
     def capture_single_frame(self) -> CameraStatus:
         """Captures a single frame and returns status.
