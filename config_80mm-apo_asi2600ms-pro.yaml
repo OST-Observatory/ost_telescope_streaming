@@ -155,7 +155,7 @@ overlay:
   # Image size for overlay generation
   image_size: [6248, 4176]  # Full sensor resolution
   # Font size for text
-  font_size: 20
+  font_size: 25
   # Output format for overlays
   output_format: "png"
   # Default filename for overlays
@@ -175,20 +175,20 @@ overlay:
   display:
     object_color: [255, 0, 0]
     text_color: [255, 255, 255]
-    marker_size: 15
-    text_offset: [24, -24]
+    marker_size: 20
+    text_offset: [30, -30]
   
   # Information panel settings
   info_panel:
     enabled: true
     position: "top_right"  # "top_left", "top_right", "bottom_left", "bottom_right"
-    width: 600
+    width: 800
     background_color: [0, 0, 0, 180]  # RGBA with transparency
     border_color: [255, 255, 255, 255]
     border_width: 2
     padding: 10
-    line_spacing: 5
-    font_size: 12
+    line_spacing: 10
+    font_size: 30
     text_color: [255, 255, 255, 255]
     title_color: [255, 255, 0, 255]  # Yellow for title
     show_timestamp: true
@@ -241,7 +241,7 @@ overlay:
       opacity: 180         # Transparency (0-255)
       show_label: true     # Show FOV label
       label_color: [0, 255, 255, 255]  # Label color
-      label_font_size: 10
+      label_font_size: 15
       label_offset: [5, 5]  # Label offset from FOV border
     
     # Position offset (if secondary telescope is not perfectly aligned)
