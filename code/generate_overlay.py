@@ -60,6 +60,10 @@ class OverlayGenerator:
         # Secondary FOV settings
         self.secondary_fov_config = self.overlay_config.get('secondary_fov', {})
         self.secondary_fov_enabled = self.secondary_fov_config.get('enabled', False)
+        # Coordinate handling options
+        coords_cfg = self.overlay_config.get('coordinates', {})
+        # In astronomical convention with north up, RA increases to the left; default True
+        self.ra_increases_left = coords_cfg.get('ra_increases_left', True)
 
     def get_font(self):
         """Loads an available font for the current system."""
@@ -100,8 +104,10 @@ class OverlayGenerator:
         """
         try:
             # Calculate angular separation in arcminutes
-            delta_ra = (obj_coord.ra.degree - center_coord.ra.degree) * \
+            delta_ra_basic = (obj_coord.ra.degree - center_coord.ra.degree) * \
                 u.deg.to(u.arcmin) * np.cos(center_coord.dec.radian)
+            # Apply RA direction convention: RA increases to the left when north is up
+            delta_ra = -delta_ra_basic if self.ra_increases_left else delta_ra_basic
             delta_dec = (obj_coord.dec.degree - center_coord.dec.degree) * u.deg.to(u.arcmin)
 
             # Convert to radians for rotation
