@@ -72,6 +72,11 @@ frame_processing:
   auto_debayer: true  # Auto-debayer color images
   debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
   
+  # Normalization settings for display (OpenCV conversion)
+  normalization:
+    method: zscale    # zscale | hist
+    contrast: 0.15    # zscale contrast parameter
+  
   # Output settings
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files

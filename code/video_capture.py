@@ -1357,13 +1357,9 @@ class VideoCapture:
             else:
                 self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
             
-            # Convert to uint8 for display (if needed)
+            # Normalize to uint8 for display
             if result_image.dtype != np.uint8:
-                if result_image.dtype == np.uint16:
-                    # Apply intelligent scaling for 16-bit to 8-bit conversion
-                    result_image = self._scale_16bit_to_8bit(result_image)
-                else:
-                    result_image = result_image.astype(np.uint8)
+                result_image = self._normalize_to_uint8(result_image)
             
             return result_image
             
@@ -1430,6 +1426,58 @@ class VideoCapture:
             self.logger.warning(f"Intelligent scaling failed: {e}, using fallback")
             # Fallback to simple division
             return (image_16bit / 256).astype(np.uint8)
+
+    def _normalize_to_uint8(self, image: np.ndarray) -> np.ndarray:
+        """Normalize image to uint8 using configurable method (zscale by default).
+
+        For 2D images, apply directly. For 3D images, normalize per-channel.
+        """
+        try:
+            norm_cfg = self.config.get_frame_processing_config().get('normalization', {})
+            method = norm_cfg.get('method', 'zscale').lower()
+            if method == 'zscale':
+                try:
+                    from astropy.visualization import ImageNormalize, ZScaleInterval
+                    contrast = float(norm_cfg.get('contrast', 0.15))
+                    def zscale_channel(ch: np.ndarray) -> np.ndarray:
+                        norm = ImageNormalize(ch.astype(np.float32), interval=ZScaleInterval(contrast=contrast))
+                        arr = norm(ch.astype(np.float32))  # 0..1
+                        return np.clip(arr * 255.0, 0, 255).astype(np.uint8)
+                    if image.ndim == 2:
+                        return zscale_channel(image)
+                    elif image.ndim == 3 and image.shape[2] in (3, 4):
+                        out = np.empty_like(image, dtype=np.uint8)
+                        for c in range(image.shape[2]):
+                            out[:, :, c] = zscale_channel(image[:, :, c])
+                        return out
+                    else:
+                        # Fallback to simple heuristic
+                        method = 'hist'
+                except Exception as e:
+                    self.logger.debug(f"ZScale normalization not available/failed, falling back: {e}")
+                    method = 'hist'
+
+            # Histogram/percentile-based fallback
+            if method in ('hist', 'histogram', 'percentile'):
+                if image.ndim == 2:
+                    return self._scale_16bit_to_8bit(image.astype(np.uint16) if image.dtype != np.uint16 else image)
+                elif image.ndim == 3 and image.shape[2] in (3, 4):
+                    out = np.empty_like(image, dtype=np.uint8)
+                    for c in range(image.shape[2]):
+                        ch = image[:, :, c]
+                        out[:, :, c] = self._scale_16bit_to_8bit(ch.astype(np.uint16) if ch.dtype != np.uint16 else ch)
+                    return out
+                else:
+                    return (image / 256).astype(np.uint8)
+
+            # Default fallback
+            return (image / 256).astype(np.uint8)
+        except Exception as e:
+            self.logger.debug(f"Normalization to uint8 failed, using fallback: {e}")
+            try:
+                return (image / 256).astype(np.uint8)
+            except Exception:
+                return image.astype(np.uint8, copy=False)
 
     def _needs_rotation(self, image_shape: tuple) -> bool:
         """Check if the image needs rotation based on its dimensions.
