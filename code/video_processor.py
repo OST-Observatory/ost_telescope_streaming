@@ -173,7 +173,7 @@ class VideoProcessor:
         # Initialize video capture
         if self.frame_enabled:
             try:
-                self.video_capture = VideoCapture(config=self.config, logger=self.logger)
+                self.video_capture = VideoCapture(config=self.config, logger=self.logger, return_frame_objects=True)
                 self.logger.info("Video capture initialized")
                 # Initialize FrameWriter now that we have camera and type
                 self.frame_writer = FrameWriter(
@@ -430,6 +430,7 @@ class VideoProcessor:
             if frame is None:
                 self.logger.warning("No frame available for capture")
                 return
+            # Keep original object (Status or Frame) so downstream saving retains metadata
             
             self.capture_count += 1
             

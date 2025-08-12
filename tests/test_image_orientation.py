@@ -28,7 +28,7 @@ def test_image_orientation():
     config = get_test_config()
     
     # Create video capture
-    video_capture = VideoCapture(config=config, logger=logger)
+    video_capture = VideoCapture(config=config, logger=logger, return_frame_objects=True)
     
     # Connect to camera
     logger.info("Connecting to ASCOM camera...")

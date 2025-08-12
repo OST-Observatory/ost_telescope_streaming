@@ -29,11 +29,11 @@ from capture.frame import Frame
 
 class VideoCapture:
     """Video capture class for telescope streaming."""
-
-    def __init__(self, config, logger: Optional[logging.Logger] = None, enable_calibration: bool = True) -> None:
+    
+    def __init__(self, config, logger: Optional[logging.Logger] = None, enable_calibration: bool = True, return_frame_objects: bool = False) -> None:
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
-
+        
         # Camera/config state
         frame_config = config.get_frame_processing_config()
         camera_cfg = config.get_camera_config()
@@ -47,32 +47,33 @@ class VideoCapture:
         self.frame_rate = camera_cfg.get('opencv', {}).get('fps', 30)
         self.resolution = camera_cfg.get('opencv', {}).get('resolution', [1920, 1080])
         self.frame_enabled = frame_config.get('enabled', True)
-
+        
         # Cooling configuration
         cooling_config = camera_cfg.get('cooling', {})
         self.enable_cooling = cooling_config.get('enable_cooling', False)
         self.wait_for_cooling = cooling_config.get('wait_for_cooling', True)
         self.cooling_timeout = cooling_config.get('cooling_timeout', 300)
-
+        
         # Runtime camera handles
         self.camera = None
         self.cap = None
         self.cooling_manager = None
-
+        
         # Threading and state
         self.is_capturing = False
         self.capture_thread = None
         self.current_frame = None
         self.frame_lock = threading.Lock()
-
+        
         # Calibration
         self.enable_calibration = enable_calibration
+        self.return_frame_objects = return_frame_objects
         if enable_calibration:
             self.calibration_applier = CalibrationApplier(config, logger)
         else:
             self.calibration_applier = None
             self.logger.info("Calibration disabled for this session")
-
+        
         # Setup
         self._ensure_directories()
         self._initialize_camera()
@@ -85,7 +86,7 @@ class VideoCapture:
                 self.enable_cooling = False
             else:
                 self.logger.warning("Cooling enabled but no compatible camera found")
-
+    
     def _ensure_directories(self) -> None:
         try:
             output_dir = Path(self.config.get_frame_processing_config().get('output_dir', 'captured_frames'))
@@ -94,7 +95,7 @@ class VideoCapture:
             cache_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             self.logger.warning(f"Failed to create output directories: {e}")
-
+    
     def _initialize_camera(self) -> CameraStatus:
         if self.camera_type == 'opencv':
             if cv2 is None:
@@ -112,7 +113,7 @@ class VideoCapture:
             if hasattr(cv2, 'CAP_PROP_GAIN'):
                 self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
             return success_status("Camera connected", details={'camera_index': self.camera_index})
-
+            
         elif self.camera_type == 'ascom':
             cam_cfg = self.config.get_camera_config()
             self.ascom_driver = cam_cfg.get('ascom_driver', None)
@@ -164,7 +165,7 @@ class VideoCapture:
                 return error_status(f"Alpaca camera connection failed: {status.message}", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
         else:
             return error_status(f"Unsupported camera type: {self.camera_type}")
-
+    
     def _initialize_cooling(self) -> CameraStatus:
         if not self.enable_cooling:
             return success_status("Cooling not enabled")
@@ -182,7 +183,7 @@ class VideoCapture:
             return success_status("Cooling initialized successfully")
         except Exception as e:
             return error_status(f"Failed to initialize cooling: {e}")
-
+    
     def start_observation_session(self) -> CameraStatus:
         try:
             if self.enable_cooling:
@@ -198,7 +199,7 @@ class VideoCapture:
             return success_status("Observation session started successfully")
         except Exception as e:
             return error_status(f"Failed to start observation session: {e}")
-
+    
     def end_observation_session(self) -> CameraStatus:
         try:
             if self.cooling_manager and self.cooling_manager.is_cooling:
@@ -208,12 +209,12 @@ class VideoCapture:
             return success_status("Observation session ended successfully")
         except Exception as e:
             return error_status(f"Failed to end observation session: {e}")
-
+    
     def get_cooling_status(self) -> Dict[str, Any]:
         if not self.cooling_manager:
             return {'error': 'Cooling manager not available'}
         return self.cooling_manager.get_cooling_status()
-
+    
     def get_field_of_view(self) -> tuple[float, float]:
         try:
             sensor_width = self.config.get_camera_config().get('sensor_width', 6.17)
@@ -224,7 +225,7 @@ class VideoCapture:
             return (fov_width, fov_height)
         except Exception:
             return (1.5, 1.0)
-
+    
     def get_sampling_arcsec_per_pixel(self) -> float:
         try:
             pixel_size = self.config.get_camera_config().get('pixel_size', 3.75)
@@ -234,7 +235,7 @@ class VideoCapture:
             return sampling
         except Exception:
             return 1.0
-
+    
     def disconnect(self) -> None:
         if self.camera_type == 'opencv':
             if self.cap:
@@ -249,7 +250,7 @@ class VideoCapture:
                 self.camera.disconnect()
                 self.camera = None
         self.logger.info("Camera disconnected")
-
+    
     # Legacy shim for tests expecting a connect() method
     def connect(self):  # pragma: no cover
         return self._initialize_camera()
@@ -283,18 +284,18 @@ class VideoCapture:
                 connect_status = self._initialize_camera()
                 if not connect_status.is_success:
                     return error_status("Failed to connect to Alpaca camera", details={'host': getattr(self, 'alpaca_host', None), 'port': getattr(self, 'alpaca_port', None), 'camera_name': getattr(self, 'alpaca_camera_name', None)})
-
+        
         self.is_capturing = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
         return success_status("Video capture started", details={'camera_type': self.camera_type, 'is_capturing': True})
-
+    
     def stop_capture(self) -> CameraStatus:
         self.is_capturing = False
         if hasattr(self, 'capture_thread') and self.capture_thread:
             self.capture_thread.join(timeout=2.0)
         return success_status("Video capture stopped", details={'camera_type': self.camera_type, 'is_capturing': False})
-
+    
     def _capture_loop(self) -> None:
         while self.is_capturing:
             try:
@@ -331,7 +332,7 @@ class VideoCapture:
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
-
+    
     def get_current_frame(self) -> Optional[Any]:
         with self.frame_lock:
             if self.current_frame is None:
@@ -339,7 +340,7 @@ class VideoCapture:
             if hasattr(self.current_frame, 'data') or hasattr(self.current_frame, 'is_success'):
                 return self.current_frame
             return self.current_frame
-
+    
     def capture_single_frame(self) -> CameraStatus:
         if self.camera_type == 'ascom' and self.camera:
             ascom_config = self.config.get_camera_config().get('ascom', {})
@@ -365,7 +366,7 @@ class VideoCapture:
                 return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
         else:
             return error_status(f"Unsupported camera type: {self.camera_type}")
-
+    
     def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
         if not self.camera:
             return error_status("ASCOM camera not connected")
@@ -430,12 +431,16 @@ class VideoCapture:
             if calibration_status.is_success:
                 calibrated_frame = calibration_status.data
                 frame_details.update(calibration_status.details)
+                if self.return_frame_objects:
+                    return success_status("Frame captured", data=Frame(data=calibrated_frame, metadata=frame_details), details=frame_details)
                 return success_status("Frame captured", data=calibrated_frame, details=frame_details)
             else:
+                if self.return_frame_objects:
+                    return success_status("Frame captured (calibration failed)", data=Frame(data=frame_data, metadata=frame_details), details=frame_details)
                 return success_status("Frame captured (calibration failed)", data=frame_data, details=frame_details)
         except Exception as e:
             return error_status(f"Error capturing ASCOM frame: {e}")
-
+    
     def capture_single_frame_alpaca(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
         if not self.camera:
             return error_status("Alpaca camera not connected")
@@ -473,23 +478,23 @@ class VideoCapture:
             if self.camera.is_color_camera():
                 frame_data = image_data
                 frame_details = {
-                    'exposure_time_s': exposure_time_s,
-                    'gain': gain,
-                    'binning': binning_value,
+                    'exposure_time_s': exposure_time_s, 
+                    'gain': gain, 
+                    'binning': binning_value, 
                     'offset': getattr(self.camera, 'offset', None),
                     'readout_mode': getattr(self.camera, 'readout_mode', None),
-                    'dimensions': f"{effective_width}x{effective_height}",
+                    'dimensions': f"{effective_width}x{effective_height}", 
                     'debayered': True,
                 }
             else:
                 frame_data = image_data
                 frame_details = {
-                    'exposure_time_s': exposure_time_s,
-                    'gain': gain,
-                    'binning': binning_value,
+                    'exposure_time_s': exposure_time_s, 
+                    'gain': gain, 
+                    'binning': binning_value, 
                     'offset': getattr(self.camera, 'offset', None),
                     'readout_mode': getattr(self.camera, 'readout_mode', None),
-                    'dimensions': f"{effective_width}x{effective_height}",
+                    'dimensions': f"{effective_width}x{effective_height}", 
                     'debayered': False,
                 }
             if self.enable_calibration and self.calibration_applier:
@@ -499,12 +504,16 @@ class VideoCapture:
             if calibration_status.is_success:
                 calibrated_frame = calibration_status.data
                 frame_details.update(calibration_status.details)
+                if self.return_frame_objects:
+                    return success_status("Frame captured", data=Frame(data=calibrated_frame, metadata=frame_details), details=frame_details)
                 return success_status("Frame captured", data=calibrated_frame, details=frame_details)
             else:
+                if self.return_frame_objects:
+                    return success_status("Frame captured (calibration failed)", data=Frame(data=frame_data, metadata=frame_details), details=frame_details)
                 return success_status("Frame captured (calibration failed)", data=frame_data, details=frame_details)
         except Exception as e:
             return error_status(f"Error capturing Alpaca frame: {e}")
-
+    
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         try:
             # Prefer centralized FrameWriter for uniform saving behavior
@@ -518,7 +527,7 @@ class VideoCapture:
         except Exception as e:
             camera_id = self.camera_index if hasattr(self, 'camera_index') else getattr(self, 'ascom_driver', None)
             return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
-
+    
     def _save_fits_unified(self, frame: Any, filename: str) -> CameraStatus:
         try:
             # Delegate to FrameWriter for unified FITS saving
@@ -528,30 +537,14 @@ class VideoCapture:
             return writer.save_fits(image_data if image_data is not None else frame, filename, metadata=details)
         except Exception as e:
             return error_status(f"Error saving FITS file: {e}")
-
+    
     def _save_image_file(self, frame: Any, filename: str) -> CameraStatus:
         try:
-            if hasattr(frame, 'data'):
-                frame_data = frame.data
-            else:
-                frame_data = frame
-            if self.camera_type in ['alpaca', 'ascom']:
-                frame = convert_camera_data_to_opencv(frame_data, self.camera, self.config, self.logger)
-            else:
-                frame = frame_data
-            if frame is None:
-                return error_status("Failed to convert camera image to OpenCV format")
-            if not isinstance(frame, np.ndarray):
-                frame = np.array(frame)
-            if frame.dtype != np.uint8:
-                if frame.dtype in [np.float32, np.float64]:
-                    frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255).astype(np.uint8)
-                else:
-                    frame = frame.astype(np.uint8)
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
-            if cv2.imwrite(filename, frame):
-                return success_status("Image file saved", data=filename)
-            return error_status("Failed to save image file")
+            from services.frame_writer import FrameWriter
+            image_data, details = unwrap_status(frame)
+            frame_obj = Frame(data=image_data if image_data is not None else frame, metadata=details or {})
+            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+            return writer.save_image(frame_obj, filename)
         except Exception as e:
             return error_status(f"Error saving image file: {e}")
 
@@ -559,4 +552,4 @@ class VideoCapture:
         if len(image_shape) >= 2:
             height, width = image_shape[0], image_shape[1]
             return height > width
-        return False
+        return False 

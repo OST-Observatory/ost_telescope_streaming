@@ -78,7 +78,7 @@ def main():
         # Note: These updates are now handled by the individual camera classes
         # which read from the correct config sections
         
-        capture = VideoCapture(config=config, logger=logger)
+        capture = VideoCapture(config=config, logger=logger, return_frame_objects=True)
         
         if args.action == 'info':
             # Show camera information

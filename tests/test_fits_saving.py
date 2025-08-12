@@ -95,7 +95,7 @@ def test_video_capture_fits():
         
         # Initialize VideoCapture
         config = ConfigManager(test_config_file)
-        video_capture = VideoCapture(config)
+        video_capture = VideoCapture(config, return_frame_objects=True)
         
         # Create test data
         test_data = np.random.randint(0, 65535, (100, 100), dtype=np.uint16)

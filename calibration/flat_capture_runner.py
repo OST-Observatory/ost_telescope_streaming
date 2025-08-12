@@ -198,7 +198,7 @@ Examples:
         
         # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
-        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False)
+        video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False, return_frame_objects=True)
         
         if not video_capture.initialize():
             logger.error("Failed to initialize video capture")

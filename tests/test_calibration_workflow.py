@@ -39,7 +39,7 @@ def test_camera_connection(config, logger):
         print(f"Testing {camera_type.upper()} camera connection...")
         
         # Create video capture instance
-        capture = VideoCapture(config=config, logger=logger)
+        capture = VideoCapture(config=config, logger=logger, return_frame_objects=True)
         
         # Test connection
         if camera_type == 'opencv':
