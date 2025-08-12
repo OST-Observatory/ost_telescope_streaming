@@ -23,7 +23,7 @@ from calibration_applier import CalibrationApplier
 from utils.fits_utils import enrich_header_from_metadata
 from processing.format_conversion import convert_camera_data_to_opencv
 from utils.status_utils import unwrap_status
-from capture.adapters import AlpacaCameraAdapter, AscomCameraAdapter
+from capture.adapters import AlpacaCameraAdapter, AscomCameraAdapter, OpenCVCameraAdapter
 from capture.frame import Frame
 
 
@@ -112,6 +112,8 @@ class VideoCapture:
                 self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_cv)
             if hasattr(cv2, 'CAP_PROP_GAIN'):
                 self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
+            # Wrap in unified adapter for OpenCV
+            self.camera = OpenCVCameraAdapter(self.cap)
             return success_status("Camera connected", details={'camera_index': self.camera_index})
             
         elif self.camera_type == 'ascom':
@@ -342,47 +344,41 @@ class VideoCapture:
             return self.current_frame
     
     def capture_single_frame(self) -> CameraStatus:
-        if self.camera_type == 'ascom' and self.camera:
-            ascom_config = self.config.get_camera_config().get('ascom', {})
-            exposure_time = ascom_config.get('exposure_time', 1.0)
-            gain = ascom_config.get('gain', None)
-            binning = ascom_config.get('binning', 1)
-            return self.capture_single_frame_ascom(exposure_time, gain, binning)
-        elif self.camera_type == 'alpaca' and self.camera:
-            alpaca_config = self.config.get_camera_config().get('alpaca', {})
-            exposure_time = alpaca_config.get('exposure_time', 1.0)
-            gain = alpaca_config.get('gain', None)
-            binning = alpaca_config.get('binning', [1, 1])
-            return self.capture_single_frame_alpaca(exposure_time, gain, binning)
-        elif self.camera_type == 'opencv':
-            if not self.cap or not self.cap.isOpened():
-                init_status = self._initialize_camera()
-                if not init_status or (hasattr(init_status, 'is_success') and not init_status.is_success):
-                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
-            ret, frame = self.cap.read()
-            if ret:
-                return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
-            else:
-                return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
-        else:
-            return error_status(f"Unsupported camera type: {self.camera_type}")
-    
-    def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
+        # Unified single-frame capture via adapter
         if not self.camera:
-            return error_status("ASCOM camera not connected")
+            init_status = self._initialize_camera()
+            if not init_status or (hasattr(init_status, 'is_success') and not init_status.is_success):
+                return error_status("Failed to connect to camera")
+        # Choose exposure/gain/binning from appropriate config block
+        cam_cfg = self.config.get_camera_config()
+        if self.camera_type == 'alpaca':
+            section = cam_cfg.get('alpaca', {})
+            binning = section.get('binning', [1, 1])
+        elif self.camera_type == 'ascom':
+            section = cam_cfg.get('ascom', {})
+            binning = section.get('binning', 1)
+        else:
+            section = cam_cfg.get('opencv', {})
+            binning = 1
+        exposure_time = section.get('exposure_time', 1.0)
+        gain = section.get('gain', None)
+        return self.capture_single_frame_generic(exposure_time, gain, binning)
+
+    def capture_single_frame_generic(self, exposure_time_s: float, gain: Optional[float] = None, binning: int | list[int] = 1) -> CameraStatus:
+        if not self.camera:
+            return error_status("Camera not connected")
         try:
-            # Set parameters via adapter when available
-            if gain is None:
-                gain = self.gain
+            # Set parameters if supported
             try:
-                if gain is not None:
+                if gain is None:
+                    gain = self.gain
+                if gain is not None and hasattr(self.camera, 'gain'):
                     self.camera.gain = gain  # type: ignore[attr-defined]
                 if isinstance(binning, list):
                     binning_value = binning[0] if len(binning) > 0 else 1
                 else:
                     binning_value = int(binning)
                 if binning_value != 1:
-                    # Best-effort set binning if supported
                     if hasattr(self.camera, 'bin_x'):
                         self.camera.bin_x = binning_value  # type: ignore[attr-defined]
                     if hasattr(self.camera, 'bin_y'):
@@ -391,30 +387,34 @@ class VideoCapture:
                     self.camera.offset = self.offset  # type: ignore[attr-defined]
                 if hasattr(self.camera, 'readout_mode'):
                     self.camera.readout_mode = self.readout_mode  # type: ignore[attr-defined]
-            except Exception as e:
-                self.logger.warning(f"Could not set ASCOM camera parameters: {e}")
+            except Exception as param_e:
+                self.logger.debug(f"Non-fatal: could not set some camera parameters: {param_e}")
 
-            # Start exposure using adapter
-            try:
-                self.camera.start_exposure(exposure_time_s, light=True)  # type: ignore[attr-defined]
-            except Exception as e:
-                return error_status(f"Failed to start ASCOM exposure: {e}")
+            # Start exposure
+            self.camera.start_exposure(exposure_time_s, light=True)  # type: ignore[attr-defined]
 
-            # ASCOM adapter returns image_array from get_image_array()
-            # Wait a minimal time; in real ASCOM flow we would poll image_ready
-            time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
-            image_data = None
-            try:
+            # Wait for image readiness depending on camera type
+            if self.camera_type == 'alpaca':
+                start_time = time.time()
+                timeout = exposure_time_s + 30
+                while not getattr(self.camera, 'image_ready', False):  # type: ignore[attr-defined]
+                    time.sleep(0.1)
+                    if time.time() - start_time > timeout:
+                        return error_status("Exposure timeout")
                 image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
-            except Exception as e:
-                return error_status(f"Failed to get ASCOM image: {e}")
+            elif self.camera_type == 'ascom':
+                # Best-effort minimal wait for ASCOM expose/get_image pattern
+                time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
+                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
+            else:
+                # OpenCV adapter snapshots immediately
+                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
+
             if image_data is None:
-                return error_status("Failed to get image data from ASCOM camera")
+                return error_status("Failed to get image data from camera")
 
             effective_width = getattr(self.camera, 'camera_x_size', self.resolution[0])  # type: ignore[attr-defined]
             effective_height = getattr(self.camera, 'camera_y_size', self.resolution[1])  # type: ignore[attr-defined]
-            # Build frame details
-            frame_data = image_data
             frame_details = {
                 'exposure_time_s': exposure_time_s,
                 'gain': gain,
@@ -424,10 +424,13 @@ class VideoCapture:
                 'dimensions': f"{effective_width}x{effective_height}",
                 'debayered': bool(getattr(self.camera, 'is_color_camera', lambda: False)()),
             }
+
+            frame_data = image_data
             if self.enable_calibration and self.calibration_applier:
                 calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
             else:
                 calibration_status = success_status("Calibration skipped", data=frame_data, details={'calibration_applied': False})
+
             if calibration_status.is_success:
                 calibrated_frame = calibration_status.data
                 frame_details.update(calibration_status.details)
@@ -439,80 +442,13 @@ class VideoCapture:
                     return success_status("Frame captured (calibration failed)", data=Frame(data=frame_data, metadata=frame_details), details=frame_details)
                 return success_status("Frame captured (calibration failed)", data=frame_data, details=frame_details)
         except Exception as e:
-            return error_status(f"Error capturing ASCOM frame: {e}")
+            return error_status(f"Error capturing frame: {e}")
+    
+    def capture_single_frame_ascom(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
+        return self.capture_single_frame_generic(exposure_time_s, gain, binning)
     
     def capture_single_frame_alpaca(self, exposure_time_s: float, gain: Optional[float] = None, binning: int = 1) -> CameraStatus:
-        if not self.camera:
-            return error_status("Alpaca camera not connected")
-        try:
-            if gain is None:
-                gain = self.gain
-            try:
-                if gain is not None:
-                    self.camera.gain = gain
-                if isinstance(binning, list):
-                    binning_value = binning[0] if len(binning) > 0 else 1
-                else:
-                    binning_value = int(binning)
-                if binning_value != 1:
-                    self.camera.bin_x = binning_value
-                    self.camera.bin_y = binning_value
-                if hasattr(self.camera, 'offset'):
-                    self.camera.offset = self.offset
-                if hasattr(self.camera, 'readout_mode'):
-                    self.camera.readout_mode = self.readout_mode
-            except Exception as e:
-                self.logger.warning(f"Could not set camera parameters: {e}")
-            self.camera.start_exposure(exposure_time_s, light=True)
-            start_time = time.time()
-            timeout = exposure_time_s + 30
-            while not self.camera.image_ready:
-                time.sleep(0.1)
-                if time.time() - start_time > timeout:
-                    return error_status("Exposure timeout")
-            image_data = self.camera.get_image_array()
-            if image_data is None:
-                return error_status("Failed to get image data from Alpaca camera")
-            effective_width = self.camera.camera_x_size
-            effective_height = self.camera.camera_y_size
-            if self.camera.is_color_camera():
-                frame_data = image_data
-                frame_details = {
-                    'exposure_time_s': exposure_time_s, 
-                    'gain': gain, 
-                    'binning': binning_value, 
-                    'offset': getattr(self.camera, 'offset', None),
-                    'readout_mode': getattr(self.camera, 'readout_mode', None),
-                    'dimensions': f"{effective_width}x{effective_height}", 
-                    'debayered': True,
-                }
-            else:
-                frame_data = image_data
-                frame_details = {
-                    'exposure_time_s': exposure_time_s, 
-                    'gain': gain, 
-                    'binning': binning_value, 
-                    'offset': getattr(self.camera, 'offset', None),
-                    'readout_mode': getattr(self.camera, 'readout_mode', None),
-                    'dimensions': f"{effective_width}x{effective_height}", 
-                    'debayered': False,
-                }
-            if self.enable_calibration and self.calibration_applier:
-                calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
-            else:
-                calibration_status = success_status("Calibration skipped", data=frame_data, details={'calibration_applied': False})
-            if calibration_status.is_success:
-                calibrated_frame = calibration_status.data
-                frame_details.update(calibration_status.details)
-                if self.return_frame_objects:
-                    return success_status("Frame captured", data=Frame(data=calibrated_frame, metadata=frame_details), details=frame_details)
-                return success_status("Frame captured", data=calibrated_frame, details=frame_details)
-            else:
-                if self.return_frame_objects:
-                    return success_status("Frame captured (calibration failed)", data=Frame(data=frame_data, metadata=frame_details), details=frame_details)
-                return success_status("Frame captured (calibration failed)", data=frame_data, details=frame_details)
-        except Exception as e:
-            return error_status(f"Error capturing Alpaca frame: {e}")
+        return self.capture_single_frame_generic(exposure_time_s, gain, binning)
     
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         try:
@@ -538,18 +474,4 @@ class VideoCapture:
         except Exception as e:
             return error_status(f"Error saving FITS file: {e}")
     
-    def _save_image_file(self, frame: Any, filename: str) -> CameraStatus:
-        try:
-            from services.frame_writer import FrameWriter
-            image_data, details = unwrap_status(frame)
-            frame_obj = Frame(data=image_data if image_data is not None else frame, metadata=details or {})
-            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
-            return writer.save_image(frame_obj, filename)
-        except Exception as e:
-            return error_status(f"Error saving image file: {e}")
-
-    def _needs_rotation(self, image_shape: tuple) -> bool:
-        if len(image_shape) >= 2:
-            height, width = image_shape[0], image_shape[1]
-            return height > width
-        return False 
+    # Note: Image saving is fully delegated to FrameWriter via save_frame().

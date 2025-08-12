@@ -102,7 +102,7 @@ def test_video_capture_fits():
         
         # Test FITS saving
         test_filename = "test_video_capture.fits"
-        status = video_capture._save_fits_unified(test_data, test_filename)
+        status = video_capture.save_frame(test_data, test_filename)
         
         if status.is_success:
             print(f"✅ VideoCapture FITS saving successful: {test_filename}")

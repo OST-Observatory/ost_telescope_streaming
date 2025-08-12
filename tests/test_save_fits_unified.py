@@ -71,7 +71,8 @@ def test_save_fits_unified_writes_header_and_data(tmp_path):
     status = success_status("frame", data=img, details=details)
 
     out_file = tmp_path / "test_frame.fits"
-    save_status = vc._save_fits_unified(status, str(out_file))
+    # Use public save_frame which delegates to FrameWriter
+    save_status = vc.save_frame(status, str(out_file))
     assert save_status.is_success
     assert out_file.exists()
 

@@ -386,7 +386,7 @@ class CalibrationApplier:
     
     def calibrate_frame(
         self,
-        frame_data: np.ndarray,
+        frame_data: Any,
         exposure_time: Optional[float] = None,
         frame_info: Optional[Dict[str, Any]] = None,
         *,
@@ -404,6 +404,19 @@ class CalibrationApplier:
             Status: Success or error status with calibrated frame data
         """
         try:
+            # If caller provided a Frame dataclass, merge its metadata
+            try:
+                if frame_info is None and hasattr(frame_data, 'metadata'):
+                    meta = getattr(frame_data, 'metadata')
+                    if isinstance(meta, dict):
+                        frame_info = {**meta}
+                if exposure_time is None and hasattr(frame_data, 'metadata'):
+                    meta = getattr(frame_data, 'metadata') or {}
+                    if isinstance(meta, dict):
+                        exposure_time = meta.get('exposure_time_s') or meta.get('exposure_time') or exposure_time
+            except Exception:
+                pass
+
             # Backward-compat: allow exposure_time_s/frame_details keyword names
             if exposure_time is None and exposure_time_s is not None:
                 exposure_time = exposure_time_s
@@ -449,6 +462,9 @@ class CalibrationApplier:
                 if hasattr(raw, 'data'):
                     raw = raw.data
                     continue
+                if hasattr(raw, 'metadata'):
+                    # Metadata already merged above, nothing to do here
+                    pass
                 if isinstance(raw, list):
                     raw = np.array(raw)
                 break

@@ -429,6 +429,7 @@ class OverlayRunner:
                                             combined_file = "combined.png"
                                         
                                         # Combine overlay with captured image
+                                        # Combine overlay with image; FITS headers will be preserved via FrameWriter
                                         combine_status = self.video_processor.combine_overlay_with_image(
                                             latest_frame, overlay_file, combined_file
                                         )

@@ -42,6 +42,7 @@ import numpy as np
 from video_capture import VideoCapture
 from plate_solver import PlateSolverFactory, PlateSolveResult
 from services.frame_writer import FrameWriter
+from utils.status_utils import unwrap_status
 
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
@@ -137,6 +138,7 @@ class VideoProcessor:
         self.capture_count: int = 0
         self.solve_count: int = 0
         self.successful_solves: int = 0
+        self.last_frame_metadata: Optional[dict[str, Any]] = None
         
         # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
@@ -430,7 +432,13 @@ class VideoProcessor:
             if frame is None:
                 self.logger.warning("No frame available for capture")
                 return
-            # Keep original object (Status or Frame) so downstream saving retains metadata
+            # Capture and store frame metadata for downstream consumers
+            try:
+                _, details = unwrap_status(frame)
+                if isinstance(details, dict) and details:
+                    self.last_frame_metadata = details
+            except Exception:
+                pass
             
             self.capture_count += 1
             

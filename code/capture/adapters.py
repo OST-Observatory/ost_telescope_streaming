@@ -173,3 +173,101 @@ class AscomCameraAdapter(CameraInterface):
     @property
     def name(self) -> Optional[str]:
         return getattr(self._cam, 'name', None)
+
+
+class OpenCVCameraAdapter(CameraInterface):
+    """Adapter for OpenCV cameras to match CameraInterface for live view and snapshots."""
+    def __init__(self, cap) -> None:
+        self._cap = cap
+        self._last_frame = None
+
+    def connect(self) -> Any:
+        return True
+
+    def disconnect(self) -> None:
+        try:
+            if self._cap:
+                self._cap.release()
+        except Exception:
+            pass
+
+    def start_exposure(self, exposure_time_s: float, light: bool = True) -> None:
+        # For OpenCV, we simulate immediate exposure and grab a frame
+        if self._cap and self._cap.isOpened():
+            ret, frame = self._cap.read()
+            if ret:
+                self._last_frame = frame
+
+    @property
+    def image_ready(self) -> bool:
+        return self._last_frame is not None
+
+    def get_image_array(self) -> Any:
+        img = self._last_frame
+        self._last_frame = None
+        return img
+
+    @property
+    def gain(self) -> Optional[float]:
+        return None
+
+    @gain.setter
+    def gain(self, value: float) -> None:
+        pass
+
+    @property
+    def offset(self) -> Optional[int]:
+        return None
+
+    @offset.setter
+    def offset(self, value: int) -> None:
+        pass
+
+    @property
+    def readout_mode(self) -> Optional[int]:
+        return None
+
+    @readout_mode.setter
+    def readout_mode(self, value: int) -> None:
+        pass
+
+    @property
+    def bin_x(self) -> Optional[int]:
+        return None
+
+    @bin_x.setter
+    def bin_x(self, value: int) -> None:
+        pass
+
+    @property
+    def bin_y(self) -> Optional[int]:
+        return None
+
+    @bin_y.setter
+    def bin_y(self, value: int) -> None:
+        pass
+
+    def is_color_camera(self) -> bool:
+        return True
+
+    @property
+    def sensor_type(self) -> Optional[str]:
+        return None
+
+    @property
+    def camera_x_size(self) -> int:
+        try:
+            return int(self._cap.get(3))  # CAP_PROP_FRAME_WIDTH
+        except Exception:
+            return 0
+
+    @property
+    def camera_y_size(self) -> int:
+        try:
+            return int(self._cap.get(4))  # CAP_PROP_FRAME_HEIGHT
+        except Exception:
+            return 0
+
+    @property
+    def name(self) -> Optional[str]:
+        return "OpenCV Camera"

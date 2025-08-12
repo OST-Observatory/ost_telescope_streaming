@@ -27,19 +27,25 @@ def unwrap_status(value: Any, max_depth: int = 5) -> Tuple[Any, Dict[str, Any]]:
     current = value
     depth = 0
 
-    # Pull top-level details if present
+    # Pull top-level details/metadata if present
     details = getattr(current, 'details', None)
     if isinstance(details, dict):
         merged_details.update(details)
+    metadata = getattr(current, 'metadata', None)
+    if isinstance(metadata, dict):
+        merged_details.update(metadata)
 
     while depth < max_depth and hasattr(current, 'data'):
         parent = current
         current = getattr(current, 'data')
         depth += 1
-        # Merge details at this level if any
+        # Merge details/metadata at this level if any
         details = getattr(parent, 'details', None)
         if isinstance(details, dict):
             merged_details.update(details)
+        metadata = getattr(parent, 'metadata', None)
+        if isinstance(metadata, dict):
+            merged_details.update(metadata)
 
     return current, merged_details
 

@@ -452,7 +452,7 @@ class DarkCapture:
                         self.logger.error(f"Frame data is not a numpy array before saving: {type(frame_data)}")
                         continue
                     
-                    save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
+                    save_status = self.video_capture.save_frame(frame_with_details, filepath)
                     
                     if save_status is None:
                         self.logger.warning(f"Failed to save dark {i+1}: save_status is None")

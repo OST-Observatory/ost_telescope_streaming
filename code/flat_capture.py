@@ -576,12 +576,10 @@ class FlatCapture:
                     if 'binning' not in frame_details and binning is not None:
                         frame_details['binning'] = binning
                     
-                    # Create a Status object with both data and details for FITS saving
+                    # Save the frame directly as FITS with proper details
                     from status import success_status
                     frame_with_details = success_status("Frame captured", data=frame_data, details=frame_details)
-                    
-                    # Save the frame directly as FITS with proper details
-                    save_status = self.video_capture._save_fits_unified(frame_with_details, filepath)
+                    save_status = self.video_capture.save_frame(frame_with_details, filepath)
                     if save_status.is_success:
                         captured_files.append(filepath)
                         self.logger.debug(f"Captured flat {i+1}/{self.num_flats}: {filename} (exposure: {self.current_exposure:.3f}s)")
