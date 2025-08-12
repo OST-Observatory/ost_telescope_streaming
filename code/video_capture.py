@@ -22,6 +22,7 @@ from ascom_camera import ASCOMCamera
 from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
 from utils.fits_utils import enrich_header_from_metadata
+from processing.normalization import normalize_to_uint8, scale_16bit_to_8bit
 from utils.status_utils import unwrap_status
 
 class VideoCapture:
@@ -1204,7 +1205,7 @@ class VideoCapture:
             
             # Normalize to uint8 for display
             if result_image.dtype != np.uint8:
-                result_image = self._normalize_to_uint8(result_image)
+                result_image = normalize_to_uint8(result_image, self.config, self.logger)
             
             return result_image
             
@@ -1212,117 +1213,7 @@ class VideoCapture:
             self.logger.error(f"Error converting image to OpenCV format: {e}")
             return None
 
-    def _scale_16bit_to_8bit(self, image_16bit: np.ndarray) -> np.ndarray:
-        """Intelligently scale 16-bit image to 8-bit for display.
-        
-        Uses histogram-based scaling to preserve image details and avoid
-        completely black or white images.
-        
-        Args:
-            image_16bit: 16-bit image array (uint16)
-            
-        Returns:
-            np.ndarray: 8-bit image array (uint8)
-        """
-        try:
-            # Calculate histogram to understand data distribution
-            hist, bins = np.histogram(image_16bit.flatten(), bins=256, range=(0, 65535))
-            
-            # Find the 1st and 99th percentiles to avoid outliers
-            cumulative_hist = np.cumsum(hist)
-            total_pixels = cumulative_hist[-1]
-            
-            # Find 1st percentile (lower bound)
-            lower_percentile = 0.01
-            lower_idx = np.searchsorted(cumulative_hist, total_pixels * lower_percentile)
-            lower_bound = bins[lower_idx] if lower_idx < len(bins) else 0
-            
-            # Find 99th percentile (upper bound)
-            upper_percentile = 0.99
-            upper_idx = np.searchsorted(cumulative_hist, total_pixels * upper_percentile)
-            upper_bound = bins[upper_idx] if upper_idx < len(bins) else 65535
-            
-            # Ensure we have a reasonable range
-            if upper_bound <= lower_bound:
-                # Fallback to min/max if percentiles are too close
-                lower_bound = image_16bit.min()
-                upper_bound = image_16bit.max()
-                if upper_bound <= lower_bound:
-                    # If still no range, use full 16-bit range
-                    lower_bound = 0
-                    upper_bound = 65535
-            
-            # Apply contrast stretching
-            range_16bit = upper_bound - lower_bound
-            if range_16bit > 0:
-                # Scale to 0-255 range
-                image_8bit = np.clip(((image_16bit.astype(np.float32) - lower_bound) / range_16bit) * 255, 0, 255).astype(np.uint8)
-            else:
-                # Fallback to simple division
-                image_8bit = (image_16bit / 256).astype(np.uint8)
-            
-            # Log scaling information for debugging
-            self.logger.debug(f"16-bit to 8-bit scaling: range={lower_bound:.0f}-{upper_bound:.0f}, "
-                            f"output range={image_8bit.min()}-{image_8bit.max()}")
-            
-            return image_8bit
-            
-        except Exception as e:
-            self.logger.warning(f"Intelligent scaling failed: {e}, using fallback")
-            # Fallback to simple division
-            return (image_16bit / 256).astype(np.uint8)
-
-    def _normalize_to_uint8(self, image: np.ndarray) -> np.ndarray:
-        """Normalize image to uint8 using configurable method (zscale by default).
-
-        For 2D images, apply directly. For 3D images, normalize per-channel.
-        """
-        try:
-            norm_cfg = self.config.get_frame_processing_config().get('normalization', {})
-            method = norm_cfg.get('method', 'zscale').lower()
-            if method == 'zscale':
-                try:
-                    from astropy.visualization import ImageNormalize, ZScaleInterval
-                    contrast = float(norm_cfg.get('contrast', 0.15))
-                    def zscale_channel(ch: np.ndarray) -> np.ndarray:
-                        norm = ImageNormalize(ch.astype(np.float32), interval=ZScaleInterval(contrast=contrast))
-                        arr = norm(ch.astype(np.float32))  # 0..1
-                        return np.clip(arr * 255.0, 0, 255).astype(np.uint8)
-                    if image.ndim == 2:
-                        return zscale_channel(image)
-                    elif image.ndim == 3 and image.shape[2] in (3, 4):
-                        out = np.empty_like(image, dtype=np.uint8)
-                        for c in range(image.shape[2]):
-                            out[:, :, c] = zscale_channel(image[:, :, c])
-                        return out
-                    else:
-                        # Fallback to simple heuristic
-                        method = 'hist'
-                except Exception as e:
-                    self.logger.debug(f"ZScale normalization not available/failed, falling back: {e}")
-                    method = 'hist'
-
-            # Histogram/percentile-based fallback
-            if method in ('hist', 'histogram', 'percentile'):
-                if image.ndim == 2:
-                    return self._scale_16bit_to_8bit(image.astype(np.uint16) if image.dtype != np.uint16 else image)
-                elif image.ndim == 3 and image.shape[2] in (3, 4):
-                    out = np.empty_like(image, dtype=np.uint8)
-                    for c in range(image.shape[2]):
-                        ch = image[:, :, c]
-                        out[:, :, c] = self._scale_16bit_to_8bit(ch.astype(np.uint16) if ch.dtype != np.uint16 else ch)
-                    return out
-                else:
-                    return (image / 256).astype(np.uint8)
-
-            # Default fallback
-            return (image / 256).astype(np.uint8)
-        except Exception as e:
-            self.logger.debug(f"Normalization to uint8 failed, using fallback: {e}")
-            try:
-                return (image / 256).astype(np.uint8)
-            except Exception:
-                return image.astype(np.uint8, copy=False)
+    # removed in favor of processing.normalization
 
     def _needs_rotation(self, image_shape: tuple) -> bool:
         """Check if the image needs rotation based on its dimensions.
