@@ -47,13 +47,13 @@ master_frames:
 
 ```bash
 # Create all master frames (darks and flats)
-python master_frame_runner.py --config config_master_frames.yaml
+python calibration/master_frame_runner.py --config config_master_frames.yaml
 
 # Create only master darks
-python master_frame_runner.py --config config_master_frames.yaml --darks-only
+python calibration/master_frame_runner.py --config config_master_frames.yaml --darks-only
 
 # Create only master flats
-python master_frame_runner.py --config config_master_frames.yaml --flats-only
+python calibration/master_frame_runner.py --config config_master_frames.yaml --flats-only
 ```
 
 ## Configuration Options
@@ -75,7 +75,7 @@ python master_frame_runner.py --config config_master_frames.yaml --flats-only
 ### Command Line Options
 
 ```bash
-python master_frame_runner.py [OPTIONS]
+python calibration/master_frame_runner.py [OPTIONS]
 
 Options:
   --config CONFIG_FILE        Configuration file path
@@ -204,14 +204,14 @@ def normalize_max(master_flat):
 
 ```bash
 # Create all master frames
-python master_frame_runner.py --config config_master_frames.yaml
+python calibration/master_frame_runner.py --config config_master_frames.yaml
 ```
 
 ### Master Darks Only
 
 ```bash
 # Create only master darks
-python master_frame_runner.py \
+python calibration/master_frame_runner.py \
   --config config_master_frames.yaml \
   --darks-only
 ```
@@ -220,7 +220,7 @@ python master_frame_runner.py \
 
 ```bash
 # Create only master flats
-python master_frame_runner.py \
+python calibration/master_frame_runner.py \
   --config config_master_frames.yaml \
   --flats-only
 ```
@@ -229,7 +229,7 @@ python master_frame_runner.py \
 
 ```bash
 # Use min/max rejection instead of sigma clipping
-python master_frame_runner.py \
+python calibration/master_frame_runner.py \
   --config config_master_frames.yaml \
   --rejection-method minmax
 ```
@@ -238,7 +238,7 @@ python master_frame_runner.py \
 
 ```bash
 # Use custom sigma threshold
-python master_frame_runner.py \
+python calibration/master_frame_runner.py \
   --config config_master_frames.yaml \
   --sigma-threshold 2.5
 ```
@@ -247,7 +247,7 @@ python master_frame_runner.py \
 
 ```bash
 # Use median normalization for master flats
-python master_frame_runner.py \
+python calibration/master_frame_runner.py \
   --config config_master_frames.yaml \
   --normalization-method median
 ```
@@ -386,7 +386,7 @@ The system provides detailed status information including:
 Enable debug logging to get detailed information:
 
 ```bash
-python master_frame_runner.py --config config_master_frames.yaml --debug
+python calibration/master_frame_runner.py --config config_master_frames.yaml --debug
 ```
 
 This will show:

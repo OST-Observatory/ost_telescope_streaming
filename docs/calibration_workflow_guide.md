@@ -58,20 +58,20 @@ video:
 
 ```bash
 # Complete calibration workflow
-python calibration_workflow.py --config config_calibration_frames.yaml
+python calibration/calibration_workflow.py --config config_calibration_frames.yaml
 ```
 
 ### 3. Run Individual Steps
 
 ```bash
 # Dark capture only
-python calibration_workflow.py --config config_calibration_frames.yaml --step darks
+python calibration/calibration_workflow.py --config config_calibration_frames.yaml --step darks
 
 # Flat capture only
-python calibration_workflow.py --config config_calibration_frames.yaml --step flats
+python calibration/calibration_workflow.py --config config_calibration_frames.yaml --step flats
 
 # Master frame creation only
-python calibration_workflow.py --config config_calibration_frames.yaml --step masters
+python calibration/calibration_workflow.py --config config_calibration_frames.yaml --step masters
 ```
 
 ## Configuration Options
@@ -159,7 +159,7 @@ python calibration_workflow.py --config config_calibration_frames.yaml --step ma
 
 ```bash
 # Run complete workflow without confirmations
-python calibration_workflow.py \
+python calibration/calibration_workflow.py \
   --config config_calibration_frames.yaml \
   --no-confirm
 ```
@@ -168,7 +168,7 @@ python calibration_workflow.py \
 
 ```bash
 # Enable debug logging
-python calibration_workflow.py \
+python calibration/calibration_workflow.py \
   --config config_calibration_frames.yaml \
   --debug
 ```
@@ -235,7 +235,7 @@ result = master_creator.create_all_master_frames()
 ```
 project_root/
 ├── config_calibration_frames.yaml    # Unified configuration
-├── calibration_workflow.py           # Main workflow script
+├── calibration/calibration_workflow.py           # Main workflow script
 ├── darks/                            # Dark frame output
 │   ├── exp_0.001s/                   # Bias frames (1ms)
 │   ├── exp_1.000s/                   # Flat darks (1s)
@@ -342,7 +342,7 @@ project_root/
 Enable debug logging for detailed information:
 
 ```bash
-python calibration_workflow.py --config config_calibration_frames.yaml --debug
+python calibration/calibration_workflow.py --config config_calibration_frames.yaml --debug
 ```
 
 This will show:
@@ -377,13 +377,13 @@ Individual scripts still work with the unified config:
 
 ```bash
 # Dark capture with unified config
-python dark_capture_runner.py --config config_calibration_frames.yaml
+python calibration/dark_capture_runner.py --config config_calibration_frames.yaml
 
 # Flat capture with unified config
-python flat_capture_runner.py --config config_calibration_frames.yaml
+python calibration/flat_capture_runner.py --config config_calibration_frames.yaml
 
 # Master frame creation with unified config
-python master_frame_runner.py --config config_calibration_frames.yaml
+python calibration/master_frame_runner.py --config config_calibration_frames.yaml
 ```
 
 ## Benefits

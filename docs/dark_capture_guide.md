@@ -44,13 +44,13 @@ dark_capture:
 
 ```bash
 # Complete dark capture (all exposure times)
-python dark_capture_runner.py --config config_dark_capture.yaml
+python calibration/dark_capture_runner.py --config config_dark_capture.yaml
 
 # Bias frames only
-python dark_capture_runner.py --config config_dark_capture.yaml --bias-only
+python calibration/dark_capture_runner.py --config config_dark_capture.yaml --bias-only
 
 # Science darks only
-python dark_capture_runner.py --config config_dark_capture.yaml --science-only
+python calibration/dark_capture_runner.py --config config_dark_capture.yaml --science-only
 ```
 
 ## Configuration Options
@@ -70,7 +70,7 @@ python dark_capture_runner.py --config config_dark_capture.yaml --science-only
 ### Command Line Options
 
 ```bash
-python dark_capture_runner.py [OPTIONS]
+python calibration/dark_capture_runner.py [OPTIONS]
 
 Options:
   --config CONFIG_FILE        Configuration file path
@@ -132,14 +132,14 @@ darks/
 
 ```bash
 # Capture darks for all exposure times
-python dark_capture_runner.py --config config_dark_capture.yaml
+python calibration/dark_capture_runner.py --config config_dark_capture.yaml
 ```
 
 ### Bias Frames Only
 
 ```bash
 # Capture only bias frames (1ms exposure)
-python dark_capture_runner.py \
+python calibration/dark_capture_runner.py \
   --config config_dark_capture.yaml \
   --bias-only
 ```
@@ -148,7 +148,7 @@ python dark_capture_runner.py \
 
 ```bash
 # Capture only science exposure darks
-python dark_capture_runner.py \
+python calibration/dark_capture_runner.py \
   --config config_dark_capture.yaml \
   --science-only
 ```
@@ -157,7 +157,7 @@ python dark_capture_runner.py \
 
 ```bash
 # Custom number of darks and science exposure time
-python dark_capture_runner.py \
+python calibration/dark_capture_runner.py \
   --config config_dark_capture.yaml \
   --num-darks 30 \
   --science-exposure-time 2.0
@@ -167,7 +167,7 @@ python dark_capture_runner.py \
 
 ```bash
 # Enable debug logging for troubleshooting
-python dark_capture_runner.py \
+python calibration/dark_capture_runner.py \
   --config config_dark_capture.yaml \
   --debug
 ```
@@ -271,7 +271,7 @@ The system provides detailed status information including:
 Enable debug logging to get detailed information:
 
 ```bash
-python dark_capture_runner.py --config config_dark_capture.yaml --debug
+python calibration/dark_capture_runner.py --config config_dark_capture.yaml --debug
 ```
 
 This will show:

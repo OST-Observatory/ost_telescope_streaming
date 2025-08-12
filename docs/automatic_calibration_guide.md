@@ -230,16 +230,16 @@ video:
 ```bash
 # 1. Set camera settings for science imaging
 # 2. Capture bias frames (same settings, 0.001s exposure)
-python dark_capture_runner.py --bias-only
+python calibration/dark_capture_runner.py --bias-only
 
 # 3. Capture dark frames (same settings, various exposures)
-python dark_capture_runner.py
+python calibration/dark_capture_runner.py
 
 # 4. Capture flat frames (same settings, optimized exposure)
-python flat_capture_runner.py
+python calibration/flat_capture_runner.py
 
 # 5. Create master frames
-python master_frame_runner.py
+python calibration/master_frame_runner.py
 
 # 6. Start science imaging (automatic calibration applied)
 python overlay_runner.py

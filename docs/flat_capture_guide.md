@@ -45,13 +45,13 @@ flat_capture:
 
 ```bash
 # Basic usage
-python flat_capture_runner.py --config config_flat_capture.yaml
+python calibration/flat_capture_runner.py --config config_flat_capture.yaml
 
 # Custom number of flats
-python flat_capture_runner.py --config config_flat_capture.yaml --num-flats 50
+python calibration/flat_capture_runner.py --config config_flat_capture.yaml --num-flats 50
 
 # Custom target count rate
-python flat_capture_runner.py --config config_flat_capture.yaml --target-count-rate 0.6
+python calibration/flat_capture_runner.py --config config_flat_capture.yaml --target-count-rate 0.6
 ```
 
 ## Configuration Options
@@ -72,7 +72,7 @@ python flat_capture_runner.py --config config_flat_capture.yaml --target-count-r
 ### Command Line Options
 
 ```bash
-python flat_capture_runner.py [OPTIONS]
+python calibration/flat_capture_runner.py [OPTIONS]
 
 Options:
   --config CONFIG_FILE        Configuration file path
@@ -115,14 +115,14 @@ Options:
 
 ```bash
 # Use default settings
-python flat_capture_runner.py --config config_flat_capture.yaml
+python calibration/flat_capture_runner.py --config config_flat_capture.yaml
 ```
 
 ### Custom Settings
 
 ```bash
 # Capture 50 flats with 60% target count rate
-python flat_capture_runner.py \
+python calibration/flat_capture_runner.py \
   --config config_flat_capture.yaml \
   --num-flats 50 \
   --target-count-rate 0.6 \
@@ -133,7 +133,7 @@ python flat_capture_runner.py \
 
 ```bash
 # Enable debug logging for troubleshooting
-python flat_capture_runner.py \
+python calibration/flat_capture_runner.py \
   --config config_flat_capture.yaml \
   --debug
 ```
@@ -216,7 +216,7 @@ The system provides detailed status information including:
 Enable debug logging to get detailed information:
 
 ```bash
-python flat_capture_runner.py --config config_flat_capture.yaml --debug
+python calibration/flat_capture_runner.py --config config_flat_capture.yaml --debug
 ```
 
 This will show:

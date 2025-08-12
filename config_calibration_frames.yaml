@@ -208,19 +208,19 @@ plate_solve:
 # =============================================================================
 # 
 # 1. CAPTURE DARKS:
-#    python dark_capture_runner.py --config config_calibration_frames.yaml
+#    python calibration/dark_capture_runner.py --config config_calibration_frames.yaml
 # 
 # 2. CAPTURE FLATS:
-#    python flat_capture_runner.py --config config_calibration_frames.yaml
+#    python calibration/flat_capture_runner.py --config config_calibration_frames.yaml
 # 
 # 3. CREATE MASTER FRAMES:
-#    python master_frame_runner.py --config config_calibration_frames.yaml
+#    python calibration/master_frame_runner.py --config config_calibration_frames.yaml
 # 
 # 4. COMPLETE CALIBRATION WORKFLOW:
-#    python calibration_workflow.py --config config_calibration_frames.yaml
+#    python calibration/calibration_workflow.py --config config_calibration_frames.yaml
 # 
 # 5. CALIBRATION WITH COOLING:
-#    python calibration_workflow.py --config config_calibration_frames.yaml --wait-for-cooling
+#    python calibration/calibration_workflow.py --config config_calibration_frames.yaml --wait-for-cooling
 # 
 # =============================================================================
 # CALIBRATION WORKFLOW EXPLANATION
