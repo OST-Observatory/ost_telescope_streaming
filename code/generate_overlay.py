@@ -90,53 +90,20 @@ class OverlayGenerator:
         return ImageFont.load_default()
 
     def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0, is_flipped=False):
-        """Converts sky coordinates to pixel coordinates with rotation support.
-        Args:
-            obj_coord: SkyCoord of the object
-            center_coord: SkyCoord of the image center
-            size_px: Image size as (width, height) in pixels
-            fov_width_deg: Field of view width in degrees
-            fov_height_deg: Field of view height in degrees
-            position_angle_deg: Position angle in degrees (rotation of the image)
-            is_flipped: Whether the image is flipped (mirror X-axis)
-        Returns:
-            tuple: (x, y) pixel coordinates
-        """
-        try:
-            # Calculate angular separation in arcminutes
-            delta_ra_basic = (obj_coord.ra.degree - center_coord.ra.degree) * \
-                u.deg.to(u.arcmin) * np.cos(center_coord.dec.radian)
-            # Apply RA direction convention: RA increases to the left when north is up
-            delta_ra = -delta_ra_basic if self.ra_increases_left else delta_ra_basic
-            delta_dec = (obj_coord.dec.degree - center_coord.dec.degree) * u.deg.to(u.arcmin)
-
-            # Convert to radians for rotation
-            pa_rad = np.radians(position_angle_deg)
-
-            # Apply rotation matrix
-            cos_pa = np.cos(pa_rad)
-            sin_pa = np.sin(pa_rad)
-
-            # Rotate the coordinates
-            delta_ra_rot = delta_ra * cos_pa + delta_dec * sin_pa
-            delta_dec_rot = -delta_ra * sin_pa + delta_dec * cos_pa
-
-            # Calculate pixel scales (arcmin per pixel)
-            scale_x = (fov_width_deg * 60) / size_px[0]   # arcmin per pixel in X
-            scale_y = (fov_height_deg * 60) / size_px[1]  # arcmin per pixel in Y
-
-            # Convert to pixel coordinates
-            x = size_px[0] / 2 + delta_ra_rot / scale_x
-            y = size_px[1] / 2 - delta_dec_rot / scale_y  # Invert Y-axis (Dec up)
-
-            # Apply flip correction if needed
-            if is_flipped:
-                # Mirror the X-axis: x = width - x
-                x = size_px[0] - x
-
-            return int(x), int(y)
-        except Exception as e:
-            raise ValueError(f"Error in coordinate conversion with rotation: {e}")
+        """Thin wrapper that delegates projection to overlay.projection."""
+        from overlay.projection import skycoord_to_pixel_with_rotation as _proj
+        return _proj(
+            obj_coord.ra.degree,
+            obj_coord.dec.degree,
+            center_coord.ra.degree,
+            center_coord.dec.degree,
+            size_px,
+            fov_width_deg,
+            fov_height_deg,
+            position_angle_deg,
+            is_flipped,
+            self.ra_increases_left,
+        )
 
     def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
         """Converts sky coordinates to pixel coordinates (legacy method for backward compatibility)."""
@@ -840,48 +807,18 @@ class OverlayGenerator:
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
-            # Configure SIMBAD with robust field selection (handle Simbad field changes)
+            # Configure SIMBAD with robust field selection (delegated)
+            from overlay.simbad_fields import discover_simbad_dimension_fields
             custom_simbad = Simbad()
             custom_simbad.reset_votable_fields()
-            # Base fields always safe
-            base_fields = ['ra', 'dec', 'V', 'otype', 'main_id']
-            custom_simbad.add_votable_fields(*base_fields)
-            # Discover available fields dynamically
-            try:
-                vot = Simbad.list_votable_fields()
-                available = set()
-                try:
-                    # astroquery returns a table-like with 'name' column
-                    for row in vot:
-                        name = str(row['name']).strip()
-                        if name:
-                            available.add(name.lower())
-                except Exception:
-                    pass
-            except Exception:
-                available = set()
-            
-            # Candidate synonyms per quantity
-            maj_candidates = ['dim_majaxis', 'majdiam', 'majdiameter', 'galdim_maj_axis', 'galdim_majaxis']
-            min_candidates = ['dim_minaxis', 'mindiam', 'mindiameter', 'galdim_min_axis', 'galdim_minaxis']
-            ang_candidates = ['dim_angle', 'pa', 'posang', 'galdim_pa']
-            dims_candidates = ['dimensions']
-
-            def pick_and_add(cands):
-                for c in cands:
-                    if c.lower() in available:
-                        try:
-                            custom_simbad.add_votable_fields(c)
-                            return c
-                        except Exception:
-                            continue
-                return None
-
-            picked_maj = pick_and_add(maj_candidates)
-            picked_min = pick_and_add(min_candidates)
-            picked_ang = pick_and_add(ang_candidates)
-            picked_dims = pick_and_add(dims_candidates)
-            pa_supported = (picked_ang is not None and picked_ang.lower() in ['pa', 'dim_angle', 'posang', 'galdim_pa'])
+            custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
+            picked_maj, picked_min, picked_ang, picked_dims, pa_supported = discover_simbad_dimension_fields(Simbad)
+            for fld in [picked_maj, picked_min, picked_ang, picked_dims]:
+                if fld:
+                    try:
+                        custom_simbad.add_votable_fields(fld)
+                    except Exception:
+                        pass
 
             # Radius is half-diagonal of field of view
             radius = ((fov_w**2 + fov_h**2)**0.5) / 2
