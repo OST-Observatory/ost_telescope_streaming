@@ -85,14 +85,15 @@ class VideoCapture:
         except Exception:
             self._frame_writer = None
         if self.enable_cooling:
-            if self.camera:
-                from cooling_manager import create_cooling_manager
-                self.cooling_manager = create_cooling_manager(self.camera, config, logger)
-            elif self.camera_type == 'opencv':
-                self.logger.info("Cooling not supported for OpenCV cameras")
-                self.enable_cooling = False
-            else:
-                self.logger.warning("Cooling enabled but no compatible camera found")
+            try:
+                from services.cooling_service import CoolingService
+                self.cooling_service = CoolingService(self.config, logger=self.logger)
+                if self.camera:
+                    self.cooling_service.initialize(self.camera)
+                else:
+                    self.logger.warning("Cooling enabled but no camera available yet")
+            except Exception as e:
+                self.logger.warning(f"Cooling service unavailable: {e}")
     
     def _ensure_directories(self) -> None:
         try:
@@ -196,9 +197,23 @@ class VideoCapture:
     def start_observation_session(self) -> CameraStatus:
         try:
             if self.enable_cooling:
-                cooling_status = self._initialize_cooling()
-                if not cooling_status.is_success:
-                    return cooling_status
+                try:
+                    from services.cooling_service import CoolingService
+                    # Ensure service exists and initialized
+                    if not hasattr(self, 'cooling_service') or self.cooling_service is None:
+                        self.cooling_service = CoolingService(self.config, logger=self.logger)
+                        if self.camera:
+                            self.cooling_service.initialize(self.camera)
+                    target_temp = self.config.get_camera_config().get('cooling', {}).get('target_temperature', -10.0)
+                    status = self.cooling_service.initialize_and_stabilize(
+                        target_temp=target_temp,
+                        wait_for_cooling=self.wait_for_cooling,
+                        timeout_s=self.cooling_timeout,
+                    )
+                    if not status.is_success:
+                        return status
+                except Exception as e:
+                    return error_status(f"Cooling initialization failed: {e}")
             if self.enable_calibration and self.calibration_applier:
                 calibration_status = self.calibration_applier.load_master_frames()
                 if not calibration_status.is_success:
@@ -211,8 +226,8 @@ class VideoCapture:
     
     def end_observation_session(self) -> CameraStatus:
         try:
-            if self.cooling_manager and self.cooling_manager.is_cooling:
-                warmup_status = self.cooling_manager.start_warmup()
+            if hasattr(self, 'cooling_service') and getattr(self, 'cooling_service', None) and self.cooling_service.is_cooling:
+                warmup_status = self.cooling_service.start_warmup()
                 if not warmup_status.is_success:
                     self.logger.warning(f"Warmup start: {warmup_status.message}")
             return success_status("Observation session ended successfully")

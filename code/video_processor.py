@@ -184,6 +184,18 @@ class VideoProcessor:
                     camera=self.video_capture.camera,
                     camera_type=self.video_capture.camera_type,
                 )
+                # Initialize CoolingService and kick off status monitoring if enabled
+                try:
+                    from services.cooling_service import CoolingService
+                    self.cooling_service = CoolingService(self.config, logger=self.logger)
+                    if self.video_capture and self.video_capture.camera:
+                        self.cooling_service.initialize(self.video_capture.camera)
+                    cooling_cfg = self.config.get_camera_config().get('cooling', {})
+                    if cooling_cfg.get('enable_cooling', False):
+                        interval = cooling_cfg.get('status_interval', 30)
+                        self.cooling_service.start_status_monitor(interval)
+                except Exception as e:
+                    self.logger.debug(f"CoolingService not started: {e}")
             except Exception as e:
                 self.logger.error(f"Error initializing video capture: {e}")
                 success = False
@@ -427,15 +439,31 @@ class VideoProcessor:
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
             
-            # Get current frame from camera
-            frame = self.video_capture.get_current_frame()
+            # Get or capture a frame
+            frame = None
+            try:
+                cam_type = getattr(self.video_capture, 'camera_type', 'opencv') if self.video_capture else 'opencv'
+                if cam_type in ['alpaca', 'ascom']:
+                    capture_status = self.video_capture.capture_single_frame()
+                    if not capture_status or not getattr(capture_status, 'is_success', False):
+                        self.logger.warning(f"Single-frame capture failed: {getattr(capture_status, 'message', 'unknown error')}")
+                        return
+                    frame = capture_status
+                else:
+                    frame = self.video_capture.get_current_frame()
+            except Exception as e:
+                self.logger.warning(f"Failed to obtain frame: {e}")
+                return
             if frame is None:
                 self.logger.warning("No frame available for capture")
                 return
-            # Capture and store frame metadata for downstream consumers
+            # Capture and store frame metadata for downstream consumers; attach capture_id
             try:
                 _, details = unwrap_status(frame)
                 if isinstance(details, dict) and details:
+                    # assign a capture_id for correlation
+                    self.capture_count += 1
+                    details = {**details, 'capture_id': self.capture_count}
                     self.last_frame_metadata = details
             except Exception:
                 pass
