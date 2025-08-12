@@ -21,6 +21,7 @@ from status import CameraStatus, success_status, error_status, warning_status
 from ascom_camera import ASCOMCamera
 from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
+from utils.fits_utils import enrich_header_from_metadata
 from utils.status_utils import unwrap_status
 
 class VideoCapture:
@@ -933,118 +934,8 @@ class VideoCapture:
             else:
                 header['COLORTYP'] = 'MONO'
             
-            # Exposure information - use actual values from frame details first
-            actual_exposure_time = None
-            if frame_details is not None:
-                if isinstance(frame_details, dict):
-                    # Check common keys for exposure time (prefer seconds field)
-                    for key in [
-                        'exposure_time_s', 'exposure_time', 'EXPTIME', 'ExposureTime',
-                        'exptime', 'Exposure', 'exp_time', 'ExpTime', 'EXP'
-                    ]:
-                        if key in frame_details and frame_details.get(key) is not None:
-                            actual_exposure_time = frame_details.get(key)
-                            break
-                else:
-                    self.logger.debug(f"frame_details is not a dict: {type(frame_details)}")
-
-                if actual_exposure_time is not None:
-                    try:
-                        header['EXPTIME'] = float(actual_exposure_time)
-                        self.logger.debug(f"Set EXPTIME from frame_details: {actual_exposure_time}s")
-                    except Exception:
-                        self.logger.warning(
-                            f"Could not convert exposure value to float: {actual_exposure_time}. Falling back to camera attribute if available"
-                        )
-                        if hasattr(self.camera, 'exposure_time'):
-                            header['EXPTIME'] = self.camera.exposure_time
-                            self.logger.debug(f"Set EXPTIME from camera attribute: {self.camera.exposure_time}s")
-                elif hasattr(self.camera, 'exposure_time'):
-                    header['EXPTIME'] = self.camera.exposure_time
-                    self.logger.debug(f"Set EXPTIME from camera attribute: {self.camera.exposure_time}s")
-                
-                actual_gain = None
-                if isinstance(frame_details, dict):
-                    actual_gain = frame_details.get('gain')
-                if actual_gain is not None:
-                    header['GAIN'] = actual_gain
-                elif hasattr(self.camera, 'gain'):
-                    header['GAIN'] = self.camera.gain
-                # Offset information
-                actual_offset = None
-                if isinstance(frame_details, dict):
-                    actual_offset = frame_details.get('offset')
-                if actual_offset is not None:
-                    header['OFFSET'] = actual_offset
-                elif hasattr(self.camera, 'offset'):
-                    header['OFFSET'] = getattr(self.camera, 'offset')
-                
-                # Readout mode information
-                actual_readout = None
-                if isinstance(frame_details, dict):
-                    actual_readout = frame_details.get('readout_mode')
-                if actual_readout is not None:
-                    header['READOUT'] = actual_readout
-                elif hasattr(self.camera, 'readout_mode'):
-                    header['READOUT'] = getattr(self.camera, 'readout_mode')
-
-                actual_binning = None
-                if isinstance(frame_details, dict):
-                    actual_binning = frame_details.get('binning')
-                if actual_binning is not None:
-                    if isinstance(actual_binning, list):
-                        header['XBINNING'] = actual_binning[0]
-                        header['YBINNING'] = actual_binning[1]
-                    else:
-                        header['XBINNING'] = actual_binning
-                        header['YBINNING'] = actual_binning
-                elif hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
-                    header['XBINNING'] = self.camera.bin_x
-                    header['YBINNING'] = self.camera.bin_y
-            else:
-                # Fallback to camera attributes if frame_details is None
-                if hasattr(self.camera, 'exposure_time'):
-                    header['EXPTIME'] = self.camera.exposure_time
-                if hasattr(self.camera, 'gain'):
-                    header['GAIN'] = self.camera.gain
-                if hasattr(self.camera, 'offset'):
-                    header['OFFSET'] = getattr(self.camera, 'offset')
-                if hasattr(self.camera, 'readout_mode'):
-                    header['READOUT'] = getattr(self.camera, 'readout_mode')
-                if hasattr(self.camera, 'bin_x') and hasattr(self.camera, 'bin_y'):
-                    header['XBINNING'] = self.camera.bin_x
-                    header['YBINNING'] = self.camera.bin_y
-            
-            # Additional fallback: try to get exposure time from config if still missing
-            if 'EXPTIME' not in header:
-                camera_config = self.config.get_camera_config()
-                if self.camera_type == 'ascom':
-                    ascom_config = camera_config.get('ascom', {})
-                    config_exposure = ascom_config.get('exposure_time')
-                    if config_exposure is not None:
-                        header['EXPTIME'] = config_exposure
-                        self.logger.debug(f"Using exposure time from ASCOM config: {config_exposure}s")
-                elif self.camera_type == 'alpaca':
-                    alpaca_config = camera_config.get('alpaca', {})
-                    config_exposure = alpaca_config.get('exposure_time')
-                    if config_exposure is not None:
-                        header['EXPTIME'] = config_exposure
-                        self.logger.debug(f"Using exposure time from Alpaca config: {config_exposure}s")
-
-            # Additional fallbacks for OFFSET/READOUT from config
-            camera_config = self.config.get_camera_config()
-            if 'OFFSET' not in header:
-                for sub in ('ascom', 'alpaca'):
-                    cfg = camera_config.get(sub, {})
-                    if 'offset' in cfg and cfg.get('offset') is not None:
-                        header['OFFSET'] = cfg.get('offset')
-                        break
-            if 'READOUT' not in header:
-                for sub in ('ascom', 'alpaca'):
-                    cfg = camera_config.get(sub, {})
-                    if 'readout_mode' in cfg and cfg.get('readout_mode') is not None:
-                        header['READOUT'] = cfg.get('readout_mode')
-                        break
+            # Populate header from metadata/camera/config
+            enrich_header_from_metadata(header, frame_details, self.camera, self.config, self.camera_type, self.logger)
             
             # Calibration information (if available from upstream calibration)
             try:
