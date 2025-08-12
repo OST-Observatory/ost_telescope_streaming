@@ -41,6 +41,7 @@ import numpy as np
 # Import local modules
 from video_capture import VideoCapture
 from plate_solver import PlateSolverFactory, PlateSolveResult
+from services.frame_writer import FrameWriter
 
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
@@ -91,6 +92,7 @@ class VideoProcessor:
         self.config = config or default_config
         self.logger = logger or logging.getLogger(__name__)
         self.video_capture: Optional[VideoCapture] = None
+        self.frame_writer: Optional[FrameWriter] = None
         self.plate_solver: Optional[object] = None
         self.mount: Optional[object] = None  # ASCOM mount for slewing detection
         self.is_running: bool = False
@@ -173,6 +175,13 @@ class VideoProcessor:
             try:
                 self.video_capture = VideoCapture(config=self.config, logger=self.logger)
                 self.logger.info("Video capture initialized")
+                # Initialize FrameWriter now that we have camera and type
+                self.frame_writer = FrameWriter(
+                    config=self.config,
+                    logger=self.logger,
+                    camera=self.video_capture.camera,
+                    camera_type=self.video_capture.camera_type,
+                )
             except Exception as e:
                 self.logger.error(f"Error initializing video capture: {e}")
                 success = False
@@ -190,8 +199,7 @@ class VideoProcessor:
                 self.logger.error(f"Error initializing plate solver: {e}")
                 self.plate_solver = None
         
-        # Initialize mount for slewing detection
-        # This is optional - if it fails, slewing detection is disabled
+        # Initialize mount for slewing detection (optional)
         try:
             from ascom_mount import ASCOMMount
             self.mount = ASCOMMount(config=self.config, logger=self.logger)
@@ -218,7 +226,7 @@ class VideoProcessor:
         # Skip initialization if already done in start_observation_session
         if not self.video_capture:
             if not self.initialize():
-                return error_status("Initialization failed", details={'video_enabled': self.video_enabled})
+                return error_status("Initialization failed", details={'frame_enabled': self.frame_enabled})
         
         if not self.video_capture:
             self.logger.error("Video capture not available")
@@ -393,13 +401,10 @@ class VideoProcessor:
         
         try:
             # CRITICAL: Check if mount is slewing before capturing
-            # This prevents blurred images and improves plate-solving success
             if hasattr(self, 'mount') and self.mount and self.slewing_detection_enabled:
                 slewing_status = self.mount.is_slewing()
                 if slewing_status.is_success and slewing_status.data:
                     if self.slewing_wait_for_completion:
-                        # Wait Mode: Wait for slewing to complete before capturing
-                        # This ensures we get every possible frame for critical imaging
                         self.logger.info("Mount is slewing, waiting for completion...")
                         wait_status = self.mount.wait_for_slewing_complete(
                             timeout=self.slewing_wait_timeout,
@@ -409,20 +414,16 @@ class VideoProcessor:
                             self.logger.info("Slewing completed, proceeding with capture")
                         else:
                             self.logger.warning(f"Slewing wait failed or timed out: {wait_status.message}")
-                            if not wait_status.data:  # Timeout
+                            if not wait_status.data:
                                 self.logger.info("Skipping capture due to slewing timeout")
                                 return
-                            else:  # Error
+                            else:
                                 self.logger.warning("Continuing with capture despite slewing error")
                     else:
-                        # Skip Mode: Skip capture if slewing (default behavior)
-                        # This maximizes capture opportunities for high-frequency imaging
                         self.logger.debug("Mount is slewing, skipping capture")
                         return
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
-                    # Continue with capture if we can't check slewing status
-                    # This ensures operation continues even if slewing detection fails
             
             # Get current frame from camera
             frame = self.video_capture.get_current_frame()
@@ -449,22 +450,24 @@ class VideoProcessor:
                 
                 base_filename = '_'.join(filename_parts)
                 
-                # Save current frame in configured format
+                # Save current frame in configured format using FrameWriter
                 frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
-                save_status = self.video_capture.save_frame(frame, str(frame_filename))
+                if not self.frame_writer:
+                    self.frame_writer = FrameWriter(self.config, self.logger, camera=self.video_capture.camera, camera_type=self.video_capture.camera_type)
+                save_status = self.frame_writer.save(frame, str(frame_filename))
                 if save_status and save_status.is_success:
                     self.logger.info(f"Frame saved: {frame_filename}")
                 else:
-                    self.logger.warning(f"Failed to save frame: {save_status.message if save_status else 'No status'}")
+                    self.logger.warning(f"Failed to save frame: {getattr(save_status, 'message', 'No status')}" )
                     frame_filename = None
                 
-                # ALWAYS save FITS for plate-solving (PlateSolve2 requirement)
+                # ALWAYS save FITS for plate-solving
                 fits_filename = self.frame_dir / f"{base_filename}.fits"
-                fits_save_status = self.video_capture.save_frame(frame, str(fits_filename))
+                fits_save_status = self.frame_writer.save(frame, str(fits_filename))
                 if fits_save_status and fits_save_status.is_success:
                     self.logger.info(f"FITS frame saved: {fits_filename}")
                 else:
-                    self.logger.warning(f"Failed to save FITS frame: {fits_save_status.message if fits_save_status else 'No status'}")
+                    self.logger.warning(f"Failed to save FITS frame: {getattr(fits_save_status, 'message', 'No status')}")
                     fits_filename = None
             
             # Trigger capture callback
@@ -475,14 +478,12 @@ class VideoProcessor:
             if (self.plate_solver and self.auto_solve and 
                 time.time() - self.last_solve_time >= self.min_solve_interval):
                 
-                # ALWAYS prefer FITS files for plate-solving (PlateSolve2 requirement)
                 solve_filename = None
                 
                 if fits_filename and fits_filename.exists():
                     solve_filename = fits_filename
                     self.logger.info(f"Using FITS file for plate-solving: {solve_filename}")
                 elif frame_filename and frame_filename.exists():
-                    # Only use display format if FITS is not available
                     solve_filename = frame_filename
                     self.logger.warning(f"FITS file not available, using display format for plate-solving: {solve_filename}")
                     self.logger.warning("This may cause 'File type not supported' errors with PlateSolve2")
@@ -693,20 +694,11 @@ class VideoProcessor:
             
             # Create composite image
             try:
-                # Create a new image with the base image
                 composite = base_image.copy()
-                
-                # Apply overlay with alpha blending
                 composite = Image.alpha_composite(composite, overlay_image)
-                
-                # Convert to RGB for saving (PNG supports alpha, but some viewers prefer RGB)
                 composite_rgb = composite.convert('RGB')
-                
-                # Save the combined image
                 composite_rgb.save(output_path, 'PNG', quality=95)
-                
                 self.logger.info(f"Combined image saved: {output_path}")
-                
                 return success_status(
                     f"Image combined successfully: {output_path}",
                     data=output_path,
@@ -718,7 +710,6 @@ class VideoProcessor:
                         'overlay_size': overlay_image.size
                     }
                 )
-                
             except Exception as e:
                 return error_status(f"Error creating composite image: {e}")
                 
@@ -762,14 +753,13 @@ class VideoProcessor:
             
             # Get the configured image format from frame config
             image_format = self.frame_config.get('file_format', 'PNG').lower()
-            if image_format.startswith('.'):
-                image_format = image_format[1:]  # Remove leading dot if present
+            if image_format.startswith('.'):  # Remove leading dot if present
+                image_format = image_format[1:]
             
             # Check if timestamps are used
             use_timestamps = self.config.get_overlay_config().get('use_timestamps', False)
             
             if not use_timestamps:
-                # Simple case: look for "capture.{extension}" file
                 capture_file = os.path.join(plate_solve_dir, f"capture.{image_format}")
                 if os.path.exists(capture_file):
                     self.logger.debug(f"Found capture file: {capture_file}")
@@ -778,7 +768,6 @@ class VideoProcessor:
                     self.logger.debug(f"Capture file not found: {capture_file}")
                     return None
             else:
-                # Timestamp case: find the most recent file with the configured extension
                 if not os.path.exists(plate_solve_dir):
                     self.logger.debug(f"Plate solve directory does not exist: {plate_solve_dir}")
                     return None
@@ -831,22 +820,12 @@ class VideoProcessor:
             if not self.video_capture:
                 return error_status("No video capture available")
             
-            # Capture a frame
-            capture_status = self.video_capture.start_capture() # Assuming start_capture returns a status
+            capture_status = self.video_capture.start_capture()  # Assuming start_capture returns a status
             if not capture_status.is_success:
                 return error_status(f"Failed to capture frame: {capture_status.message}")
             
-            # Get the captured image path
-            # The actual frame data is not directly available here as it's in a separate thread.
-            # This method is primarily for convenience and might need a more robust way
-            # to retrieve the frame if it's not immediately available here.
-            # For now, we'll assume the capture_status.data might contain the path or we need to refactor.
-            # A better approach would be to have a method in VideoCapture to get the current frame.
-            # For now, let's assume for the purpose of this edit that capture_status.data is the path.
-            # If not, this will need adjustment based on VideoCapture's actual return type.
-            image_path = capture_status.data # This might need to be adjusted based on VideoCapture's API
+            image_path = capture_status.data  # May need adaptation if API differs
             
-            # Combine with overlay
             return self.combine_overlay_with_image(image_path, overlay_path, output_path)
             
         except Exception as e:
@@ -876,7 +855,6 @@ class VideoProcessor:
         try:
             result = self._solve_frame(frame_path)
             if result:
-                # Convert PlateSolveResult to dictionary for status data
                 result_data = {
                     'ra_center': result.ra_center,
                     'dec_center': result.dec_center,
