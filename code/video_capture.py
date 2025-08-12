@@ -21,6 +21,7 @@ from status import CameraStatus, success_status, error_status, warning_status
 from ascom_camera import ASCOMCamera
 from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
+from utils.status_utils import unwrap_status
 
 class VideoCapture:
     """Video capture class for telescope streaming."""
@@ -792,54 +793,7 @@ class VideoCapture:
                 return error_status(f"Astropy not available for FITS saving: {e}")
             
             # Get original data - handle Status objects and merge details robustly
-            image_data = None
-            frame_details = {}
-            merged_details = {}
-
-            # Merge top-level details if present
-            if hasattr(frame, 'details') and isinstance(getattr(frame, 'details', None), dict):
-                merged_details.update(frame.details)
-
-            if hasattr(frame, 'data') and frame.data is not None:
-                # Frame is a status object with data
-                if hasattr(frame.data, 'data') and frame.data.data is not None:
-                    # Nested Status object - extract the actual data
-                    image_data = frame.data.data
-                    nested_details = getattr(frame.data, 'details', {})
-                    if isinstance(nested_details, dict):
-                        merged_details.update(nested_details)
-                    self.logger.debug("Extracted data from nested status object")
-                elif hasattr(frame.data, 'is_success') and frame.data.is_success and hasattr(frame.data, 'data'):
-                    # Nested success status object
-                    image_data = frame.data.data
-                    nested_details = getattr(frame.data, 'details', {})
-                    if isinstance(nested_details, dict):
-                        merged_details.update(nested_details)
-                    self.logger.debug("Extracted data from nested success status object")
-                else:
-                    # Direct data in status object
-                    image_data = frame.data
-                    self.logger.debug("Extracted data from status object")
-            elif hasattr(frame, 'is_success') and frame.is_success and hasattr(frame, 'data'):
-                # Frame is a success status object
-                if hasattr(frame.data, 'data') and frame.data.data is not None:
-                    # Nested Status object - extract the actual data
-                    image_data = frame.data.data
-                    nested_details = getattr(frame.data, 'details', {})
-                    if isinstance(nested_details, dict):
-                        merged_details.update(nested_details)
-                    self.logger.debug("Extracted data from nested status object in success frame")
-                else:
-                    # Direct data in success status object
-                    image_data = frame.data
-                    self.logger.debug("Extracted data from success status object")
-            else:
-                # Frame is direct data
-                image_data = frame
-                merged_details = {}
-                self.logger.debug("Using direct frame data")
-
-            frame_details = merged_details
+            image_data, frame_details = unwrap_status(frame)
             
             # Validate that we have actual image data
             if image_data is None:

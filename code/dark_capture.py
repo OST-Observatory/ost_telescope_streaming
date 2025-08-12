@@ -25,6 +25,7 @@ from datetime import datetime
 from status import Status, success_status, error_status, warning_status
 from exceptions import DarkCaptureError
 from video_capture import VideoCapture
+from utils.status_utils import unwrap_status
 
 
 class DarkCapture:
@@ -369,9 +370,7 @@ class DarkCapture:
                 
                 if frame_status.is_success:
                     # Extract frame data and details from Status object
-                    frame_data = frame_status.data
-                    # Ensure details is a dict, not None
-                    frame_details = getattr(frame_status, 'details', None) or {}
+                    frame_data, frame_details = unwrap_status(frame_status)
                     
                     self.logger.debug(f"Frame status data type: {type(frame_data)}")
                     self.logger.debug(f"Frame status details: {frame_details}")
@@ -382,24 +381,7 @@ class DarkCapture:
                         continue
                     
                     # Handle nested Status objects - extract recursively until we get actual data
-                    extraction_level = 0
-                    while hasattr(frame_data, 'data') and frame_data is not None:
-                        self.logger.debug(f"Extraction level {extraction_level}: Found nested Status object, extracting data...")
-                        old_frame_data = frame_data
-                        frame_data = frame_data.data
-                        extraction_level += 1
-                        self.logger.debug(f"Extraction level {extraction_level}: Extracted data type: {type(frame_data)}")
-                        
-                        # Get details from nested status if available
-                        details_obj = getattr(old_frame_data, 'details', None)
-                        if isinstance(details_obj, dict):
-                            frame_details.update(details_obj)
-                            self.logger.debug(f"Updated frame_details from nested status: {frame_details}")
-                        
-                        # Prevent infinite loop
-                        if extraction_level > 5:
-                            self.logger.error(f"Too many nested Status objects (level {extraction_level}), stopping extraction")
-                            break
+                    # (nested Status unwrapping handled by unwrap_status)
                     
                     # Convert list to numpy array if needed (like in flat_capture.py)
                     if isinstance(frame_data, list):

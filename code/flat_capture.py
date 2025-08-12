@@ -24,6 +24,7 @@ from datetime import datetime
 from status import Status, success_status, error_status, warning_status
 from exceptions import FlatCaptureError
 from video_capture import VideoCapture
+from utils.status_utils import unwrap_status
 
 
 class FlatCapture:
@@ -563,15 +564,7 @@ class FlatCapture:
                 
                 if frame_status.is_success:
                     # Extract frame data and details from Status object
-                    frame_data = frame_status.data
-                    frame_details = getattr(frame_status, 'details', {})
-                    
-                    # Handle nested Status objects
-                    if hasattr(frame_data, 'data'):
-                        frame_data = frame_data.data
-                        # Get details from nested status if available
-                        if hasattr(frame_status.data, 'details'):
-                            frame_details.update(frame_status.data.details)
+                    frame_data, frame_details = unwrap_status(frame_status)
                     
                     # Ensure we have the current exposure time in frame details
                     if 'exposure_time_s' not in frame_details:
