@@ -311,7 +311,7 @@ class MasterFrameCreator:
         try:
             # Find all dark/bias files in the directory (case-insensitive, de-duplicated)
             dark_files = self._list_fits_files(exp_dir)
-
+            
             if not dark_files:
                 return error_status(f"No dark files found in {exp_dir}")
             
@@ -431,7 +431,7 @@ class MasterFrameCreator:
                             continue
             except Exception as e:
                 self.logger.debug(f"Failed to read EXPTIME from {file_path}: {e}")
-
+        
         return None
     
     def _find_master_dark_for_exposure(self, exposure_time: float) -> Optional[str]:
@@ -547,7 +547,7 @@ class MasterFrameCreator:
             if not files:
                 self.logger.error(f"No valid frames found for {frame_type}")
                 return None
-
+            
             # Peek first file for shape
             first = self._load_fits_file(files[0])
             if first is None:
@@ -610,7 +610,7 @@ class MasterFrameCreator:
                 count_img += mask.astype(np.uint32)
             count_nonzero = np.maximum(count_img, 1)
             combined = (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
-            return combined
+        return combined
         except Exception as e:
             self.logger.error(f"Sigma-clip combine failed: {e}")
             return None
@@ -764,7 +764,7 @@ class MasterFrameCreator:
                     max_used |= is_max
                 count_nonzero = np.maximum(count_img, 1)
                 return (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
-            else:
+        else:
                 # Simple mean
                 sum_img = np.zeros(shape, dtype=np.float64)
                 cnt = 0

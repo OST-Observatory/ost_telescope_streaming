@@ -72,7 +72,7 @@ class VideoCapture:
         # Calibration (only if enabled)
         self.enable_calibration = enable_calibration
         if enable_calibration:
-            self.calibration_applier = CalibrationApplier(config, logger)
+        self.calibration_applier = CalibrationApplier(config, logger)
         else:
             self.calibration_applier = None
             self.logger.info("Calibration disabled for this session")
@@ -86,8 +86,8 @@ class VideoCapture:
         # Initialize cooling if enabled
         if self.enable_cooling:
             if self.camera:  # ASCOM or Alpaca camera
-                from cooling_manager import create_cooling_manager
-                self.cooling_manager = create_cooling_manager(self.camera, config, logger)
+            from cooling_manager import create_cooling_manager
+            self.cooling_manager = create_cooling_manager(self.camera, config, logger)
             elif self.camera_type == 'opencv':
                 # OpenCV cameras don't support cooling
                 self.logger.info("Cooling not supported for OpenCV cameras")
@@ -180,8 +180,8 @@ class VideoCapture:
                     cam.camera.NumY = self.resolution[1]
                     cam.camera.StartX = 0
                     cam.camera.StartY = 0
-                    
-                except Exception as e:
+            
+        except Exception as e:
                     self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
                     # Use default dimensions from config
                     self.resolution[0] = 1920
@@ -267,9 +267,9 @@ class VideoCapture:
             
             # Initialize calibration only if enabled
             if self.enable_calibration and self.calibration_applier:
-                calibration_status = self.calibration_applier.load_master_frames()
-                if not calibration_status.is_success:
-                    self.logger.warning(f"Calibration initialization: {calibration_status.message}")
+            calibration_status = self.calibration_applier.load_master_frames()
+            if not calibration_status.is_success:
+                self.logger.warning(f"Calibration initialization: {calibration_status.message}")
             else:
                 self.logger.info("Calibration skipped (disabled for this session)")
             
@@ -348,9 +348,9 @@ class VideoCapture:
     def disconnect(self):
         """Disconnects from the video camera."""
         if self.camera_type == 'opencv':
-            if self.cap:
-                self.cap.release()
-                self.cap = None
+        if self.cap:
+            self.cap.release()
+            self.cap = None
         elif self.camera_type == 'ascom':
             if self.camera:
                 self.camera.disconnect()
@@ -368,9 +368,9 @@ class VideoCapture:
         """
         if self.camera_type == 'opencv':
             # For OpenCV cameras, just ensure connection
-            if not self.cap or not self.cap.isOpened():
+        if not self.cap or not self.cap.isOpened():
                 if not self._initialize_camera():
-                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
         elif self.camera_type == 'ascom':
             # For ASCOM cameras, just ensure connection
             if not self.camera:
@@ -431,25 +431,25 @@ class VideoCapture:
                             # Use ASCOM-specific settings
                             ascom_config = self.config.get_camera_config().get('ascom', {})
                             exposure_time = ascom_config.get('exposure_time', 1.0)  # seconds
-                            gain = ascom_config.get('gain', None)
-                            binning = ascom_config.get('binning', 1)
-                            status = self.capture_single_frame_ascom(exposure_time, gain, binning)
+                        gain = ascom_config.get('gain', None)
+                        binning = ascom_config.get('binning', 1)
+                        status = self.capture_single_frame_ascom(exposure_time, gain, binning)
                         
                         if status.is_success:
                             # Store raw camera data in current_frame (no conversion here)
                             # Conversion will happen only when needed for display
-                            with self.frame_lock:
+                                with self.frame_lock:
                                 self.current_frame = status
-                        else:
+                            else:
                             self.logger.warning(f"Failed to capture frame from {self.camera_type} camera: {status.message}")
-                            time.sleep(0.1)
-                    else:
+                                time.sleep(0.1)
+                        else:
                         self.logger.warning(f"{self.camera_type.upper()} camera not available")
                         time.sleep(0.1)
                     
                     # Sleep between captures to avoid overwhelming the camera
                     time.sleep(5)  # 5 second interval between captures
-                            
+                        
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
@@ -469,7 +469,7 @@ class VideoCapture:
             if hasattr(self.current_frame, 'data') or hasattr(self.current_frame, 'is_success'):
                 return self.current_frame
             # Otherwise return the raw data (e.g., OpenCV ndarray)
-            return self.current_frame
+                return self.current_frame
     
     def capture_single_frame(self) -> CameraStatus:
         """Captures a single frame and returns status.
@@ -491,15 +491,15 @@ class VideoCapture:
             binning = alpaca_config.get('binning', [1, 1])
             return self.capture_single_frame_alpaca(exposure_time, gain, binning)
         elif self.camera_type == 'opencv':
-            if not self.cap or not self.cap.isOpened():
-                if not self._initialize_camera():
-                    return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
-            ret, frame = self.cap.read()
-            if ret:
-                return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
-            else:
-                self.logger.error("Failed to capture single frame")
-                return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
+        if not self.cap or not self.cap.isOpened():
+            if not self._initialize_camera():
+                return error_status("Failed to connect to camera", details={'camera_index': self.camera_index})
+        ret, frame = self.cap.read()
+        if ret:
+            return success_status("Frame captured", data=frame, details={'camera_index': self.camera_index})
+        else:
+            self.logger.error("Failed to capture single frame")
+            return error_status("Failed to capture single frame", details={'camera_index': self.camera_index})
         else:
             return error_status(f"Unsupported camera type: {self.camera_type}")
     
@@ -572,29 +572,29 @@ class VideoCapture:
             
             # Apply calibration if enabled and master frames are available
             if self.enable_calibration and self.calibration_applier:
-                calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            
+            if calibration_status.is_success:
+                calibrated_frame = calibration_status.data
+                calibration_details = calibration_status.details
                 
-                if calibration_status.is_success:
-                    calibrated_frame = calibration_status.data
-                    calibration_details = calibration_status.details
-                    
-                    # Update frame details with calibration information
-                    frame_details.update(calibration_details)
-                    
-                    if calibration_details.get('calibration_applied', False):
-                        self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
-                                       f"Flat={calibration_details.get('flat_correction_applied', False)}")
-                        return success_status("Frame captured and calibrated", 
-                                            data=calibrated_frame, 
-                                            details=frame_details)
-                    else:
-                        self.logger.debug("Frame captured (no calibration applied)")
-                        return success_status("Frame captured", 
-                                            data=calibrated_frame, 
-                                            details=frame_details)
+                # Update frame details with calibration information
+                frame_details.update(calibration_details)
+                
+                if calibration_details.get('calibration_applied', False):
+                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                    return success_status("Frame captured and calibrated", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
                 else:
-                    self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
-                    return success_status("Frame captured (calibration failed)", 
+                    self.logger.debug("Frame captured (no calibration applied)")
+                    return success_status("Frame captured", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+            else:
+                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                return success_status("Frame captured (calibration failed)", 
                                         data=frame_data, 
                                         details=frame_details)
             else:
@@ -688,7 +688,7 @@ class VideoCapture:
                     'dimensions': f"{effective_width}x{effective_height}", 
                     'debayered': True
                 }
-            else:
+                else:
                 # For monochrome cameras
                 frame_data = image_data
                 frame_details = {
@@ -703,29 +703,29 @@ class VideoCapture:
             
             # Apply calibration if enabled and master frames are available
             if self.enable_calibration and self.calibration_applier:
-                calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
+            
+            if calibration_status.is_success:
+                calibrated_frame = calibration_status.data
+                calibration_details = calibration_status.details
                 
-                if calibration_status.is_success:
-                    calibrated_frame = calibration_status.data
-                    calibration_details = calibration_status.details
-                    
-                    # Update frame details with calibration information
-                    frame_details.update(calibration_details)
-                    
-                    if calibration_details.get('calibration_applied', False):
-                        self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
-                                       f"Flat={calibration_details.get('flat_correction_applied', False)}")
-                        return success_status("Frame captured and calibrated", 
-                                            data=calibrated_frame, 
-                                            details=frame_details)
-                    else:
-                        self.logger.debug("Frame captured (no calibration applied)")
-                        return success_status("Frame captured", 
-                                            data=calibrated_frame, 
-                                            details=frame_details)
+                # Update frame details with calibration information
+                frame_details.update(calibration_details)
+                
+                if calibration_details.get('calibration_applied', False):
+                    self.logger.info(f"Frame calibrated: Dark={calibration_details.get('dark_subtraction_applied', False)}, "
+                                   f"Flat={calibration_details.get('flat_correction_applied', False)}")
+                    return success_status("Frame captured and calibrated", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
                 else:
-                    self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
-                    return success_status("Frame captured (calibration failed)", 
+                    self.logger.debug("Frame captured (no calibration applied)")
+                    return success_status("Frame captured", 
+                                        data=calibrated_frame, 
+                                        details=frame_details)
+            else:
+                self.logger.warning(f"Calibration failed: {calibration_status.message}, returning uncalibrated frame")
+                return success_status("Frame captured (calibration failed)", 
                                         data=frame_data, 
                                         details=frame_details)
             else:
@@ -787,9 +787,9 @@ class VideoCapture:
         """
         try:
             # Try to import astropy
-            try:
-                import astropy.io.fits as fits
-                from astropy.time import Time
+        try:
+            import astropy.io.fits as fits
+            from astropy.time import Time
                 self.logger.debug("Astropy imported successfully")
             except ImportError as e:
                 self.logger.error(f"Astropy not available for FITS saving: {e}")
@@ -806,7 +806,7 @@ class VideoCapture:
             # Ensure it's a numpy array
             if not isinstance(image_data, np.ndarray):
                 try:
-                    image_data = np.array(image_data)
+                image_data = np.array(image_data)
                 except Exception as e:
                     self.logger.error(f"Failed to convert to numpy array: {e}")
                     self.logger.error(f"Image data type: {type(image_data)}")
@@ -870,9 +870,9 @@ class VideoCapture:
                     data_max = image_data.max()
                     if data_max > data_min:
                         image_data = ((image_data - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
-                    else:
-                        image_data = image_data.astype(np.uint16)
                 else:
+                        image_data = image_data.astype(np.uint16)
+            else:
                     # Convert to 16-bit
                     image_data = image_data.astype(np.uint16)
             
@@ -970,12 +970,12 @@ class VideoCapture:
             # Log warning if exposure time is still missing
             if 'EXPTIME' not in header:
                 self.logger.warning("Could not determine exposure time for FITS header")
-            else:
+                    else:
                 self.logger.debug(f"FITS header exposure time: {header['EXPTIME']}s")
             
             # Temperature and cooling information
             try:
-                if hasattr(self.camera, 'ccdtemperature'):
+            if hasattr(self.camera, 'ccdtemperature'):
                     header['CCD-TEMP'] = float(self.camera.ccdtemperature)
                 # Target set temperature (if available)
                 if hasattr(self.camera, 'set_ccd_temperature'):
@@ -1003,11 +1003,11 @@ class VideoCapture:
             if os.path.exists(filename):
                 self.logger.info(f"Alpaca FITS file saved successfully: {filename}")
                 return success_status("Alpaca FITS file saved", data=filename)
-            else:
+                    else:
                 self.logger.error(f"FITS file was not created: {filename}")
                 return error_status("FITS file was not created")
-            
-        except Exception as e:
+                    
+                except Exception as e:
             self.logger.error(f"Error saving Alpaca FITS file: {e}")
             import traceback
             self.logger.error(f"Traceback: {traceback.format_exc()}")
@@ -1051,9 +1051,9 @@ class VideoCapture:
                 if frame.dtype == np.float32 or frame.dtype == np.float64:
                     # Normalize to 0-255 range
                     frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255).astype(np.uint8)
-                else:
+                    else:
                     frame = frame.astype(np.uint8)
-            
+                
             # Ensure directory exists
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             
@@ -1097,4 +1097,4 @@ class VideoCapture:
             self.logger.debug(f"Image dimensions: {width}x{height}, needs rotation: {needs_rotation}")
             return needs_rotation
         
-        return False
+        return False 
