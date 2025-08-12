@@ -835,11 +835,8 @@ class OverlayGenerator:
             is_flipped = is_flipped if is_flipped is not None else False
             output_file = output_file or self.default_filename
 
-            # Apply flip correction to position angle if needed
-            if is_flipped:
-                self.logger.info(f"Image is flipped, applying flip correction to overlay")
-                # For flipped images, we need to mirror the X-axis
-                # This is handled in the coordinate conversion
+            # Do not adjust PA here; upstream solvers (e.g., PlateSolve2) may already apply PA+180°.
+            # If a solver indicates flipping without PA correction, the X-mirror in the projection handles it.
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
