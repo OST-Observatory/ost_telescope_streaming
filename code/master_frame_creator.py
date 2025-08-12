@@ -610,7 +610,7 @@ class MasterFrameCreator:
                 count_img += mask.astype(np.uint32)
             count_nonzero = np.maximum(count_img, 1)
             combined = (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
-        return combined
+            return combined
         except Exception as e:
             self.logger.error(f"Sigma-clip combine failed: {e}")
             return None
@@ -764,7 +764,7 @@ class MasterFrameCreator:
                     max_used |= is_max
                 count_nonzero = np.maximum(count_img, 1)
                 return (sum_img / count_nonzero.astype(np.float64)).astype(np.float32)
-        else:
+            else:
                 # Simple mean
                 sum_img = np.zeros(shape, dtype=np.float64)
                 cnt = 0
