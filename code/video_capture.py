@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import os
 import time
-import cv2
+try:
+    import cv2  # optional at import time; used only for OpenCV camera
+except Exception:  # pragma: no cover
+    cv2 = None
 import numpy as np
 import threading
 import logging
@@ -16,8 +19,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from status import CameraStatus, success_status, error_status, warning_status
-from ascom_camera import ASCOMCamera
-from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
 from utils.fits_utils import enrich_header_from_metadata
 from processing.format_conversion import convert_camera_data_to_opencv
@@ -94,6 +95,8 @@ class VideoCapture:
 
     def _initialize_camera(self) -> CameraStatus:
         if self.camera_type == 'opencv':
+            if cv2 is None:
+                return error_status("OpenCV (cv2) not available")
             self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
                 return error_status(f"Failed to open camera {self.camera_index}", details={'camera_index': self.camera_index})
@@ -113,6 +116,8 @@ class VideoCapture:
             self.ascom_driver = cam_cfg.get('ascom_driver', None)
             if not self.ascom_driver:
                 return error_status("ASCOM driver ID not configured")
+            # Lazy import to avoid import-time dependency in environments without ASCOM
+            from ascom_camera import ASCOMCamera
             cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
             status = cam.connect()
             if status.is_success:
@@ -143,6 +148,8 @@ class VideoCapture:
             self.alpaca_port = cam_cfg.get('alpaca_port', 11111)
             self.alpaca_device_id = cam_cfg.get('alpaca_device_id', 0)
             self.alpaca_camera_name = cam_cfg.get('alpaca_camera_name', 'Unknown')
+            # Lazy import to avoid import-time dependency if alpaca lib is not installed
+            from alpaca_camera import AlpycaCameraWrapper
             cam = AlpycaCameraWrapper(self.alpaca_host, self.alpaca_port, self.alpaca_device_id, self.config, self.logger)
             status = cam.connect()
             if status.is_success:
@@ -238,6 +245,23 @@ class VideoCapture:
                 self.camera.disconnect()
                 self.camera = None
         self.logger.info("Camera disconnected")
+
+    # Legacy shim for tests expecting a connect() method
+    def connect(self):  # pragma: no cover
+        return self._initialize_camera()
+
+    # Legacy shim used by tests
+    def get_camera_info(self):  # pragma: no cover
+        info = {
+            'camera_type': self.camera_type,
+            'resolution': tuple(self.resolution),
+        }
+        if self.camera_type == 'ascom' and self.camera:
+            try:
+                info['name'] = getattr(self.camera, 'name', None)
+            except Exception:
+                pass
+        return info
 
     def start_capture(self) -> CameraStatus:
         if self.camera_type == 'opencv':

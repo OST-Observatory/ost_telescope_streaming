@@ -213,3 +213,14 @@ VIDEO_INTEGRATION.md
 
 # Cache files
 cache/*.json
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+*.fits
+*.fit
+*.fts
+*.fit.gz
+*.fit.bz2
+*.fit.xz

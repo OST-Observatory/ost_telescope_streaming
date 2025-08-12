@@ -56,6 +56,7 @@ def skycoord_to_pixel_with_rotation(
     if is_flipped:
         x = size_px[0] - x
 
-    return int(x), int(y)
+    # Use rounding to make flip symmetry exact in tests
+    return int(round(x)), int(round(y))
 
 

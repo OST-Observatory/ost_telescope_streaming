@@ -385,7 +385,13 @@ class ConfigManager:
         import warnings
         warnings.warn("get_video_config() is deprecated, use get_frame_processing_config() instead", 
                      DeprecationWarning, stacklevel=2)
-        return self.get_frame_processing_config()
+        # Back-compat: some tests expect 'ascom' settings under video config
+        vc = dict(self.get_frame_processing_config())
+        try:
+            vc['ascom'] = self.get_camera_config().get('ascom', {})
+        except Exception:
+            vc['ascom'] = {}
+        return vc
     
     def get_plate_solve_config(self) -> Dict[str, Any]:
         """Get the plate solving configuration.
@@ -406,6 +412,11 @@ class ConfigManager:
             Dict[str, Any]: The overlay configuration.
         """
         return self.config.get('overlay', {})
+
+    # Backward-compat attribute access used in some tests
+    @property
+    def overlay_config(self) -> Dict[str, Any]:  # pragma: no cover - legacy shim
+        return self.get_overlay_config()
     
     def get_streaming_config(self) -> Dict[str, Any]:
         """Get the streaming update configuration.

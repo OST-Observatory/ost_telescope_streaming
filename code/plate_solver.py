@@ -178,7 +178,7 @@ class PlateSolver(ABC):
         """
         pass
 
-class PlateSolve2Solver(PlateSolver):
+class PlateSolve2(PlateSolver):
     """PlateSolve 2 Integration."""
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
@@ -407,7 +407,7 @@ class PlateSolverFactory:
                 solver_type = default_config.get_plate_solve_config().get('default_solver', 'platesolve2')
                 
         solvers = {
-            'platesolve2': PlateSolve2Solver,
+            'platesolve2': PlateSolve2,
             'astrometry': AstrometryNetSolver,
         }
         
@@ -436,7 +436,7 @@ class PlateSolverFactory:
             Dict[str, bool]: Dictionary mapping solver names to availability
         """
         solvers = {
-            'platesolve2': PlateSolve2Solver(config=config, logger=logger),
+            'platesolve2': PlateSolve2(config=config, logger=logger),
             'astrometry': AstrometryNetSolver(config=config, logger=logger),
         }
         return {name: solver.is_available() for name, solver in solvers.items()} 

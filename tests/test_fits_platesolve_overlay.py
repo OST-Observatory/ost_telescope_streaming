@@ -10,6 +10,7 @@ import argparse
 import math
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
+import logging
 
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
@@ -464,6 +465,9 @@ def test_fits_platesolve_overlay(fits_path: str, output_dir: str,
         True if successful, False otherwise
     """
     try:
+        if logger is None:
+            logging.basicConfig(level=logging.INFO)
+            logger = logging.getLogger("fits_test")
         # Ensure output directory exists
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -556,6 +560,7 @@ def test_color_camera_functionality(fits_path: str, output_dir: str, config=None
         True if successful, False otherwise
     """
     if logger is None:
+        logging.basicConfig(level=logging.INFO)
         logger = logging.getLogger(__name__)
     
     logger.info("=" * 60)
