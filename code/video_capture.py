@@ -23,6 +23,7 @@ from alpaca_camera import AlpycaCameraWrapper
 from calibration_applier import CalibrationApplier
 from utils.fits_utils import enrich_header_from_metadata
 from processing.normalization import normalize_to_uint8, scale_16bit_to_8bit
+from processing.format_conversion import convert_camera_data_to_opencv
 from utils.status_utils import unwrap_status
 
 class VideoCapture:
@@ -1033,7 +1034,7 @@ class VideoCapture:
             
             # Convert camera data to OpenCV format for display
             if self.camera_type == 'alpaca' or self.camera_type == 'ascom':
-                frame = self._convert_to_opencv(frame_data)
+                frame = convert_camera_data_to_opencv(frame_data, self.camera, self.config, self.logger)
             else:
                 # For other camera types, assume it's already in OpenCV format
                 frame = frame_data
@@ -1070,148 +1071,8 @@ class VideoCapture:
             return error_status(f"Error saving image file: {e}")
 
     def _convert_to_opencv(self, image_data):
-        """Convert camera image data to OpenCV format with debayering support.
-        
-        Unified function for both ASCOM and Alpaca cameras.
-        
-        Args:
-            image_data: Raw image data from camera (Status object or direct data)
-        Returns:
-            numpy.ndarray: OpenCV-compatible image array or None if conversion fails
-        """
-        try:
-            # Check if input is a Status object and extract data
-            if hasattr(image_data, 'data'):
-                # It's a Status object, extract the data
-                raw_data = image_data.data
-            else:
-                # It's direct data
-                raw_data = image_data
-            
-            # Check if image data is None or empty
-            if raw_data is None:
-                self.logger.error("Image data is None")
-                return None
-            
-            # Convert to numpy array
-            image_array = np.array(raw_data)
-            
-            # Check if array is empty or has invalid shape
-            if image_array.size == 0:
-                self.logger.error("Image array is empty")
-                return None
-            
-            # Log the original data type and shape for debugging
-            self.logger.debug(f"Image data type: {image_array.dtype}, shape: {image_array.shape}")
-            
-            # Ensure it's a numpy array
-            if not isinstance(image_array, np.ndarray):
-                image_array = np.array(image_array)
-            
-            # Check if camera is color (has Bayer pattern)
-            is_color_camera = False
-            bayer_pattern = None
-            
-            # Method 1: Check sensor type from camera
-            if hasattr(self.camera, 'sensor_type'):
-                sensor_type = self.camera.sensor_type
-                if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                    is_color_camera = True
-                    bayer_pattern = sensor_type
-                    self.logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
-            
-            # Method 2: Check if auto_debayer is enabled in config
-            if not is_color_camera:
-                camera_config = self.config.get_camera_config()
-                auto_debayer = camera_config.get('auto_debayer', False)
-                if auto_debayer:
-                    debayer_method = camera_config.get('debayer_method', 'RGGB')
-                    if debayer_method in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
-                        is_color_camera = True
-                        bayer_pattern = debayer_method
-                        self.logger.debug(f"Color camera detected via config, Bayer pattern: {bayer_pattern}")
-            
-            # Method 3: Check camera name for color indicators
-            if not is_color_camera and hasattr(self.camera, 'name'):
-                camera_name = self.camera.name.lower()
-                color_indicators = ['color', 'rgb', 'bayer', 'asi2600mc', 'asi2600mmc', 'qhy600c', 'qhy600mc']
-                if any(indicator in camera_name for indicator in color_indicators):
-                    is_color_camera = True
-                    bayer_pattern = 'RGGB'  # Default for most color cameras
-                    self.logger.debug(f"Color camera detected via name: {camera_name}, using default Bayer pattern: {bayer_pattern}")
-            
-            # Convert data type for processing
-            if image_array.dtype != np.uint16:
-                if image_array.dtype in [np.float32, np.float64]:
-                    # Normalize to 0-65535 range for 16-bit
-                    data_min = image_array.min()
-                    data_max = image_array.max()
-                    if data_max > data_min:
-                        image_array = ((image_array - data_min) / (data_max - data_min) * 65535).astype(np.uint16)
-                    else:
-                        image_array = image_array.astype(np.uint16)
-                else:
-                    image_array = image_array.astype(np.uint16)
-            
-            # Apply debayering for color cameras FIRST (before rotation)
-            if is_color_camera and bayer_pattern and len(image_array.shape) == 2:
-                # Apply debayering based on Bayer pattern
-                if bayer_pattern == 'RGGB':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                elif bayer_pattern == 'GRBG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
-                elif bayer_pattern == 'GBRG':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerGB2BGR
-                elif bayer_pattern == 'BGGR':
-                    bayer_pattern_cv2 = cv2.COLOR_BayerBG2BGR
-                else:
-                    self.logger.warning(f"Unknown Bayer pattern: {bayer_pattern}, using RGGB")
-                    bayer_pattern_cv2 = cv2.COLOR_BayerRG2BGR
-                
-                # Apply debayering
-                try:
-                    result_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
-                    self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
-                except Exception as e:
-                    self.logger.warning(f"Debayering failed: {e}, falling back to grayscale")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-            else:
-                # Handle non-color or already debayered images
-                if len(image_array.shape) == 2:
-                    self.logger.debug("Converting monochrome image to 3-channel")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-                elif len(image_array.shape) == 3:
-                    # If it's already 3-channel (e.g., RGBA), convert to BGR
-                    if image_array.shape[2] == 4:
-                        self.logger.debug("Converting RGBA to BGR")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                    else:
-                        # Assume it's RGB and convert to BGR
-                        self.logger.debug("Converting RGB to BGR")
-                        result_image = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
-                else:
-                    # Fallback: assume monochrome and convert
-                    self.logger.debug("Fallback: converting to 3-channel grayscale")
-                    result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
-            
-            # NOW apply orientation correction to the debayered RGB image
-            # This is much simpler and more robust than rotating Bayer patterns
-            original_shape = result_image.shape
-            if self._needs_rotation(result_image.shape):
-                result_image = np.transpose(result_image, (1, 0, 2))  # Transpose spatial dimensions
-                self.logger.info(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
-            else:
-                self.logger.debug(f"Image already in correct orientation: {original_shape}, no rotation needed")
-            
-            # Normalize to uint8 for display
-            if result_image.dtype != np.uint8:
-                result_image = normalize_to_uint8(result_image, self.config, self.logger)
-            
-            return result_image
-            
-        except Exception as e:
-            self.logger.error(f"Error converting image to OpenCV format: {e}")
-            return None
+        """Delegate to processing.format_conversion.convert_camera_data_to_opencv."""
+        return convert_camera_data_to_opencv(image_data, self.camera, self.config, self.logger)
 
     # removed in favor of processing.normalization
 
