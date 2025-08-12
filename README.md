@@ -159,6 +159,19 @@ plate_solve:
 - OpenCV (for video processing)
 - Astropy (for astronomical calculations)
 
+## Development
+
+### Run tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+Notes:
+- `astroquery` is optional. Overlays work without it (empty catalog layer).
+- Tests add `code/` to `PYTHONPATH` via `pytest.ini`.
+
 ## License
 
 See [LICENSE](LICENSE) file for details.

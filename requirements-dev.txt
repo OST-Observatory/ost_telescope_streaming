@@ -1,0 +1,6 @@
+pytest>=7.0.0
+numpy
+astropy
+opencv-python-headless
+astroquery; extra == 'astro'
+
