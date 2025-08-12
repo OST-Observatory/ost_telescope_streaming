@@ -205,160 +205,7 @@ class OverlayGenerator:
         
         return f"FOV: {fov_width_deg:.2f}°×{fov_height_deg:.2f}° ({fov_width_arcmin:.1f}'×{fov_height_arcmin:.1f}')"
     
-    def _draw_info_panel(self, draw, img_size: Tuple[int, int], ra_deg: float, dec_deg: float, 
-                        fov_width_deg: float, fov_height_deg: float, position_angle_deg: float = 0.0):
-        """Draw information panel on the overlay."""
-        if not self.info_panel_enabled:
-            return
-        
-        # Get panel configuration
-        position = self.info_panel_config.get('position', 'top_right')
-        width = self.info_panel_config.get('width', 300)
-        padding = self.info_panel_config.get('padding', 10)
-        line_spacing = self.info_panel_config.get('line_spacing', 5)
-        background_color = tuple(self.info_panel_config.get('background_color', [0, 0, 0, 180]))
-        border_color = tuple(self.info_panel_config.get('border_color', [255, 255, 255, 255]))
-        border_width = self.info_panel_config.get('border_width', 2)
-        text_color = tuple(self.info_panel_config.get('text_color', [255, 255, 255, 255]))
-        title_color = tuple(self.info_panel_config.get('title_color', [255, 255, 0, 255]))
-        
-        # Get fonts
-        info_font = self._get_info_panel_font()
-        
-        # Prepare text lines
-        lines = []
-        
-        # Title
-        lines.append(("INFO PANEL", title_color))
-        lines.append(("", text_color))  # Empty line
-        
-        # Timestamp
-        if self.info_panel_config.get('show_timestamp', True):
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            lines.append((f"Time: {timestamp}", text_color))
-        
-        # Coordinates
-        if self.info_panel_config.get('show_coordinates', True):
-            coord_str = self._format_coordinates(ra_deg, dec_deg)
-            lines.append((coord_str, text_color))
-        
-        # Position angle
-        if position_angle_deg != 0.0:
-            lines.append((f"Position Angle: {position_angle_deg:.1f}°", text_color))
-        
-        # Telescope info
-        if self.info_panel_config.get('show_telescope_info', True):
-            lines.append(("", text_color))  # Empty line
-            lines.append((self._get_telescope_info(), text_color))
-        
-        # Camera info
-        if self.info_panel_config.get('show_camera_info', True):
-            lines.append((self._get_camera_info(), text_color))
-        
-        # FOV info
-        if self.info_panel_config.get('show_fov_info', True):
-            lines.append(("", text_color))  # Empty line
-            lines.append((self._get_fov_info(fov_width_deg, fov_height_deg), text_color))
-        
-        # Calculate panel height
-        text_bbox = info_font.getbbox("A")
-        line_height = text_bbox[3] - text_bbox[1] + line_spacing
-        panel_height = len(lines) * line_height + 2 * padding
-        
-        # Calculate panel position
-        if position == 'top_left':
-            panel_x = padding
-            panel_y = padding
-        elif position == 'top_right':
-            panel_x = img_size[0] - width - padding
-            panel_y = padding
-        elif position == 'bottom_left':
-            panel_x = padding
-            panel_y = img_size[1] - panel_height - padding
-        elif position == 'bottom_right':
-            panel_x = img_size[0] - width - padding
-            panel_y = img_size[1] - panel_height - padding
-        else:
-            panel_x = padding
-            panel_y = padding
-        
-        draw_info_panel(draw, img_size, lines, position, width, padding, line_spacing, background_color, border_color, border_width, info_font)
-    
-    def _draw_title(self, draw, img_size: Tuple[int, int]):
-        """Draw title/header on the overlay."""
-        if not self.title_enabled:
-            return
-        
-        # Get title configuration
-        title_text = self.title_config.get('text', 'OST Telescope Streaming')
-        position = self.title_config.get('position', 'top_center')
-        font_size = self.title_config.get('font_size', 18)
-        font_color = tuple(self.title_config.get('font_color', [255, 255, 0, 255]))
-        background_color = tuple(self.title_config.get('background_color', [0, 0, 0, 180]))
-        padding = self.title_config.get('padding', 10)
-        border_color = tuple(self.title_config.get('border_color', [255, 255, 255, 255]))
-        border_width = self.title_config.get('border_width', 1)
-        
-        # Get font
-        title_font = self._get_title_font(font_size)
-        
-        # Get text size
-        text_bbox = title_font.getbbox(title_text)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
-        
-        # Calculate title box dimensions
-        box_width = text_width + 2 * padding
-        box_height = text_height + 2 * padding
-        
-        # Calculate position
-        if position == 'top_center':
-            box_x = (img_size[0] - box_width) // 2
-            box_y = padding
-        elif position == 'top_left':
-            box_x = padding
-            box_y = padding
-        elif position == 'top_right':
-            box_x = img_size[0] - box_width - padding
-            box_y = padding
-        else:
-            box_x = padding
-            box_y = padding
-        
-        draw_title(draw, img_size, title_text, position, title_font, font_color, background_color, padding, border_color, border_width)
-    
-    def _draw_ellipse_for_object(self, draw, center_x: int, center_y: int, 
-                                dim_maj_arcmin: float, dim_min_arcmin: float, 
-                                pa_deg: float, img_size: Tuple[int, int], 
-                                fov_width_deg: float, fov_height_deg: float,
-                                position_angle_deg: float = 0.0, is_flipped: bool = False,
-                                color: Tuple[int, int, int, int] = None, 
-                                line_width: int = 2):
-        """Draw an ellipse for a deep-sky object based on its dimensions.
-        
-        Args:
-            draw: PIL ImageDraw object
-            center_x, center_y: Center coordinates in pixels
-            dim_maj_arcmin: Major axis in arcminutes
-            dim_min_arcmin: Minor axis in arcminutes
-            pa_deg: Position angle in degrees (from SIMBAD)
-            img_size: Image size in pixels
-            fov_width_deg, fov_height_deg: Field of view in degrees
-            position_angle_deg: Image rotation angle
-            is_flipped: Whether image is flipped
-            color: Ellipse color (RGBA)
-            line_width: Line width
-        """
-        if color is None:
-            color = tuple(self.object_color)
-        
-        return draw_ellipse_for_object(
-            draw, center_x, center_y, dim_maj_arcmin, dim_min_arcmin, pa_deg,
-            img_size, fov_width_deg, fov_height_deg, position_angle_deg,
-            is_flipped, tuple(self.object_color) if color is None else color,
-            line_width,
-        )
+    # Removed local drawing wrappers; direct overlay.drawing calls are used instead
     
     def _should_draw_ellipse(self, object_type: str) -> bool:
         """Determine if an object should be drawn as an ellipse based on its type.
@@ -568,8 +415,53 @@ class OverlayGenerator:
             font = self.get_font()
             
             # Draw title and info panel first (so they appear behind objects)
-            self._draw_title(draw, img_size)
-            self._draw_info_panel(draw, img_size, ra_deg, dec_deg, fov_w, fov_h, pa_deg)
+            draw_title(
+                draw, img_size,
+                self.title_config.get('text', 'OST Telescope Streaming'),
+                self.title_config.get('position', 'top_center'),
+                self._get_title_font(self.title_config.get('font_size', 18)),
+                tuple(self.title_config.get('font_color', [255, 255, 0, 255])),
+                tuple(self.title_config.get('background_color', [0, 0, 0, 180])),
+                self.title_config.get('padding', 10),
+                tuple(self.title_config.get('border_color', [255, 255, 255, 255])),
+                self.title_config.get('border_width', 1),
+            )
+
+            if self.info_panel_enabled:
+                info_font = self._get_info_panel_font(self.info_panel_config.get('font_size', 12))
+                lines = []
+                title_color = tuple(self.info_panel_config.get('title_color', [255, 255, 0, 255]))
+                text_color = tuple(self.info_panel_config.get('text_color', [255, 255, 255, 255]))
+                lines.append(("INFO PANEL", title_color))
+                lines.append(("", text_color))
+                if self.info_panel_config.get('show_timestamp', True):
+                    from datetime import datetime
+                    lines.append((f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", text_color))
+                if self.info_panel_config.get('show_coordinates', True):
+                    lines.append((self._format_coordinates(ra_deg, dec_deg), text_color))
+                if pa_deg != 0.0:
+                    lines.append((f"Position Angle: {pa_deg:.1f}°", text_color))
+                if self.info_panel_config.get('show_telescope_info', True):
+                    lines.append(("", text_color))
+                    lines.append((self._get_telescope_info(), text_color))
+                if self.info_panel_config.get('show_camera_info', True):
+                    lines.append((self._get_camera_info(), text_color))
+                if self.info_panel_config.get('show_fov_info', True):
+                    lines.append(("", text_color))
+                    lines.append((self._get_fov_info(fov_w, fov_h), text_color))
+
+                draw_info_panel(
+                    draw, img_size,
+                    lines,
+                    self.info_panel_config.get('position', 'top_right'),
+                    self.info_panel_config.get('width', 300),
+                    self.info_panel_config.get('padding', 10),
+                    self.info_panel_config.get('line_spacing', 5),
+                    tuple(self.info_panel_config.get('background_color', [0, 0, 0, 180])),
+                    tuple(self.info_panel_config.get('border_color', [255, 255, 255, 255])),
+                    self.info_panel_config.get('border_width', 2),
+                    info_font,
+                )
             
             # Draw secondary FOV overlay
             draw_secondary_fov(draw, img_size, ra_deg, dec_deg, fov_w, fov_h, pa_deg, is_flipped, self.secondary_fov_config, self.ra_increases_left)
@@ -678,9 +570,10 @@ class OverlayGenerator:
                         
                         # Draw ellipse if we have dimension data
                         if should_draw_ellipse and has_dimensions and dim_maj is not None and dim_min is not None:
-                            ellipse_drawn = self._draw_ellipse_for_object(
+                            ellipse_drawn = draw_ellipse_for_object(
                                 draw, x, y, dim_maj, dim_min, pa or 0.0,
-                                img_size, fov_w, fov_h, pa_deg, is_flipped
+                                img_size, fov_w, fov_h, pa_deg, is_flipped,
+                                tuple(self.object_color), 2,
                             )
                             if not ellipse_drawn:
                                 # Fallback to marker if ellipse drawing failed
