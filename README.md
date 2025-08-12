@@ -126,6 +126,18 @@ overlay:
     max_retries: 3
   use_timestamps: true
   wait_for_plate_solve: true
+  title:
+    enabled: true
+    text: OST Telescope Streaming
+  info_panel:
+    enabled: true
+    show_timestamp: true
+    show_coordinates: true
+    show_telescope_info: true
+    show_camera_info: true
+    show_fov_info: true
+    # Optional: display cooling status in info panel if cooling is enabled
+    show_cooling_info: false
 ```
 
 ### Plate-Solving Configuration

@@ -147,7 +147,16 @@ class FrameWriter:
             header['DATE-OBS'] = Time.now().isot
 
             hdu = fits.PrimaryHDU(image_data, header=header)
+            # Measure write time for telemetry
+            import time as _t
+            t0 = _t.perf_counter()
             hdu.writeto(filename, overwrite=True)
+            t1 = _t.perf_counter()
+            try:
+                if isinstance(frame_details, dict):
+                    frame_details['save_duration_ms'] = (t1 - t0) * 1000.0
+            except Exception:
+                pass
             if os.path.exists(filename):
                 return success_status("FITS file saved", data=filename)
             return error_status("FITS file was not created")

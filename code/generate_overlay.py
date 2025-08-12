@@ -17,7 +17,7 @@ from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoo
 from overlay.simbad_fields import discover_simbad_dimension_fields
 from overlay.text import get_info_panel_font, get_title_font
 from overlay.drawing import draw_title, draw_info_panel, draw_ellipse_for_object, draw_secondary_fov
-from overlay.info import format_coordinates, telescope_info, camera_info, fov_info, calculate_secondary_fov, secondary_fov_label
+from overlay.info import format_coordinates, telescope_info, camera_info, fov_info, calculate_secondary_fov, secondary_fov_label, cooling_info
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
@@ -57,6 +57,8 @@ class OverlayGenerator:
         # Info panel settings
         self.info_panel_config = self.overlay_config.get('info_panel', {})
         self.info_panel_enabled = self.info_panel_config.get('enabled', True)
+        # Cooling info optional
+        self.show_cooling_info = bool(self.info_panel_config.get('show_cooling_info', False))
         
         # Title settings
         self.title_config = self.overlay_config.get('title', {})
@@ -401,6 +403,21 @@ class OverlayGenerator:
                 if self.info_panel_config.get('show_fov_info', True):
                     lines.append(("", text_color))
                     lines.append((fov_info(fov_w, fov_h), text_color))
+                if self.show_cooling_info:
+                    # Try to get cooling status if cooling service exists
+                    try:
+                        from services.cooling_service import CoolingService  # noqa: F401
+                        cooling_status = None
+                        # Heuristic: video processor may have started status monitoring
+                        if hasattr(self, 'video_processor') and self.video_processor and hasattr(self.video_processor, 'cooling_service'):
+                            cs = getattr(self.video_processor, 'cooling_service')
+                            if cs:
+                                cooling_status = cs.get_cooling_status()
+                        # Fallback: inspector in config not available here; show enabled flag only
+                        enabled = bool(self.config.get_camera_config().get('cooling', {}).get('enable_cooling', False))
+                        lines.append((cooling_info(cooling_status, enabled), text_color))
+                    except Exception:
+                        pass
 
                 draw_info_panel(
                     draw, img_size,

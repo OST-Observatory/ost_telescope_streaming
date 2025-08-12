@@ -43,6 +43,7 @@ from video_capture import VideoCapture
 from plate_solver import PlateSolverFactory, PlateSolveResult
 from services.frame_writer import FrameWriter
 from utils.status_utils import unwrap_status
+from generate_overlay import OverlayGenerator
 
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
@@ -196,6 +197,13 @@ class VideoProcessor:
                         self.cooling_service.start_status_monitor(interval)
                 except Exception as e:
                     self.logger.debug(f"CoolingService not started: {e}")
+                # Make overlay generator aware of processor for cooling info
+                try:
+                    self.overlay_generator = OverlayGenerator(self.config, self.logger)
+                    # Inject a reference for optional cooling information access
+                    self.overlay_generator.video_processor = self
+                except Exception as e:
+                    self.logger.debug(f"OverlayGenerator not initialized: {e}")
             except Exception as e:
                 self.logger.error(f"Error initializing video capture: {e}")
                 success = False

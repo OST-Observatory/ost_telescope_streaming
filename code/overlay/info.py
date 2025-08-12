@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, Optional, Dict, Any
 
 
 def format_coordinates(ra_deg: float, dec_deg: float) -> str:
@@ -33,6 +33,30 @@ def fov_info(fov_width_deg: float, fov_height_deg: float) -> str:
     fov_width_arcmin = fov_width_deg * 60.0
     fov_height_arcmin = fov_height_deg * 60.0
     return f"FOV: {fov_width_deg:.2f}°×{fov_height_deg:.2f}° ({fov_width_arcmin:.1f}'×{fov_height_arcmin:.1f}')"
+
+
+def cooling_info(cooling_status: Optional[Dict[str, Any]], enabled: bool) -> str:
+    if not enabled:
+        return "Cooling: disabled"
+    if not cooling_status or not isinstance(cooling_status, dict):
+        return "Cooling: n/a"
+    try:
+        temp = cooling_status.get('ccd_temperature')
+        target = cooling_status.get('target_temperature')
+        power = cooling_status.get('cooler_power')
+        cooler_on = cooling_status.get('cooler_on')
+        parts = []
+        if temp is not None:
+            parts.append(f"T={float(temp):.1f}°C")
+        if target is not None:
+            parts.append(f"→{float(target):.1f}°C")
+        if power is not None:
+            parts.append(f"P={float(power):.0f}%")
+        if cooler_on is not None:
+            parts.append("ON" if cooler_on else "OFF")
+        return "Cooling: " + (" ".join(parts) if parts else "n/a")
+    except Exception:
+        return "Cooling: n/a"
 
 
 def calculate_secondary_fov(config: dict) -> Tuple[float, float]:

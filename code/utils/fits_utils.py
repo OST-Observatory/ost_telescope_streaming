@@ -165,6 +165,15 @@ def enrich_header_from_metadata(header,  # fits.Header
                     header['MSTFLAT'] = os.path.basename(str(frame_details.get('master_flat_used')))
                 except Exception:
                     header['MSTFLAT'] = str(frame_details.get('master_flat_used'))
+            # Capture correlation and timing
+            if 'capture_id' in frame_details:
+                header['CAPTURE'] = int(frame_details['capture_id'])
+            if 'capture_started_at' in frame_details:
+                header['CAPSTRT'] = str(frame_details['capture_started_at'])
+            if 'capture_finished_at' in frame_details:
+                header['CAPEND'] = str(frame_details['capture_finished_at'])
+            if 'save_duration_ms' in frame_details:
+                header['SAVEMS'] = float(frame_details['save_duration_ms'])
     except Exception:
         pass
 
