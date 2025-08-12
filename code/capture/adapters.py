@@ -30,6 +30,16 @@ class AlpacaCameraAdapter(CameraInterface):
     def get_image_array(self) -> Any:
         return self._cam.get_image_array()
 
+    # Convenience: wait until image_ready or timeout
+    def wait_for_image_ready(self, timeout_s: float) -> bool:
+        import time
+        start = time.time()
+        while not self.image_ready:
+            time.sleep(0.1)
+            if time.time() - start > timeout_s:
+                return False
+        return True
+
     @property
     def gain(self) -> Optional[float]:
         return getattr(self._cam, 'gain', None)
@@ -112,6 +122,12 @@ class AscomCameraAdapter(CameraInterface):
     def get_image_array(self) -> Any:
         status = self._cam.get_image()
         return status.data if hasattr(status, 'data') else None
+
+    def wait_for_image_ready(self, timeout_s: float) -> bool:
+        # ASCOM pattern: expose + short wait before get_image
+        import time
+        time.sleep(min(max(timeout_s, 0.0), timeout_s))
+        return True
 
     @property
     def gain(self) -> Optional[float]:
@@ -206,6 +222,9 @@ class OpenCVCameraAdapter(CameraInterface):
         img = self._last_frame
         self._last_frame = None
         return img
+
+    def wait_for_image_ready(self, timeout_s: float) -> bool:
+        return self._last_frame is not None
 
     @property
     def gain(self) -> Optional[float]:

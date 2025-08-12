@@ -25,6 +25,7 @@ from processing.format_conversion import convert_camera_data_to_opencv
 from utils.status_utils import unwrap_status
 from capture.adapters import AlpacaCameraAdapter, AscomCameraAdapter, OpenCVCameraAdapter
 from capture.frame import Frame
+from capture.settings import CameraSettings
 
 
 class VideoCapture:
@@ -77,6 +78,12 @@ class VideoCapture:
         # Setup
         self._ensure_directories()
         self._initialize_camera()
+        # Reusable writer instance
+        try:
+            from services.frame_writer import FrameWriter
+            self._frame_writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+        except Exception:
+            self._frame_writer = None
         if self.enable_cooling:
             if self.camera:
                 from cooling_manager import create_cooling_manager
@@ -310,27 +317,8 @@ class VideoCapture:
                         else:
                             time.sleep(0.1)
                 elif self.camera_type in ['ascom', 'alpaca']:
-                    if self.camera:
-                        if self.camera_type == 'alpaca':
-                            alpaca_config = self.config.get_camera_config().get('alpaca', {})
-                            exposure_time = alpaca_config.get('exposure_time', 1.0)
-                            gain = alpaca_config.get('gain', None)
-                            binning = alpaca_config.get('binning', [1, 1])
-                            status = self.capture_single_frame_alpaca(exposure_time, gain, binning)
-                        else:
-                            ascom_config = self.config.get_camera_config().get('ascom', {})
-                            exposure_time = ascom_config.get('exposure_time', 1.0)
-                            gain = ascom_config.get('gain', None)
-                            binning = ascom_config.get('binning', 1)
-                            status = self.capture_single_frame_ascom(exposure_time, gain, binning)
-                        if status.is_success:
-                            with self.frame_lock:
-                                self.current_frame = status
-                        else:
-                            time.sleep(0.1)
-                    else:
-                        time.sleep(0.1)
-                    time.sleep(5)
+                    # For long-exposure cameras, background loop does not auto-capture
+                    time.sleep(0.1)
             except Exception as e:
                 self.logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
@@ -394,36 +382,38 @@ class VideoCapture:
             self.camera.start_exposure(exposure_time_s, light=True)  # type: ignore[attr-defined]
 
             # Wait for image readiness depending on camera type
-            if self.camera_type == 'alpaca':
-                start_time = time.time()
-                timeout = exposure_time_s + 30
-                while not getattr(self.camera, 'image_ready', False):  # type: ignore[attr-defined]
-                    time.sleep(0.1)
-                    if time.time() - start_time > timeout:
-                        return error_status("Exposure timeout")
-                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
-            elif self.camera_type == 'ascom':
-                # Best-effort minimal wait for ASCOM expose/get_image pattern
-                time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
-                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
+            # Use adapter-provided wait when available
+            timeout = exposure_time_s + 30.0
+            if hasattr(self.camera, 'wait_for_image_ready'):
+                ready = self.camera.wait_for_image_ready(timeout)  # type: ignore[attr-defined]
+                if not ready:
+                    return error_status("Exposure timeout")
             else:
-                # OpenCV adapter snapshots immediately
-                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
+                # Fallbacks per type
+                if self.camera_type == 'alpaca':
+                    start_time = time.time()
+                    while not getattr(self.camera, 'image_ready', False):  # type: ignore[attr-defined]
+                        time.sleep(0.1)
+                        if time.time() - start_time > timeout:
+                            return error_status("Exposure timeout")
+                elif self.camera_type == 'ascom':
+                    time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
+            image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
 
             if image_data is None:
                 return error_status("Failed to get image data from camera")
 
             effective_width = getattr(self.camera, 'camera_x_size', self.resolution[0])  # type: ignore[attr-defined]
             effective_height = getattr(self.camera, 'camera_y_size', self.resolution[1])  # type: ignore[attr-defined]
-            frame_details = {
-                'exposure_time_s': exposure_time_s,
-                'gain': gain,
-                'binning': binning_value if 'binning_value' in locals() else binning,
-                'offset': getattr(self.camera, 'offset', None),
-                'readout_mode': getattr(self.camera, 'readout_mode', None),
-                'dimensions': f"{effective_width}x{effective_height}",
-                'debayered': bool(getattr(self.camera, 'is_color_camera', lambda: False)()),
-            }
+            settings = CameraSettings(
+                exposure_time_s=exposure_time_s,
+                gain=gain,
+                offset=getattr(self.camera, 'offset', None),
+                readout_mode=getattr(self.camera, 'readout_mode', None),
+                binning=(binning_value if 'binning_value' in locals() else binning),
+                dimensions=f"{effective_width}x{effective_height}",
+            )
+            frame_details = {**settings.to_dict(), 'debayered': bool(getattr(self.camera, 'is_color_camera', lambda: False)())}
 
             frame_data = image_data
             if self.enable_calibration and self.calibration_applier:
@@ -453,12 +443,14 @@ class VideoCapture:
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         try:
             # Prefer centralized FrameWriter for uniform saving behavior
-            from services.frame_writer import FrameWriter
             output_path = Path(filename)
             image_data, details = unwrap_status(frame)
             # Wrap into Frame for structured saving
             frame_obj = Frame(data=image_data if image_data is not None else frame, metadata=details or {})
-            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+            writer = self._frame_writer
+            if writer is None:
+                from services.frame_writer import FrameWriter
+                writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
             return writer.save(frame_obj, str(output_path))
         except Exception as e:
             camera_id = self.camera_index if hasattr(self, 'camera_index') else getattr(self, 'ascom_driver', None)
@@ -467,9 +459,11 @@ class VideoCapture:
     def _save_fits_unified(self, frame: Any, filename: str) -> CameraStatus:
         try:
             # Delegate to FrameWriter for unified FITS saving
-            from services.frame_writer import FrameWriter
             image_data, details = unwrap_status(frame)
-            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+            writer = self._frame_writer
+            if writer is None:
+                from services.frame_writer import FrameWriter
+                writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
             return writer.save_fits(image_data if image_data is not None else frame, filename, metadata=details)
         except Exception as e:
             return error_status(f"Error saving FITS file: {e}")
