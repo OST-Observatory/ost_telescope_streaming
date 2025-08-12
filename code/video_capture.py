@@ -20,7 +20,6 @@ from typing import Optional, Dict, Any
 
 from status import CameraStatus, success_status, error_status, warning_status
 from calibration_applier import CalibrationApplier
-from utils.fits_utils import enrich_header_from_metadata
 from processing.format_conversion import convert_camera_data_to_opencv
 from utils.status_utils import unwrap_status
 from capture.adapters import AlpacaCameraAdapter, AscomCameraAdapter, OpenCVCameraAdapter
@@ -275,22 +274,7 @@ class VideoCapture:
                 self.camera = None
         self.logger.info("Camera disconnected")
     
-    # Legacy shim for tests expecting a connect() method
-    def connect(self):  # pragma: no cover
-        return self._initialize_camera()
-
-    # Legacy shim used by tests
-    def get_camera_info(self):  # pragma: no cover
-        info = {
-            'camera_type': self.camera_type,
-            'resolution': tuple(self.resolution),
-        }
-        if self.camera_type == 'ascom' and self.camera:
-            try:
-                info['name'] = getattr(self.camera, 'name', None)
-            except Exception:
-                pass
-        return info
+    # Legacy shims removed: use start_capture()/disconnect() and adapter-provided info
 
     def start_capture(self) -> CameraStatus:
         if self.camera_type == 'opencv':
@@ -327,8 +311,20 @@ class VideoCapture:
                     if self.cap and self.cap.isOpened():
                         ret, frame = self.cap.read()
                         if ret:
+                            # Wrap into Frame and Status for consistency
+                            frame_np = frame.copy()
+                            details = {
+                                'exposure_time_s': self.exposure_time,
+                                'gain': getattr(self, 'gain', None),
+                                'binning': 1,
+                                'dimensions': f"{self.resolution[0]}x{self.resolution[1]}",
+                                'debayered': True,
+                                'capture_started_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                                'capture_finished_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                            }
+                            status_obj = success_status("Frame captured", data=Frame(data=frame_np, metadata=details), details=details)
                             with self.frame_lock:
-                                self.current_frame = frame.copy()
+                                self.current_frame = status_obj
                         else:
                             time.sleep(0.1)
                 elif self.camera_type in ['ascom', 'alpaca']:
@@ -342,8 +338,6 @@ class VideoCapture:
         with self.frame_lock:
             if self.current_frame is None:
                 return None
-            if hasattr(self.current_frame, 'data') or hasattr(self.current_frame, 'is_success'):
-                return self.current_frame
             return self.current_frame
     
     def capture_single_frame(self) -> CameraStatus:
@@ -476,17 +470,5 @@ class VideoCapture:
         except Exception as e:
             camera_id = self.camera_index if hasattr(self, 'camera_index') else getattr(self, 'ascom_driver', None)
             return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
-    
-    def _save_fits_unified(self, frame: Any, filename: str) -> CameraStatus:
-        try:
-            # Delegate to FrameWriter for unified FITS saving
-            image_data, details = unwrap_status(frame)
-            writer = self._frame_writer
-            if writer is None:
-                from services.frame_writer import FrameWriter
-                writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
-            return writer.save_fits(image_data if image_data is not None else frame, filename, metadata=details)
-        except Exception as e:
-            return error_status(f"Error saving FITS file: {e}")
     
     # Note: Image saving is fully delegated to FrameWriter via save_frame().

@@ -21,6 +21,12 @@ class AlpacaCameraAdapter(CameraInterface):
         self._cam.disconnect()
 
     def start_exposure(self, exposure_time_s: float, light: bool = True) -> None:
+        # Structured debug: exposure start
+        try:
+            import logging
+            logging.getLogger(__name__).debug(f"Alpaca: start_exposure exp={exposure_time_s} light={light}")
+        except Exception:
+            pass
         self._cam.start_exposure(exposure_time_s, light=light)
 
     @property
@@ -38,6 +44,11 @@ class AlpacaCameraAdapter(CameraInterface):
             time.sleep(0.1)
             if time.time() - start > timeout_s:
                 return False
+        try:
+            import logging
+            logging.getLogger(__name__).debug(f"Alpaca: image ready in {time.time() - start:.2f}s")
+        except Exception:
+            pass
         return True
 
     @property
@@ -112,6 +123,11 @@ class AscomCameraAdapter(CameraInterface):
 
     def start_exposure(self, exposure_time_s: float, light: bool = True) -> None:
         # ASCOM wrapper exposes expose() and get_image() pattern; start_exposure not used
+        try:
+            import logging
+            logging.getLogger(__name__).debug(f"ASCOM: expose exp={exposure_time_s} gain={getattr(self._cam, 'gain', None)} offset={getattr(self._cam, 'offset', None)} readout={getattr(self._cam, 'readout_mode', None)}")
+        except Exception:
+            pass
         self._cam.expose(exposure_time_s, getattr(self._cam, 'gain', None), 1, getattr(self._cam, 'offset', None), getattr(self._cam, 'readout_mode', None))
 
     @property
@@ -125,8 +141,13 @@ class AscomCameraAdapter(CameraInterface):
 
     def wait_for_image_ready(self, timeout_s: float) -> bool:
         # ASCOM pattern: expose + short wait before get_image
-        import time
+        import time, logging
+        t0 = time.time()
         time.sleep(min(max(timeout_s, 0.0), timeout_s))
+        try:
+            logging.getLogger(__name__).debug(f"ASCOM: image assumed ready after {time.time() - t0:.2f}s")
+        except Exception:
+            pass
         return True
 
     @property

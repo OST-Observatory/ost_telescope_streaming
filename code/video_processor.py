@@ -133,13 +133,15 @@ class VideoProcessor:
         self.slewing_check_interval: float = slewing_config.get('check_interval', 1.0)
         
         # State tracking for statistics and timing
-        self.last_capture_time: float = 0
-        self.last_solve_time: float = 0
+        self.last_capture_time: float = time.monotonic()
+        self.last_solve_time: float = time.monotonic()
         self.last_solve_result: Optional[PlateSolveResult] = None
         self.capture_count: int = 0
         self.solve_count: int = 0
         self.successful_solves: int = 0
         self.last_frame_metadata: Optional[dict[str, Any]] = None
+        # Scheduling condition for efficient sleeps and external wake-ups
+        self._condition = threading.Condition()
         
         # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
@@ -268,6 +270,11 @@ class VideoProcessor:
             VideoProcessingStatus: Status-Objekt mit Stopinformation.
         """
         self.is_running = False
+        try:
+            with self._condition:
+                self._condition.notify_all()
+        except Exception:
+            pass
         if self.processing_thread:
             self.processing_thread.join(timeout=5.0)
         if self.video_capture:
@@ -286,6 +293,11 @@ class VideoProcessor:
             VideoProcessingStatus: Status-Objekt mit Stopinformation.
         """
         self.is_running = False
+        try:
+            with self._condition:
+                self._condition.notify_all()
+        except Exception:
+            pass
         if self.processing_thread:
             self.processing_thread.join(timeout=5.0)
         if self.video_capture:
@@ -307,6 +319,96 @@ class VideoProcessor:
             self.logger.info("Camera disconnected")
         return success_status("Camera disconnected")
     
+    def _obtain_frame(self):
+        """Obtain a frame via one-shot (ASCOM/Alpaca) or current frame (OpenCV)."""
+        if not self.video_capture:
+            return None
+        try:
+            cam_type = getattr(self.video_capture, 'camera_type', 'opencv')
+            if cam_type in ['alpaca', 'ascom']:
+                status = self.video_capture.capture_single_frame()
+                if not status or not getattr(status, 'is_success', False):
+                    self.logger.warning(f"Single-frame capture failed: {getattr(status, 'message', 'unknown error')}")
+                    return None
+                return status
+            return self.video_capture.get_current_frame()
+        except Exception as e:
+            self.logger.warning(f"Failed to obtain frame: {e}")
+            return None
+
+    def _save_outputs(self, frame) -> tuple[Optional[Path], Optional[Path]]:
+        """Save display image and FITS; return their paths (may be None)."""
+        frame_filename: Optional[Path] = None
+        fits_filename: Optional[Path] = None
+        if not self.save_frames:
+            return frame_filename, fits_filename
+        # Build base filename
+        filename_parts = ["capture"]
+        if self.use_timestamps:
+            timestamp = datetime.now().strftime(self.timestamp_format)
+            filename_parts.append(timestamp)
+        if self.use_capture_count:
+            filename_parts.append(f"{self.capture_count:04d}")
+        base = '_'.join(filename_parts)
+
+        # Ensure writer exists
+        if not self.frame_writer and self.video_capture:
+            self.frame_writer = FrameWriter(
+                config=self.config,
+                logger=self.logger,
+                camera=self.video_capture.camera,
+                camera_type=self.video_capture.camera_type,
+            )
+
+        # Extract details and attach capture_id
+        try:
+            _, details = unwrap_status(frame)
+            if not isinstance(details, dict):
+                details = {}
+        except Exception:
+            details = {}
+        details_with_id = {**details, 'capture_id': self.capture_count}
+
+        # Save display image
+        frame_filename = self.frame_dir / f"{base}.{self.file_format}"
+        img_status = self.frame_writer.save(frame, str(frame_filename)) if self.frame_writer else None
+        if not (img_status and getattr(img_status, 'is_success', False)):
+            self.logger.warning(f"Failed to save frame: {getattr(img_status, 'message', 'No status')}")
+            frame_filename = None
+        else:
+            self.logger.info(f"Frame saved: {frame_filename}")
+
+        # Save FITS with metadata
+        fits_filename = self.frame_dir / f"{base}.fits"
+        fits_status = self.frame_writer.save(frame, str(fits_filename), metadata=details_with_id) if self.frame_writer else None
+        if not (fits_status and getattr(fits_status, 'is_success', False)):
+            self.logger.warning(f"Failed to save FITS frame: {getattr(fits_status, 'message', 'No status')}")
+            fits_filename = None
+        else:
+            self.logger.info(f"FITS frame saved: {fits_filename}")
+
+        return frame_filename, fits_filename
+
+    def _maybe_plate_solve(self, fits_filename: Optional[Path], frame_filename: Optional[Path]) -> None:
+        """Run plate-solving if enabled and interval elapsed; prefer FITS."""
+        if not (self.plate_solver and self.auto_solve):
+            return
+        if (time.monotonic() - self.last_solve_time) < self.min_solve_interval:
+            return
+        candidate: Optional[Path] = None
+        if fits_filename and fits_filename.exists():
+            candidate = fits_filename
+            self.logger.info(f"Using FITS file for plate-solving: {candidate}")
+        elif frame_filename and frame_filename.exists():
+            candidate = frame_filename
+            self.logger.warning(f"FITS not available, using display image for plate-solving: {candidate}")
+            self.logger.warning("This may not be supported by some solvers")
+        else:
+            self.logger.error("No suitable file to plate-solve")
+            return
+        self._solve_frame(str(candidate))
+        self.last_solve_time = time.monotonic()
+
     def start_observation_session(self) -> VideoProcessingStatus:
         """Start an observation session with cooling initialization.
         
@@ -382,24 +484,29 @@ class VideoProcessor:
             return error_status(f"Failed to end observation session: {e}")
     
     def _processing_loop(self) -> None:
-        """Hauptverarbeitungsschleife."""
+        """Main processing loop using monotonic clock and a condition for timing."""
         while self.is_running:
             try:
-                current_time = time.time()
-                
-                # Check if it's time for a new capture/solve cycle
-                if current_time - self.last_capture_time >= self.capture_interval:
+                now = time.monotonic()
+                elapsed = now - self.last_capture_time
+                if elapsed >= self.capture_interval:
                     self._capture_and_solve()
-                    self.last_capture_time = current_time
-                
-                # Sleep briefly to avoid busy waiting
-                time.sleep(1)
-                
+                    self.last_capture_time = time.monotonic()
+                    continue
+                # Efficient wait for the remaining interval or external wake-up
+                timeout = max(0.05, self.capture_interval - elapsed)
+                with self._condition:
+                    self._condition.wait(timeout=timeout)
             except Exception as e:
                 self.logger.error(f"Error in processing loop: {e}")
                 if self.on_error:
                     self.on_error(e)
-                time.sleep(5)  # Wait before retrying
+                # Short backoff before retrying
+                try:
+                    with self._condition:
+                        self._condition.wait(timeout=0.5)
+                except Exception:
+                    time.sleep(0.5)
     
     def _capture_and_solve(self) -> None:
         """Capture a frame and perform plate-solving if enabled.
@@ -447,101 +554,43 @@ class VideoProcessor:
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
             
-            # Get or capture a frame
-            frame = None
-            try:
-                cam_type = getattr(self.video_capture, 'camera_type', 'opencv') if self.video_capture else 'opencv'
-                if cam_type in ['alpaca', 'ascom']:
-                    capture_status = self.video_capture.capture_single_frame()
-                    if not capture_status or not getattr(capture_status, 'is_success', False):
-                        self.logger.warning(f"Single-frame capture failed: {getattr(capture_status, 'message', 'unknown error')}")
-                        return
-                    frame = capture_status
-                else:
-                    frame = self.video_capture.get_current_frame()
-            except Exception as e:
-                self.logger.warning(f"Failed to obtain frame: {e}")
-                return
+            # Obtain frame (one-shot for long exposures, current for OpenCV)
+            frame = self._obtain_frame()
             if frame is None:
                 self.logger.warning("No frame available for capture")
                 return
+            # Increment capture counter once per cycle
+            self.capture_count += 1
             # Capture and store frame metadata for downstream consumers; attach capture_id
             try:
                 _, details = unwrap_status(frame)
                 if isinstance(details, dict) and details:
                     # assign a capture_id for correlation
-                    self.capture_count += 1
                     details = {**details, 'capture_id': self.capture_count}
                     self.last_frame_metadata = details
+                    # Structured log for capture
+                    exp = details.get('exposure_time_s') or details.get('exposure_time')
+                    gain = details.get('gain')
+                    off = details.get('offset')
+                    readout = details.get('readout_mode')
+                    dims = details.get('dimensions')
+                    self.logger.info(f"capture_id={self.capture_count} exp={exp} gain={gain} offset={off} readout={readout} dims={dims}")
             except Exception:
                 pass
-            
-            self.capture_count += 1
+
             
             # Save frames if enabled
-            frame_filename = None
-            fits_filename = None
-            
+            frame_filename: Optional[Path] = None
+            fits_filename: Optional[Path] = None
             if self.save_frames:
-                # Generate base filename with configurable timestamp and capture count
-                filename_parts = ["capture"]
-                
-                if self.use_timestamps:
-                    timestamp = datetime.now().strftime(self.timestamp_format)
-                    filename_parts.append(timestamp)
-                
-                if self.use_capture_count:
-                    filename_parts.append(f"{self.capture_count:04d}")
-                
-                base_filename = '_'.join(filename_parts)
-                
-                # Save current frame in configured format using FrameWriter
-                frame_filename = self.frame_dir / f"{base_filename}.{self.file_format}"
-                if not self.frame_writer:
-                    self.frame_writer = FrameWriter(self.config, self.logger, camera=self.video_capture.camera, camera_type=self.video_capture.camera_type)
-                save_status = self.frame_writer.save(frame, str(frame_filename))
-                if save_status and save_status.is_success:
-                    self.logger.info(f"Frame saved: {frame_filename}")
-                else:
-                    self.logger.warning(f"Failed to save frame: {getattr(save_status, 'message', 'No status')}" )
-                    frame_filename = None
-                
-                # ALWAYS save FITS for plate-solving
-                fits_filename = self.frame_dir / f"{base_filename}.fits"
-                fits_save_status = self.frame_writer.save(frame, str(fits_filename))
-                if fits_save_status and fits_save_status.is_success:
-                    self.logger.info(f"FITS frame saved: {fits_filename}")
-                else:
-                    self.logger.warning(f"Failed to save FITS frame: {getattr(fits_save_status, 'message', 'No status')}")
-                    fits_filename = None
+                frame_filename, fits_filename = self._save_outputs(frame)
             
             # Trigger capture callback
             if self.on_capture_frame:
                 self.on_capture_frame(frame, frame_filename)
             
-            # Plate-solve if enabled and enough time has passed
-            if (self.plate_solver and self.auto_solve and 
-                time.time() - self.last_solve_time >= self.min_solve_interval):
-                
-                solve_filename = None
-                
-                if fits_filename and fits_filename.exists():
-                    solve_filename = fits_filename
-                    self.logger.info(f"Using FITS file for plate-solving: {solve_filename}")
-                elif frame_filename and frame_filename.exists():
-                    solve_filename = frame_filename
-                    self.logger.warning(f"FITS file not available, using display format for plate-solving: {solve_filename}")
-                    self.logger.warning("This may cause 'File type not supported' errors with PlateSolve2")
-                else:
-                    self.logger.error("No suitable file found for plate-solving")
-                    self.logger.error(f"FITS file exists: {fits_filename and fits_filename.exists() if fits_filename else False}")
-                    self.logger.error(f"Display file exists: {frame_filename and frame_filename.exists() if frame_filename else False}")
-                
-                if solve_filename and solve_filename.exists():
-                    self.logger.info(f"Plate-solving frame: {solve_filename}")
-                    self._solve_frame(str(solve_filename))
-                else:
-                    self.logger.warning("No frame file available for plate-solving")
+            # Plate-solve if enabled and interval elapsed
+            self._maybe_plate_solve(fits_filename, frame_filename)
             
         except Exception as e:
             self.logger.error(f"Error in capture and solve: {e}")

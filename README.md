@@ -97,6 +97,13 @@ frame_processing:
   auto_debayer: true
   output_dir: "captured_frames"
   cache_dir: "cache"
+  # Orientation policy for saved images (display + FITS). Default: long_side_horizontal
+  orientation: long_side_horizontal
+  # Normalization settings for display (PNG/JPG); FITS always uses uint16 scaling
+  normalization:
+    method: zscale   # zscale | hist
+    contrast: 0.15   # only for zscale
+  file_format: "PNG"
 ```
 
 ### Camera Configuration

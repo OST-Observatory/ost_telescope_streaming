@@ -24,6 +24,17 @@ class FrameWriter:
         self.logger = logger
         self.camera = camera
         self.camera_type = camera_type
+        # Orientation/scaling policy from config
+        try:
+            fp_cfg = self.config.get_frame_processing_config()
+            self.orientation_policy = str(fp_cfg.get('orientation', 'long_side_horizontal')).lower()
+            norm_cfg = fp_cfg.get('normalization', {})
+            self.display_normalization = str(norm_cfg.get('method', 'zscale')).lower()
+            self.display_contrast = float(norm_cfg.get('contrast', 0.15))
+        except Exception:
+            self.orientation_policy = 'long_side_horizontal'
+            self.display_normalization = 'zscale'
+            self.display_contrast = 0.15
 
     def save(self, frame: Any, filename: str, metadata: Optional[Dict[str, Any]] = None):
         suffix = Path(filename).suffix.lower()
@@ -54,16 +65,26 @@ class FrameWriter:
             if not isinstance(frame_np, np.ndarray):
                 frame_np = np.array(frame_np)
 
+            # Enforce orientation for display if configured
+            if self.orientation_policy == 'long_side_horizontal':
+                from processing.orientation import enforce_long_side_horizontal
+                frame_np, _ = enforce_long_side_horizontal(frame_np)
+
+            # Normalize to uint8 for display
             if frame_np.dtype != np.uint8:
-                if frame_np.dtype in [np.float32, np.float64]:
-                    vmin = float(np.min(frame_np))
-                    vmax = float(np.max(frame_np))
-                    if vmax > vmin:
-                        frame_np = ((frame_np - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+                try:
+                    from processing.normalization import normalize_to_uint8
+                    frame_np = normalize_to_uint8(frame_np, self.config, self.logger)
+                except Exception:
+                    if frame_np.dtype in [np.float32, np.float64]:
+                        vmin = float(np.min(frame_np))
+                        vmax = float(np.max(frame_np))
+                        if vmax > vmin:
+                            frame_np = ((frame_np - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+                        else:
+                            frame_np = frame_np.astype(np.uint8)
                     else:
                         frame_np = frame_np.astype(np.uint8)
-                else:
-                    frame_np = frame_np.astype(np.uint8)
 
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             success = cv2.imwrite(filename, frame_np)
