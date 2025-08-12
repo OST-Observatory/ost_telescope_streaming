@@ -13,6 +13,8 @@ import logging
 
 from exceptions import OverlayError, FileError
 from status import OverlayStatus, success_status, error_status, warning_status
+from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoord
+from overlay.simbad_fields import discover_simbad_dimension_fields
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
@@ -91,8 +93,7 @@ class OverlayGenerator:
 
     def skycoord_to_pixel_with_rotation(self, obj_coord, center_coord, size_px, fov_width_deg, fov_height_deg, position_angle_deg=0.0, is_flipped=False):
         """Thin wrapper that delegates projection to overlay.projection."""
-        from overlay.projection import skycoord_to_pixel_with_rotation as _proj
-        return _proj(
+        return project_skycoord(
             obj_coord.ra.degree,
             obj_coord.dec.degree,
             center_coord.ra.degree,
@@ -611,36 +612,19 @@ class OverlayGenerator:
         offset_center_ra = center_ra_deg + ra_offset_deg
         offset_center_dec = center_dec_deg + dec_offset_deg
         
-        # Calculate pixel scale
-        scale_x = (fov_width_deg * 60) / img_size[0]   # arcmin per pixel in X
-        scale_y = (fov_height_deg * 60) / img_size[1]  # arcmin per pixel in Y
+        # Use projection helper to compute pixel center of secondary FOV
+        center_x, center_y = project_skycoord(
+            offset_center_ra, offset_center_dec,
+            center_ra_deg, center_dec_deg,
+            img_size, fov_width_deg, fov_height_deg,
+            position_angle_deg, is_flipped, self.ra_increases_left,
+        )
         
-        # Calculate secondary FOV size in pixels
+        # Compute secondary FOV size in pixels using main scale
+        scale_x = (fov_width_deg * 60) / img_size[0]
+        scale_y = (fov_height_deg * 60) / img_size[1]
         secondary_fov_w_px = (secondary_fov_w * 60) / scale_x
         secondary_fov_h_px = (secondary_fov_h * 60) / scale_y
-        
-        # Calculate center position in pixels
-        center_coord = SkyCoord(ra=offset_center_ra * u.deg, dec=offset_center_dec * u.deg, frame='icrs')
-        main_center_coord = SkyCoord(ra=center_ra_deg * u.deg, dec=center_dec_deg * u.deg, frame='icrs')
-        
-        # Calculate angular separation
-        delta_ra = (offset_center_ra - center_ra_deg) * u.deg.to(u.arcmin) * np.cos(center_dec_deg * np.pi / 180)
-        delta_dec = (offset_center_dec - center_dec_deg) * u.deg.to(u.arcmin)
-        
-        # Convert to radians for rotation
-        pa_rad = np.radians(position_angle_deg)
-        
-        # Apply rotation matrix
-        cos_pa = np.cos(pa_rad)
-        sin_pa = np.sin(pa_rad)
-        
-        # Rotate the coordinates
-        delta_ra_rot = delta_ra * cos_pa + delta_dec * sin_pa
-        delta_dec_rot = -delta_ra * sin_pa + delta_dec * cos_pa
-        
-        # Convert to pixel coordinates
-        center_x = img_size[0] / 2 + delta_ra_rot / scale_x
-        center_y = img_size[1] / 2 - delta_dec_rot / scale_y
         
         # Apply flip correction if needed
         if is_flipped:
@@ -808,7 +792,6 @@ class OverlayGenerator:
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
             # Configure SIMBAD with robust field selection (delegated)
-            from overlay.simbad_fields import discover_simbad_dimension_fields
             custom_simbad = Simbad()
             custom_simbad.reset_votable_fields()
             custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
