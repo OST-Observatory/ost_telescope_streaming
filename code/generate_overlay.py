@@ -17,6 +17,7 @@ from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoo
 from overlay.simbad_fields import discover_simbad_dimension_fields
 from overlay.text import get_info_panel_font, get_title_font
 from overlay.drawing import draw_title, draw_info_panel, draw_ellipse_for_object, draw_secondary_fov
+from overlay.info import format_coordinates, telescope_info, camera_info, fov_info, calculate_secondary_fov, secondary_fov_label
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
@@ -259,71 +260,7 @@ class OverlayGenerator:
         
         return object_type in ellipse_types
     
-    def _calculate_secondary_fov(self) -> Tuple[float, float]:
-        """Calculate secondary telescope field of view in degrees."""
-        if not self.secondary_fov_enabled:
-            return 0.0, 0.0
-        
-        fov_type = self.secondary_fov_config.get('type', 'camera')
-        telescope_config = self.secondary_fov_config.get('telescope', {})
-        focal_length = telescope_config.get('focal_length', 1000)
-        
-        if fov_type == 'camera':
-            # Camera-based FOV calculation
-            camera_config = self.secondary_fov_config.get('camera', {})
-            sensor_width = camera_config.get('sensor_width', 10.0)
-            sensor_height = camera_config.get('sensor_height', 10.0)
-            
-            # Calculate FOV in degrees
-            fov_width_deg = (sensor_width / focal_length) * 57.2958  # Convert radians to degrees
-            fov_height_deg = (sensor_height / focal_length) * 57.2958
-            
-            return fov_width_deg, fov_height_deg
-            
-        elif fov_type == 'eyepiece':
-            # Eyepiece-based FOV calculation
-            eyepiece_config = self.secondary_fov_config.get('eyepiece', {})
-            eyepiece_fl = eyepiece_config.get('focal_length', 25)
-            afov = eyepiece_config.get('afov', 68)
-            
-            # Calculate magnification
-            magnification = focal_length / eyepiece_fl
-            
-            # Calculate true field of view
-            tfov = afov / magnification
-            
-            # For eyepiece, assume circular FOV
-            return tfov, tfov
-        
-        return 0.0, 0.0
-    
-    def _get_secondary_fov_label(self) -> str:
-        """Get label text for secondary FOV."""
-        if not self.secondary_fov_enabled:
-            return ""
-        
-        fov_type = self.secondary_fov_config.get('type', 'camera')
-        telescope_config = self.secondary_fov_config.get('telescope', {})
-        focal_length = telescope_config.get('focal_length', 1000)
-        aperture = telescope_config.get('aperture', 200)
-        telescope_type = telescope_config.get('type', 'reflector')
-        
-        if fov_type == 'camera':
-            camera_config = self.secondary_fov_config.get('camera', {})
-            sensor_width = camera_config.get('sensor_width', 10.0)
-            sensor_height = camera_config.get('sensor_height', 10.0)
-            pixel_size = camera_config.get('pixel_size', 5.0)
-            
-            return f"Secondary: {aperture}mm {telescope_type} + {sensor_width}×{sensor_height}mm sensor"
-            
-        elif fov_type == 'eyepiece':
-            eyepiece_config = self.secondary_fov_config.get('eyepiece', {})
-            eyepiece_fl = eyepiece_config.get('focal_length', 25)
-            afov = eyepiece_config.get('afov', 68)
-            
-            return f"Secondary: {aperture}mm {telescope_type} + {eyepiece_fl}mm ({afov}° AFOV)"
-        
-        return "Secondary FOV"
+    # Secondary FOV helpers moved to overlay.info
     
     def _draw_secondary_fov(self, *args, **kwargs):
         pass
@@ -438,17 +375,17 @@ class OverlayGenerator:
                     from datetime import datetime
                     lines.append((f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", text_color))
                 if self.info_panel_config.get('show_coordinates', True):
-                    lines.append((self._format_coordinates(ra_deg, dec_deg), text_color))
+                    lines.append((format_coordinates(ra_deg, dec_deg), text_color))
                 if pa_deg != 0.0:
                     lines.append((f"Position Angle: {pa_deg:.1f}°", text_color))
                 if self.info_panel_config.get('show_telescope_info', True):
                     lines.append(("", text_color))
-                    lines.append((self._get_telescope_info(), text_color))
+                    lines.append((telescope_info(self.config.get_telescope_config()), text_color))
                 if self.info_panel_config.get('show_camera_info', True):
-                    lines.append((self._get_camera_info(), text_color))
+                    lines.append((camera_info(self.config.get_camera_config()), text_color))
                 if self.info_panel_config.get('show_fov_info', True):
                     lines.append(("", text_color))
-                    lines.append((self._get_fov_info(fov_w, fov_h), text_color))
+                    lines.append((fov_info(fov_w, fov_h), text_color))
 
                 draw_info_panel(
                     draw, img_size,
