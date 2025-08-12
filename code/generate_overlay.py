@@ -15,6 +15,8 @@ from exceptions import OverlayError, FileError
 from status import OverlayStatus, success_status, error_status, warning_status
 from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoord
 from overlay.simbad_fields import discover_simbad_dimension_fields
+from overlay.text import get_info_panel_font, get_title_font
+from overlay.drawing import draw_title, draw_info_panel, draw_ellipse_for_object
 
 class OverlayGenerator:
     """Class for generating astronomical overlays based on RA/Dec coordinates."""
@@ -281,22 +283,7 @@ class OverlayGenerator:
             panel_x = padding
             panel_y = padding
         
-        # Draw background rectangle
-        background_rect = [panel_x, panel_y, panel_x + width, panel_y + panel_height]
-        draw.rectangle(background_rect, fill=background_color)
-        
-        # Draw border
-        if border_width > 0:
-            border_rect = [panel_x - border_width, panel_y - border_width, 
-                          panel_x + width + border_width, panel_y + panel_height + border_width]
-            draw.rectangle(border_rect, outline=border_color, width=border_width)
-        
-        # Draw text lines
-        y_offset = panel_y + padding
-        for line_text, color in lines:
-            if line_text:  # Skip empty lines
-                draw.text((panel_x + padding, y_offset), line_text, fill=color, font=info_font)
-            y_offset += line_height
+        draw_info_panel(draw, img_size, lines, position, width, padding, line_spacing, background_color, border_color, border_width, info_font)
     
     def _draw_title(self, draw, img_size: Tuple[int, int]):
         """Draw title/header on the overlay."""
@@ -339,20 +326,7 @@ class OverlayGenerator:
             box_x = padding
             box_y = padding
         
-        # Draw background rectangle
-        background_rect = [box_x, box_y, box_x + box_width, box_y + box_height]
-        draw.rectangle(background_rect, fill=background_color)
-        
-        # Draw border
-        if border_width > 0:
-            border_rect = [box_x - border_width, box_y - border_width, 
-                          box_x + box_width + border_width, box_y + box_height + border_width]
-            draw.rectangle(border_rect, outline=border_color, width=border_width)
-        
-        # Draw text
-        text_x = box_x + padding
-        text_y = box_y + padding
-        draw.text((text_x, text_y), title_text, fill=font_color, font=title_font)
+        draw_title(draw, img_size, title_text, position, title_font, font_color, background_color, padding, border_color, border_width)
     
     def _draw_ellipse_for_object(self, draw, center_x: int, center_y: int, 
                                 dim_maj_arcmin: float, dim_min_arcmin: float, 
@@ -379,85 +353,12 @@ class OverlayGenerator:
         if color is None:
             color = tuple(self.object_color)
         
-        # Calculate pixel scale
-        scale_x = (fov_width_deg * 60) / img_size[0]   # arcmin per pixel in X
-        scale_y = (fov_height_deg * 60) / img_size[1]  # arcmin per pixel in Y
-        
-        # Convert arcminutes to pixels
-        major_axis_px = dim_maj_arcmin / scale_x
-        minor_axis_px = dim_min_arcmin / scale_y
-        
-        # Skip if ellipse is too small to be visible
-        if major_axis_px < 3 or minor_axis_px < 3:
-            return False
-        
-        # Calculate total rotation (object PA + image rotation)
-        total_rotation_deg = pa_deg + position_angle_deg
-        
-        # Apply flip correction if needed
-        if is_flipped:
-            total_rotation_deg = -total_rotation_deg
-        
-        # Convert to radians
-        rotation_rad = np.radians(total_rotation_deg)
-        
-        # Calculate bounding box for the ellipse
-        # We need to find the extreme points of the rotated ellipse
-        cos_rot = np.cos(rotation_rad)
-        sin_rot = np.sin(rotation_rad)
-        
-        # Calculate the maximum extent in x and y directions
-        max_x_extent = np.sqrt((major_axis_px * cos_rot)**2 + (minor_axis_px * sin_rot)**2)
-        max_y_extent = np.sqrt((major_axis_px * sin_rot)**2 + (minor_axis_px * cos_rot)**2)
-        
-        # Calculate bounding box
-        left = center_x - max_x_extent
-        top = center_y - max_y_extent
-        right = center_x + max_x_extent
-        bottom = center_y + max_y_extent
-        
-        # Check if ellipse is within image bounds
-        if (left > img_size[0] or right < 0 or top > img_size[1] or bottom < 0):
-            return False
-        
-        # Clip to image bounds
-        left = max(0, min(left, img_size[0]))
-        top = max(0, min(top, img_size[1]))
-        right = max(0, min(right, img_size[0]))
-        bottom = max(0, min(bottom, img_size[1]))
-        
-        # For PIL, we need to draw the ellipse as a polygon approximation
-        # since PIL doesn't support rotated ellipses directly
-        num_points = 32
-        points = []
-        
-        for i in range(num_points):
-            angle = 2 * np.pi * i / num_points
-            
-            # Parametric equation of ellipse
-            x = major_axis_px * np.cos(angle)
-            y = minor_axis_px * np.sin(angle)
-            
-            # Apply rotation
-            x_rot = x * cos_rot - y * sin_rot
-            y_rot = x * sin_rot + y * cos_rot
-            
-            # Translate to center
-            px = center_x + x_rot
-            py = center_y + y_rot
-            
-            # Clip to image bounds
-            px = max(0, min(px, img_size[0] - 1))
-            py = max(0, min(py, img_size[1] - 1))
-            
-            points.append((px, py))
-        
-        # Draw the ellipse as a polygon
-        if len(points) >= 3:
-            draw.polygon(points, outline=color, width=line_width)
-            return True
-        
-        return False
+        return draw_ellipse_for_object(
+            draw, center_x, center_y, dim_maj_arcmin, dim_min_arcmin, pa_deg,
+            img_size, fov_width_deg, fov_height_deg, position_angle_deg,
+            is_flipped, tuple(self.object_color) if color is None else color,
+            line_width,
+        )
     
     def _should_draw_ellipse(self, object_type: str) -> bool:
         """Determine if an object should be drawn as an ellipse based on its type.
