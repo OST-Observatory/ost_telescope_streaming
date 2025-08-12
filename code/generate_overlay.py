@@ -3,7 +3,7 @@ import argparse
 import sys
 import platform
 import numpy as np
-from astroquery.simbad import Simbad
+# astroquery is optional; we import Simbad lazily in generate_overlay()
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from PIL import Image, ImageDraw, ImageFont
@@ -310,26 +310,41 @@ class OverlayGenerator:
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame='icrs')
 
-            # Configure SIMBAD with robust field selection (delegated)
-            custom_simbad = Simbad()
-            custom_simbad.reset_votable_fields()
-            custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
-            picked_maj, picked_min, picked_ang, picked_dims, pa_supported = discover_simbad_dimension_fields(Simbad)
-            for fld in [picked_maj, picked_min, picked_ang, picked_dims]:
-                if fld:
-                    try:
-                        custom_simbad.add_votable_fields(fld)
-                    except Exception:
-                        pass
+            # Try to import astroquery lazily
+            simbad_available = True
+            try:
+                from astroquery.simbad import Simbad  # type: ignore
+            except Exception:
+                simbad_available = False
+                self.logger.warning("astroquery not available; generating overlay without catalog objects")
 
-            # Radius is half-diagonal of field of view
-            radius = ((fov_w**2 + fov_h**2)**0.5) / 2
+            result = None
+            if simbad_available:
+                # Configure SIMBAD with robust field selection (delegated)
+                custom_simbad = Simbad()
+                custom_simbad.reset_votable_fields()
+                custom_simbad.add_votable_fields('ra', 'dec', 'V', 'otype', 'main_id')
+                picked_maj, picked_min, picked_ang, picked_dims, pa_supported = discover_simbad_dimension_fields(Simbad)
+                for fld in [picked_maj, picked_min, picked_ang, picked_dims]:
+                    if fld:
+                        try:
+                            custom_simbad.add_votable_fields(fld)
+                        except Exception:
+                            pass
 
-            self.logger.info("SIMBAD query running...")
-            result = custom_simbad.query_region(center, radius=radius * u.deg)
+                # Radius is half-diagonal of field of view
+                radius = ((fov_w**2 + fov_h**2)**0.5) / 2
+
+                self.logger.info("SIMBAD query running...")
+                try:
+                    result = custom_simbad.query_region(center, radius=radius * u.deg)
+                except Exception as e:
+                    self.logger.warning(f"Simbad query failed: {e}; proceeding without catalog objects")
+                    result = None
 
             if result is None or len(result) == 0:
-                self.logger.warning("No objects found.")
+                if simbad_available:
+                    self.logger.warning("No objects found.")
                 # Create empty overlay if configured
                 if self.advanced_config.get('save_empty_overlays', True):
                     img = Image.new("RGBA", img_size, (0, 0, 0, 0))
