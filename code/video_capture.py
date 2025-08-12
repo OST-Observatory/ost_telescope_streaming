@@ -23,6 +23,8 @@ from calibration_applier import CalibrationApplier
 from utils.fits_utils import enrich_header_from_metadata
 from processing.format_conversion import convert_camera_data_to_opencv
 from utils.status_utils import unwrap_status
+from capture.adapters import AlpacaCameraAdapter, AscomCameraAdapter
+from capture.frame import Frame
 
 
 class VideoCapture:
@@ -121,7 +123,7 @@ class VideoCapture:
             cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
             status = cam.connect()
             if status.is_success:
-                self.camera = cam
+                # Preconfigure subframe on the underlying ASCOM camera
                 try:
                     native_width = cam.camera.CameraXSize
                     native_height = cam.camera.CameraYSize
@@ -137,6 +139,8 @@ class VideoCapture:
                     self.logger.warning(f"Could not get camera dimensions: {e}, using defaults")
                     self.resolution[0] = 1920
                     self.resolution[1] = 1080
+                # Wrap in unified adapter
+                self.camera = AscomCameraAdapter(cam)
                 return success_status("ASCOM camera connected", details={'driver': self.ascom_driver})
             else:
                 self.camera = None
@@ -153,7 +157,7 @@ class VideoCapture:
             cam = AlpycaCameraWrapper(self.alpaca_host, self.alpaca_port, self.alpaca_device_id, self.config, self.logger)
             status = cam.connect()
             if status.is_success:
-                self.camera = cam
+                self.camera = AlpacaCameraAdapter(cam)
                 return success_status("Alpaca camera connected", details={'host': self.alpaca_host, 'port': self.alpaca_port, 'camera_name': self.alpaca_camera_name})
             else:
                 self.camera = None
@@ -366,63 +370,59 @@ class VideoCapture:
         if not self.camera:
             return error_status("ASCOM camera not connected")
         try:
-            effective_width = self.resolution[0]
-            effective_height = self.resolution[1]
-            try:
-                current_numx = self.camera.camera.NumX
-                current_numy = self.camera.camera.NumY
-                if current_numx != effective_width or current_numy != effective_height:
-                    self.camera.camera.NumX = effective_width
-                    self.camera.camera.NumY = effective_height
-                    self.camera.camera.StartX = 0
-                    self.camera.camera.StartY = 0
-            except Exception as e:
-                self.logger.warning(f"Could not update subframe: {e}")
+            # Set parameters via adapter when available
             if gain is None:
                 gain = self.gain
-            offset = self.offset
-            readout_mode = self.readout_mode
-            exp_status = self.camera.expose(exposure_time_s, gain, binning, offset, readout_mode)
-            if not exp_status.is_success:
-                return exp_status
-            img_status = self.camera.get_image()
-            if not img_status.is_success:
-                return img_status
-            if hasattr(self.camera, 'is_color_camera') and self.camera.is_color_camera():
-                debayer_status = self.camera.debayer(img_status.data)
-                if debayer_status.is_success:
-                    frame_data = debayer_status.data
-                    frame_details = {
-                        'exposure_time_s': exposure_time_s,
-                        'gain': gain,
-                        'binning': binning,
-                        'offset': offset,
-                        'readout_mode': readout_mode,
-                        'dimensions': f"{effective_width}x{effective_height}",
-                        'debayered': True,
-                    }
+            try:
+                if gain is not None:
+                    self.camera.gain = gain  # type: ignore[attr-defined]
+                if isinstance(binning, list):
+                    binning_value = binning[0] if len(binning) > 0 else 1
                 else:
-                    frame_data = img_status.data
-                    frame_details = {
-                        'exposure_time_s': exposure_time_s,
-                        'gain': gain,
-                        'binning': binning,
-                        'offset': offset,
-                        'readout_mode': readout_mode,
-                        'dimensions': f"{effective_width}x{effective_height}",
-                        'debayered': False,
-                    }
-            else:
-                frame_data = img_status.data
-                frame_details = {
-                    'exposure_time_s': exposure_time_s,
-                    'gain': gain,
-                    'binning': binning,
-                    'offset': offset,
-                    'readout_mode': readout_mode,
-                    'dimensions': f"{effective_width}x{effective_height}",
-                    'debayered': False,
-                }
+                    binning_value = int(binning)
+                if binning_value != 1:
+                    # Best-effort set binning if supported
+                    if hasattr(self.camera, 'bin_x'):
+                        self.camera.bin_x = binning_value  # type: ignore[attr-defined]
+                    if hasattr(self.camera, 'bin_y'):
+                        self.camera.bin_y = binning_value  # type: ignore[attr-defined]
+                if hasattr(self.camera, 'offset'):
+                    self.camera.offset = self.offset  # type: ignore[attr-defined]
+                if hasattr(self.camera, 'readout_mode'):
+                    self.camera.readout_mode = self.readout_mode  # type: ignore[attr-defined]
+            except Exception as e:
+                self.logger.warning(f"Could not set ASCOM camera parameters: {e}")
+
+            # Start exposure using adapter
+            try:
+                self.camera.start_exposure(exposure_time_s, light=True)  # type: ignore[attr-defined]
+            except Exception as e:
+                return error_status(f"Failed to start ASCOM exposure: {e}")
+
+            # ASCOM adapter returns image_array from get_image_array()
+            # Wait a minimal time; in real ASCOM flow we would poll image_ready
+            time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
+            image_data = None
+            try:
+                image_data = self.camera.get_image_array()  # type: ignore[attr-defined]
+            except Exception as e:
+                return error_status(f"Failed to get ASCOM image: {e}")
+            if image_data is None:
+                return error_status("Failed to get image data from ASCOM camera")
+
+            effective_width = getattr(self.camera, 'camera_x_size', self.resolution[0])  # type: ignore[attr-defined]
+            effective_height = getattr(self.camera, 'camera_y_size', self.resolution[1])  # type: ignore[attr-defined]
+            # Build frame details
+            frame_data = image_data
+            frame_details = {
+                'exposure_time_s': exposure_time_s,
+                'gain': gain,
+                'binning': binning_value if 'binning_value' in locals() else binning,
+                'offset': getattr(self.camera, 'offset', None),
+                'readout_mode': getattr(self.camera, 'readout_mode', None),
+                'dimensions': f"{effective_width}x{effective_height}",
+                'debayered': bool(getattr(self.camera, 'is_color_camera', lambda: False)()),
+            }
             if self.enable_calibration and self.calibration_applier:
                 calibration_status = self.calibration_applier.calibrate_frame(frame_data, exposure_time_s, frame_details)
             else:
@@ -507,106 +507,25 @@ class VideoCapture:
 
     def save_frame(self, frame: Any, filename: str) -> CameraStatus:
         try:
+            # Prefer centralized FrameWriter for uniform saving behavior
+            from services.frame_writer import FrameWriter
             output_path = Path(filename)
-            file_extension = output_path.suffix.lower()
-            if file_extension in ['.fit', '.fits']:
-                return self._save_fits_unified(frame, str(output_path))
-            return self._save_image_file(frame, str(output_path))
+            image_data, details = unwrap_status(frame)
+            # Wrap into Frame for structured saving
+            frame_obj = Frame(data=image_data if image_data is not None else frame, metadata=details or {})
+            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+            return writer.save(frame_obj, str(output_path))
         except Exception as e:
             camera_id = self.camera_index if hasattr(self, 'camera_index') else getattr(self, 'ascom_driver', None)
             return error_status(f"Error saving frame: {e}", details={'camera_id': camera_id})
 
     def _save_fits_unified(self, frame: Any, filename: str) -> CameraStatus:
         try:
-            try:
-                import astropy.io.fits as fits
-                from astropy.time import Time
-            except ImportError as e:
-                return error_status(f"Astropy not available for FITS saving: {e}")
-
-            image_data, frame_details = unwrap_status(frame)
-            if image_data is None:
-                return error_status("No image data found in frame")
-            if not isinstance(image_data, np.ndarray):
-                try:
-                    image_data = np.array(image_data)
-                except Exception as conv_e:
-                    return error_status(f"Failed to convert to numpy array: {conv_e}")
-
-            # Orientation: long side horizontal
-            if self._needs_rotation(image_data.shape):
-                if image_data.ndim == 2:
-                    image_data = np.transpose(image_data, (1, 0))
-                elif image_data.ndim == 3:
-                    image_data = np.transpose(image_data, (1, 0, 2))
-
-            # Convert to uint16 for FITS compatibility
-            if image_data.dtype != np.uint16:
-                if image_data.dtype in [np.float32, np.float64]:
-                    vmin = float(np.min(image_data))
-                    vmax = float(np.max(image_data))
-                    if vmax > vmin:
-                        image_data = ((image_data - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
-                    else:
-                        image_data = image_data.astype(np.uint16)
-                else:
-                    image_data = image_data.astype(np.uint16)
-            else:
-                image_data = image_data.astype(np.uint16, copy=False)
-
-            # Build FITS header
-            header = fits.Header()
-            header['NAXIS'] = image_data.ndim
-            header['NAXIS1'] = image_data.shape[1] if image_data.ndim >= 2 else 1
-            header['NAXIS2'] = image_data.shape[0] if image_data.ndim >= 2 else 1
-            if image_data.ndim == 3:
-                header['NAXIS3'] = image_data.shape[2]
-            header['BITPIX'] = 16
-            header['BZERO'] = 0
-            header['BSCALE'] = 1
-            header['CAMERA'] = self.camera_type.capitalize()
-            if hasattr(self.camera, 'name'):
-                header['CAMNAME'] = self.camera.name
-
-            # Enrich from metadata/config/camera
-            enrich_header_from_metadata(header, frame_details, self.camera, self.config, self.camera_type, self.logger)
-
-            # Record master frames used if available
-            try:
-                if isinstance(frame_details, dict):
-                    if frame_details.get('master_dark_used'):
-                        from os.path import basename
-                        header['MSTDARK'] = basename(str(frame_details.get('master_dark_used')))
-                    if frame_details.get('master_flat_used'):
-                        from os.path import basename
-                        header['MSTFLAT'] = basename(str(frame_details.get('master_flat_used')))
-            except Exception:
-                pass
-
-            # Cooling related header keywords if available
-            try:
-                if hasattr(self.camera, 'ccdtemperature'):
-                    header['CCD-TEMP'] = float(getattr(self.camera, 'ccdtemperature'))
-                if hasattr(self.camera, 'cooler_power'):
-                    cpwr = getattr(self.camera, 'cooler_power')
-                    if cpwr is not None:
-                        header['COOLPOW'] = float(cpwr)
-                if hasattr(self.camera, 'cooler_on'):
-                    header['COOLERON'] = bool(getattr(self.camera, 'cooler_on'))
-            except Exception:
-                pass
-
-            # Timestamp
-            header['DATE-OBS'] = Time.now().isot
-
-            # Write FITS
-            from astropy.io.fits import PrimaryHDU
-            hdu = PrimaryHDU(image_data, header=header)
-            hdu.writeto(filename, overwrite=True)
-            if os.path.exists(filename):
-                return success_status("FITS file saved", data=filename)
-            else:
-                return error_status("FITS file was not created")
+            # Delegate to FrameWriter for unified FITS saving
+            from services.frame_writer import FrameWriter
+            image_data, details = unwrap_status(frame)
+            writer = FrameWriter(self.config, logger=self.logger, camera=self.camera, camera_type=self.camera_type)
+            return writer.save_fits(image_data if image_data is not None else frame, filename, metadata=details)
         except Exception as e:
             return error_status(f"Error saving FITS file: {e}")
 
