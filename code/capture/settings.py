@@ -5,8 +5,8 @@ Camera settings dataclass to standardize capture metadata.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Optional, Dict, Any, Union
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, Optional, Union
 
 
 @dataclass
@@ -22,5 +22,3 @@ class CameraSettings:
         # Convert dataclass to dict and drop None values
         raw = asdict(self)
         return {k: v for k, v in raw.items() if v is not None}
-
-

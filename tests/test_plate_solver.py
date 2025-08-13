@@ -1,27 +1,29 @@
 import logging
-import sys
 from pathlib import Path
+import sys
 
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
-from config_manager import ConfigManager
-from platesolve.solver import PlateSolve2, PlateSolverFactory
 import argparse
+
+from config_manager import ConfigManager
+from platesolve.solver import PlateSolverFactory
+
 
 def main():
     parser = argparse.ArgumentParser(description="Test plate solver")
     parser.add_argument("--config", type=str, help="Path to configuration file")
-    
+
     # Parse config argument first to load the right configuration
     args, remaining = parser.parse_known_args()
-    
+
     # Load configuration
     if args.config:
         config = ConfigManager(config_path=args.config)
     else:
         config = ConfigManager()
-    
+
     # Recreate parser with the loaded configuration defaults
     parser = argparse.ArgumentParser(description="Test plate solver")
     parser.add_argument("--config", type=str, help="Path to configuration file")
@@ -63,5 +65,6 @@ def main():
     else:
         exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

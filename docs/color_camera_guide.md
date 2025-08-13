@@ -13,7 +13,7 @@ The system automatically detects color cameras and their Bayer patterns:
 # Supported Bayer patterns
 'RGGB'  # Red-Green-Green-Blue (most common)
 'GRBG'  # Green-Red-Blue-Green
-'GBRG'  # Green-Blue-Red-Green  
+'GBRG'  # Green-Blue-Red-Green
 'BGGR'  # Blue-Green-Green-Red
 ```
 
@@ -222,4 +222,4 @@ The color camera support provides:
 🔍 **Optimized Plate-Solving**: Green channel extraction for best results
 ⚡ **Efficient Processing**: Minimal overhead with maximum compatibility
 
-This ensures that color cameras work seamlessly with the entire system while maintaining optimal performance for both plate-solving and display purposes. 
+This ensures that color cameras work seamlessly with the entire system while maintaining optimal performance for both plate-solving and display purposes.

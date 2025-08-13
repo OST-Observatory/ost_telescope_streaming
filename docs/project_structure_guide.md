@@ -142,4 +142,4 @@ python test_final_integration.py --config ../config_ost_qhy600m.yaml
 ### For Testing
 1. **Component tests**: Individual test scripts
 2. **Integration tests**: System-wide test scripts
-3. **Hardware tests**: ASCOM-specific test scripts 
+3. **Hardware tests**: ASCOM-specific test scripts

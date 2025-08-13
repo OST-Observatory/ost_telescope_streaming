@@ -24,14 +24,17 @@ class AlpacaCameraAdapter(CameraInterface):
         # Structured debug: exposure start
         try:
             import logging
-            logging.getLogger(__name__).debug(f"Alpaca: start_exposure exp={exposure_time_s} light={light}")
+
+            logging.getLogger(__name__).debug(
+                f"Alpaca: start_exposure exp={exposure_time_s} light={light}"
+            )
         except Exception:
             pass
         self._cam.start_exposure(exposure_time_s, light=light)
 
     @property
     def image_ready(self) -> bool:
-        return bool(getattr(self._cam, 'image_ready', False))
+        return bool(getattr(self._cam, "image_ready", False))
 
     def get_image_array(self) -> Any:
         return self._cam.get_image_array()
@@ -39,6 +42,7 @@ class AlpacaCameraAdapter(CameraInterface):
     # Convenience: wait until image_ready or timeout
     def wait_for_image_ready(self, timeout_s: float) -> bool:
         import time
+
         start = time.time()
         while not self.image_ready:
             time.sleep(0.1)
@@ -46,6 +50,7 @@ class AlpacaCameraAdapter(CameraInterface):
                 return False
         try:
             import logging
+
             logging.getLogger(__name__).debug(f"Alpaca: image ready in {time.time() - start:.2f}s")
         except Exception:
             pass
@@ -53,62 +58,62 @@ class AlpacaCameraAdapter(CameraInterface):
 
     @property
     def gain(self) -> Optional[float]:
-        return getattr(self._cam, 'gain', None)
+        return getattr(self._cam, "gain", None)
 
     @gain.setter
     def gain(self, value: float) -> None:
-        setattr(self._cam, 'gain', value)
+        self._cam.gain = value
 
     @property
     def offset(self) -> Optional[int]:
-        return getattr(self._cam, 'offset', None)
+        return getattr(self._cam, "offset", None)
 
     @offset.setter
     def offset(self, value: int) -> None:
-        setattr(self._cam, 'offset', value)
+        self._cam.offset = value
 
     @property
     def readout_mode(self) -> Optional[int]:
-        return getattr(self._cam, 'readout_mode', None)
+        return getattr(self._cam, "readout_mode", None)
 
     @readout_mode.setter
     def readout_mode(self, value: int) -> None:
-        setattr(self._cam, 'readout_mode', value)
+        self._cam.readout_mode = value
 
     @property
     def bin_x(self) -> Optional[int]:
-        return getattr(self._cam, 'bin_x', None)
+        return getattr(self._cam, "bin_x", None)
 
     @bin_x.setter
     def bin_x(self, value: int) -> None:
-        setattr(self._cam, 'bin_x', value)
+        self._cam.bin_x = value
 
     @property
     def bin_y(self) -> Optional[int]:
-        return getattr(self._cam, 'bin_y', None)
+        return getattr(self._cam, "bin_y", None)
 
     @bin_y.setter
     def bin_y(self, value: int) -> None:
-        setattr(self._cam, 'bin_y', value)
+        self._cam.bin_y = value
 
     def is_color_camera(self) -> bool:
         return bool(self._cam.is_color_camera())
 
     @property
     def sensor_type(self) -> Optional[str]:
-        return getattr(self._cam, 'sensor_type', None)
+        return getattr(self._cam, "sensor_type", None)
 
     @property
     def camera_x_size(self) -> int:
-        return int(getattr(self._cam, 'camera_x_size', 0))
+        return int(getattr(self._cam, "camera_x_size", 0))
 
     @property
     def camera_y_size(self) -> int:
-        return int(getattr(self._cam, 'camera_y_size', 0))
+        return int(getattr(self._cam, "camera_y_size", 0))
 
     @property
     def name(self) -> Optional[str]:
-        return getattr(self._cam, 'name', None)
+        return getattr(self._cam, "name", None)
 
 
 class AscomCameraAdapter(CameraInterface):
@@ -125,10 +130,23 @@ class AscomCameraAdapter(CameraInterface):
         # ASCOM wrapper exposes expose() and get_image() pattern; start_exposure not used
         try:
             import logging
-            logging.getLogger(__name__).debug(f"ASCOM: expose exp={exposure_time_s} gain={getattr(self._cam, 'gain', None)} offset={getattr(self._cam, 'offset', None)} readout={getattr(self._cam, 'readout_mode', None)}")
+
+            logging.getLogger(__name__).debug(
+                "ASCOM: expose exp=%s gain=%s offset=%s readout=%s",
+                exposure_time_s,
+                getattr(self._cam, "gain", None),
+                getattr(self._cam, "offset", None),
+                getattr(self._cam, "readout_mode", None),
+            )
         except Exception:
             pass
-        self._cam.expose(exposure_time_s, getattr(self._cam, 'gain', None), 1, getattr(self._cam, 'offset', None), getattr(self._cam, 'readout_mode', None))
+        self._cam.expose(
+            exposure_time_s,
+            getattr(self._cam, "gain", None),
+            1,
+            getattr(self._cam, "offset", None),
+            getattr(self._cam, "readout_mode", None),
+        )
 
     @property
     def image_ready(self) -> bool:
@@ -137,83 +155,88 @@ class AscomCameraAdapter(CameraInterface):
 
     def get_image_array(self) -> Any:
         status = self._cam.get_image()
-        return status.data if hasattr(status, 'data') else None
+        return status.data if hasattr(status, "data") else None
 
     def wait_for_image_ready(self, timeout_s: float) -> bool:
         # ASCOM pattern: expose + short wait before get_image
-        import time, logging
+        import logging
+        import time
+
         t0 = time.time()
         time.sleep(min(max(timeout_s, 0.0), timeout_s))
         try:
-            logging.getLogger(__name__).debug(f"ASCOM: image assumed ready after {time.time() - t0:.2f}s")
+            logging.getLogger(__name__).debug(
+                f"ASCOM: image assumed ready after {time.time() - t0:.2f}s"
+            )
         except Exception:
             pass
         return True
 
     @property
     def gain(self) -> Optional[float]:
-        return getattr(self._cam, 'gain', None)
+        return getattr(self._cam, "gain", None)
 
     @gain.setter
     def gain(self, value: float) -> None:
-        setattr(self._cam, 'gain', value)
+        self._cam.gain = value
 
     @property
     def offset(self) -> Optional[int]:
-        return getattr(self._cam, 'offset', None)
+        return getattr(self._cam, "offset", None)
 
     @offset.setter
     def offset(self, value: int) -> None:
-        setattr(self._cam, 'offset', value)
+        self._cam.offset = value
 
     @property
     def readout_mode(self) -> Optional[int]:
-        return getattr(self._cam, 'readout_mode', None)
+        return getattr(self._cam, "readout_mode", None)
 
     @readout_mode.setter
     def readout_mode(self, value: int) -> None:
-        setattr(self._cam, 'readout_mode', value)
+        self._cam.readout_mode = value
 
     @property
     def bin_x(self) -> Optional[int]:
-        return getattr(self._cam, 'bin_x', None)
+        return getattr(self._cam, "bin_x", None)
 
     @bin_x.setter
     def bin_x(self, value: int) -> None:
-        setattr(self._cam, 'bin_x', value)
+        self._cam.bin_x = value
 
     @property
     def bin_y(self) -> Optional[int]:
-        return getattr(self._cam, 'bin_y', None)
+        return getattr(self._cam, "bin_y", None)
 
     @bin_y.setter
     def bin_y(self, value: int) -> None:
-        setattr(self._cam, 'bin_y', value)
+        self._cam.bin_y = value
 
     def is_color_camera(self) -> bool:
-        if hasattr(self._cam, 'is_color_camera'):
+        if hasattr(self._cam, "is_color_camera"):
             return bool(self._cam.is_color_camera())
         return False
 
     @property
     def sensor_type(self) -> Optional[str]:
-        return getattr(self._cam, 'sensor_type', None)
+        return getattr(self._cam, "sensor_type", None)
 
     @property
     def camera_x_size(self) -> int:
-        return int(getattr(getattr(self._cam, 'camera', None), 'CameraXSize', 0))
+        return int(getattr(getattr(self._cam, "camera", None), "CameraXSize", 0))
 
     @property
     def camera_y_size(self) -> int:
-        return int(getattr(getattr(self._cam, 'camera', None), 'CameraYSize', 0))
+        return int(getattr(getattr(self._cam, "camera", None), "CameraYSize", 0))
 
     @property
     def name(self) -> Optional[str]:
-        return getattr(self._cam, 'name', None)
+        return getattr(self._cam, "name", None)
 
 
 class OpenCVCameraAdapter(CameraInterface):
     """Adapter for OpenCV cameras to match CameraInterface for live view and snapshots."""
+
     def __init__(self, cap) -> None:
         self._cap = cap
         self._last_frame = None

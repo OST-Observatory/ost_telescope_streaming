@@ -18,4 +18,4 @@ PyYAML>=6.0
 pywin32>=305; sys_platform == "win32"
 
 # Optional: For better error handling and logging
-colorama>=0.4.4 
+colorama>=0.4.4

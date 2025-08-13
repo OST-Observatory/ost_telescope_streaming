@@ -212,7 +212,7 @@ while True:
             print("Mount is stationary")
     else:
         print(f"Error checking slewing: {slewing_status.message}")
-    
+
     time.sleep(1)  # Check every second
 ```
 
@@ -453,4 +453,4 @@ The slewing detection feature provides:
 🎯 **Performance Optimized**: Minimal overhead with maximum benefit
 🎯 **Easy Integration**: Works automatically with existing workflows
 
-This ensures that your astronomical imaging system only captures high-quality, stable images when the telescope is properly positioned and tracking. 
+This ensures that your astronomical imaging system only captures high-quality, stable images when the telescope is properly positioned and tracking.

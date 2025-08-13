@@ -386,4 +386,4 @@ The `test_fits_platesolve_overlay.py` script provides a complete solution for:
 ✅ **Flexible configuration** and parameter overrides
 ✅ **Comprehensive error handling** and debugging
 
-This tool is essential for processing astronomical images and creating professional overlays for telescope streaming and analysis. 
+This tool is essential for processing astronomical images and creating professional overlays for telescope streaming and analysis.

@@ -204,4 +204,4 @@ else:
 - **Batch Processing**: Process multiple images at once
 - **Video Output**: Create annotated video streams
 - **Advanced Blending**: Multiple overlay layers
-- **Real-time Streaming**: Live annotated video output 
+- **Real-time Streaming**: Live annotated video output

@@ -10,5 +10,3 @@ Guidelines:
 - Import drivers via `drivers.ascom.camera`, `drivers.alpaca.camera` in code and docs
 - Keep public APIs stable; add docstrings for key methods and properties
 - Avoid importing drivers at module top-level in code paths that run in non-driver environments (use lazy imports)
-
-

@@ -224,4 +224,4 @@ To verify this:
 3. Compare the test output files
 4. Verify the final image dimensions
 
-If the images are indeed in the wrong orientation and no rotation is being applied, then there's a bug in the rotation detection logic that needs to be fixed. 
+If the images are indeed in the wrong orientation and no rotation is being applied, then there's a bug in the rotation detection logic that needs to be fixed.

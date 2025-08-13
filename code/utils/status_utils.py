@@ -28,22 +28,22 @@ def unwrap_status(value: Any, max_depth: int = 5) -> Tuple[Any, Dict[str, Any]]:
     depth = 0
 
     # Pull top-level details/metadata if present
-    details = getattr(current, 'details', None)
+    details = getattr(current, "details", None)
     if isinstance(details, dict):
         merged_details.update(details)
-    metadata = getattr(current, 'metadata', None)
+    metadata = getattr(current, "metadata", None)
     if isinstance(metadata, dict):
         merged_details.update(metadata)
 
-    while depth < max_depth and hasattr(current, 'data'):
+    while depth < max_depth and hasattr(current, "data"):
         parent = current
-        current = getattr(current, 'data')
+        current = current.data
         depth += 1
         # Merge details/metadata at this level if any
-        details = getattr(parent, 'details', None)
+        details = getattr(parent, "details", None)
         if isinstance(details, dict):
             merged_details.update(details)
-        metadata = getattr(parent, 'metadata', None)
+        metadata = getattr(parent, "metadata", None)
         if isinstance(metadata, dict):
             merged_details.update(metadata)
 
@@ -52,6 +52,4 @@ def unwrap_status(value: Any, max_depth: int = 5) -> Tuple[Any, Dict[str, Any]]:
 
 def is_success_status(obj: Any) -> bool:
     """Best-effort check if an object looks like a successful Status."""
-    return hasattr(obj, 'is_success') and bool(getattr(obj, 'is_success'))
-
-
+    return hasattr(obj, "is_success") and bool(obj.is_success)

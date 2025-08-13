@@ -96,16 +96,16 @@ Options:
 # For each exposure time directory
 for exp_dir in exposure_directories:
     exposure_time = extract_exposure_time(exp_dir)
-    
+
     # Load all dark frames for this exposure time
     dark_frames = load_frames_from_directory(exp_dir)
-    
+
     # Apply rejection method
     if rejection_method == 'sigma_clip':
         master_dark = sigma_clip_combine(dark_frames)
     else:
         master_dark = minmax_combine(dark_frames)
-    
+
     # Save master dark
     save_master_dark(master_dark, exposure_time)
 ```
@@ -144,10 +144,10 @@ save_master_flat(master_flat_normalized, flat_exposure_time)
 def sigma_clip_combine(frames):
     mean = np.mean(frames, axis=0)
     std = np.std(frames, axis=0)
-    
+
     # Create mask for pixels within sigma threshold
     mask = np.abs(frames - mean) <= (sigma_threshold * std)
-    
+
     # Calculate mean of accepted pixels
     combined = np.zeros_like(mean)
     for i, j in pixel_coordinates:
@@ -156,7 +156,7 @@ def sigma_clip_combine(frames):
             combined[i, j] = np.mean(valid_pixels)
         else:
             combined[i, j] = mean[i, j]
-    
+
     return combined
 ```
 
@@ -165,7 +165,7 @@ def sigma_clip_combine(frames):
 def minmax_combine(frames):
     # Sort along first axis
     sorted_frames = np.sort(frames, axis=0)
-    
+
     # Remove min and max values
     n_frames = sorted_frames.shape[0]
     if n_frames > 2:
@@ -453,4 +453,4 @@ class MasterFrameCreator:
 All methods return Status objects with:
 - **Success/Error**: Operation result
 - **Data**: Created file lists or error details
-- **Details**: Additional information and statistics 
+- **Details**: Additional information and statistics

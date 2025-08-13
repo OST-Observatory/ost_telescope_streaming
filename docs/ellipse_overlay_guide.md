@@ -18,7 +18,7 @@ Das System erkennt automatisch, welche Objekte als Ellipsen dargestellt werden s
 Die Ellipsen-Dimensionen werden aus der SIMBAD-Datenbank abgerufen:
 
 - **DIM_MAJ**: Hauptachse in Bogenminuten
-- **DIM_MIN**: Nebenachse in Bogenminuten  
+- **DIM_MIN**: Nebenachse in Bogenminuten
 - **PA**: Positionswinkel in Grad
 
 ### Fallback-Mechanismus
@@ -260,4 +260,4 @@ else:
 - **Kometen**: Elliptische Koma-Darstellung
 - **Asteroiden**: Bewegungsbahnen
 - **Satelliten**: Orbit-Darstellung
-- **Meteore**: Radiant-Positionen 
+- **Meteore**: Radiant-Positionen

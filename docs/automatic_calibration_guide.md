@@ -8,7 +8,7 @@ The OST Telescope Streaming system now includes advanced automatic calibration t
 
 ### 1. Camera Settings Matching
 - **Gain Matching**: Ensures master frames were captured with the same gain setting
-- **Offset Matching**: Ensures master frames were captured with the same offset setting  
+- **Offset Matching**: Ensures master frames were captured with the same offset setting
 - **Readout Mode Matching**: Ensures master frames were captured with the same readout mode
 - **Exposure Time Matching**: Ensures master darks match the frame exposure time
 
@@ -30,7 +30,7 @@ The OST Telescope Streaming system now includes advanced automatic calibration t
 master_frames:
   # Output directory for master frames
   output_dir: "master_frames"
-  
+
   # Automatic calibration settings
   enable_calibration: true          # Enable automatic calibration
   auto_load_masters: true           # Auto-load master frames on startup
@@ -117,7 +117,7 @@ status = video_capture.capture_single_frame_ascom(
 if status.is_success:
     frame_data = status.data
     frame_details = status.details
-    
+
     # Check calibration details
     if frame_details.get('calibration_applied', False):
         print("Frame was calibrated successfully")
@@ -341,4 +341,4 @@ This will show:
 - **Adaptive Tolerance**: Automatic tolerance adjustment based on camera type
 - **Settings Interpolation**: Interpolate between master frames with different settings
 - **Quality Metrics**: Automatic quality assessment of calibration results
-- **Multi-Camera Support**: Support for different camera settings simultaneously 
+- **Multi-Camera Support**: Support for different camera settings simultaneously

@@ -274,4 +274,4 @@ class FlatCapture:
 All methods return Status objects with:
 - **Success/Error**: Operation result
 - **Data**: Captured file list or error details
-- **Details**: Additional information and statistics 
+- **Details**: Additional information and statistics

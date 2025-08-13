@@ -7,19 +7,18 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 import numpy as np
-
-from status import success_status, error_status
-from utils.status_utils import unwrap_status
-from utils.fits_utils import enrich_header_from_metadata
 from processing.format_conversion import convert_camera_data_to_opencv
 from processing.orientation import enforce_long_side_horizontal
+from status import error_status, success_status
+from utils.fits_utils import enrich_header_from_metadata
+from utils.status_utils import unwrap_status
 
 
 class FrameWriter:
-    def __init__(self, config, logger=None, camera=None, camera_type: str = 'opencv') -> None:
+    def __init__(self, config, logger=None, camera=None, camera_type: str = "opencv") -> None:
         self.config = config
         self.logger = logger
         self.camera = camera
@@ -27,18 +26,18 @@ class FrameWriter:
         # Orientation/scaling policy from config
         try:
             fp_cfg = self.config.get_frame_processing_config()
-            self.orientation_policy = str(fp_cfg.get('orientation', 'long_side_horizontal')).lower()
-            norm_cfg = fp_cfg.get('normalization', {})
-            self.display_normalization = str(norm_cfg.get('method', 'zscale')).lower()
-            self.display_contrast = float(norm_cfg.get('contrast', 0.15))
+            self.orientation_policy = str(fp_cfg.get("orientation", "long_side_horizontal")).lower()
+            norm_cfg = fp_cfg.get("normalization", {})
+            self.display_normalization = str(norm_cfg.get("method", "zscale")).lower()
+            self.display_contrast = float(norm_cfg.get("contrast", 0.15))
         except Exception:
-            self.orientation_policy = 'long_side_horizontal'
-            self.display_normalization = 'zscale'
+            self.orientation_policy = "long_side_horizontal"
+            self.display_normalization = "zscale"
             self.display_contrast = 0.15
 
     def save(self, frame: Any, filename: str, metadata: Optional[Dict[str, Any]] = None):
         suffix = Path(filename).suffix.lower()
-        if suffix in ('.fit', '.fits'):
+        if suffix in (".fit", ".fits"):
             return self.save_fits(frame, filename, metadata)
         return self.save_image(frame, filename)
 
@@ -49,13 +48,15 @@ class FrameWriter:
             except Exception as e:
                 return error_status(f"OpenCV not available for image saving: {e}")
 
-            if hasattr(frame, 'data'):
+            if hasattr(frame, "data"):
                 frame_data = frame.data
             else:
                 frame_data = frame
 
-            if self.camera_type in ['alpaca', 'ascom']:
-                frame_np = convert_camera_data_to_opencv(frame_data, self.camera, self.config, self.logger)
+            if self.camera_type in ["alpaca", "ascom"]:
+                frame_np = convert_camera_data_to_opencv(
+                    frame_data, self.camera, self.config, self.logger
+                )
             else:
                 frame_np = frame_data
 
@@ -66,14 +67,16 @@ class FrameWriter:
                 frame_np = np.array(frame_np)
 
             # Enforce orientation for display if configured
-            if self.orientation_policy == 'long_side_horizontal':
+            if self.orientation_policy == "long_side_horizontal":
                 from processing.orientation import enforce_long_side_horizontal
+
                 frame_np, _ = enforce_long_side_horizontal(frame_np)
 
             # Normalize to uint8 for display
             if frame_np.dtype != np.uint8:
                 try:
                     from processing.normalization import normalize_to_uint8
+
                     frame_np = normalize_to_uint8(frame_np, self.config, self.logger)
                 except Exception:
                     if frame_np.dtype in [np.float32, np.float64]:
@@ -137,45 +140,48 @@ class FrameWriter:
 
             # Header
             header = fits.Header()
-            header['NAXIS'] = image_data.ndim
-            header['NAXIS1'] = image_data.shape[1] if image_data.ndim >= 2 else 1
-            header['NAXIS2'] = image_data.shape[0] if image_data.ndim >= 2 else 1
+            header["NAXIS"] = image_data.ndim
+            header["NAXIS1"] = image_data.shape[1] if image_data.ndim >= 2 else 1
+            header["NAXIS2"] = image_data.shape[0] if image_data.ndim >= 2 else 1
             if image_data.ndim == 3:
-                header['NAXIS3'] = image_data.shape[2]
-            header['BITPIX'] = 16
-            header['BZERO'] = 0
-            header['BSCALE'] = 1
-            header['CAMERA'] = self.camera_type.capitalize()
-            if hasattr(self.camera, 'name'):
-                header['CAMNAME'] = self.camera.name
+                header["NAXIS3"] = image_data.shape[2]
+            header["BITPIX"] = 16
+            header["BZERO"] = 0
+            header["BSCALE"] = 1
+            header["CAMERA"] = self.camera_type.capitalize()
+            if hasattr(self.camera, "name"):
+                header["CAMNAME"] = self.camera.name
 
             # Enrich from metadata/config/camera
-            enrich_header_from_metadata(header, frame_details, self.camera, self.config, self.camera_type, self.logger)
+            enrich_header_from_metadata(
+                header, frame_details, self.camera, self.config, self.camera_type, self.logger
+            )
 
             # Cooling details if available
             try:
-                if hasattr(self.camera, 'ccdtemperature'):
-                    header['CCD-TEMP'] = float(getattr(self.camera, 'ccdtemperature'))
-                if hasattr(self.camera, 'cooler_power'):
-                    cpwr = getattr(self.camera, 'cooler_power')
+                if hasattr(self.camera, "ccdtemperature"):
+                    header["CCD-TEMP"] = float(self.camera.ccdtemperature)
+                if hasattr(self.camera, "cooler_power"):
+                    cpwr = self.camera.cooler_power
                     if cpwr is not None:
-                        header['COOLPOW'] = float(cpwr)
-                if hasattr(self.camera, 'cooler_on'):
-                    header['COOLERON'] = bool(getattr(self.camera, 'cooler_on'))
+                        header["COOLPOW"] = float(cpwr)
+                if hasattr(self.camera, "cooler_on"):
+                    header["COOLERON"] = bool(self.camera.cooler_on)
             except Exception:
                 pass
 
-            header['DATE-OBS'] = Time.now().isot
+            header["DATE-OBS"] = Time.now().isot
 
             hdu = fits.PrimaryHDU(image_data, header=header)
             # Measure write time for telemetry
             import time as _t
+
             t0 = _t.perf_counter()
             hdu.writeto(filename, overwrite=True)
             t1 = _t.perf_counter()
             try:
                 if isinstance(frame_details, dict):
-                    frame_details['save_duration_ms'] = (t1 - t0) * 1000.0
+                    frame_details["save_duration_ms"] = (t1 - t0) * 1000.0
             except Exception:
                 pass
             if os.path.exists(filename):

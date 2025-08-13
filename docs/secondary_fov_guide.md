@@ -287,4 +287,4 @@ Die Funktion berücksichtigt:
 
 1. Reduzieren Sie die Linienbreite
 2. Verwenden Sie einfachere Linienstile
-3. Deaktivieren Sie die Beschriftung bei Bedarf 
+3. Deaktivieren Sie die Beschriftung bei Bedarf

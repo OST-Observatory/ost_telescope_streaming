@@ -208,4 +208,4 @@ while True:
         info = status.data
         print(f"Temp: {info['temperature']:.1f}°C, Power: {info['cooler_power']:.1f}%")
     time.sleep(5)  # Every 5 seconds
-``` 
+```

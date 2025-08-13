@@ -102,7 +102,7 @@ if refresh_status.is_success:
 ```python
 # Wait for cooling to stabilize and show power consumption
 stabilization_status = video_capture.ascom_camera.wait_for_cooling_stabilization(
-    timeout=60, 
+    timeout=60,
     check_interval=2.0
 )
 if stabilization_status.is_success:
@@ -272,14 +272,14 @@ if not status.is_success:
 
 # Wait for cooling to stabilize
 stabilization_status = video_capture.ascom_camera.wait_for_cooling_stabilization(
-    timeout=60, 
+    timeout=60,
     check_interval=2.0
 )
 
 if stabilization_status.is_success:
     info = stabilization_status.data
     print(f"Cooling ready: temp={info['temperature']}°C, power={info['cooler_power']}%")
-    
+
     # Start imaging
     video_capture.start_capture()
 else:
@@ -382,7 +382,7 @@ python tests/test_video_capture.py --config config.yaml --action cooling-off
 #### **📊 Status Monitoring:**
 - **`cooling-status`**: Safe status check, no changes
 - **`cooling`**: Changes cooling settings
-- **`cooling-off`**: Explicitly turns off cooling 
+- **`cooling-off`**: Explicitly turns off cooling
 
 ## ASCOM Cooling Limitations
 
@@ -452,7 +452,7 @@ python tests/test_video_capture.py --config config.yaml --action cooling-off
 #### **For Automation:**
 1. **Background processes** → Consider using background cooling
 2. **Connection management** → Implement proper connection handling
-3. **Error recovery** → Handle connection losses gracefully 
+3. **Error recovery** → Handle connection losses gracefully
 
 ### Troubleshooting Cache Issues
 
@@ -511,4 +511,4 @@ python tests/test_video_capture.py --config config.yaml --action cooling-status-
 ```bash
 # Start cooling to refresh cache
 python tests/test_video_capture.py --config config.yaml --action cooling --cooling-temp -10.0
-``` 
+```

@@ -52,11 +52,11 @@ Instead of rotating Bayer patterns (which is complex), we use a **much simpler a
 def _convert_to_opencv(self, image_data):
     # 1. Convert raw data to numpy array
     image_array = np.array(ascom_image_data)
-    
+
     # 2. Detect Bayer pattern
     if hasattr(self.ascom_camera, 'sensor_type'):
         bayer_pattern = self.ascom_camera.sensor_type
-    
+
     # 3. DEBAYER FIRST (before any rotation)
     if is_color_camera and bayer_pattern:
         if bayer_pattern == 'RGGB':
@@ -64,15 +64,15 @@ def _convert_to_opencv(self, image_data):
         elif bayer_pattern == 'GRBG':
             bayer_pattern_cv2 = cv2.COLOR_BayerGR2BGR
         # ... etc
-        
+
         result_image = cv2.cvtColor(image_array, bayer_pattern_cv2)
         self.logger.debug(f"Successfully debayered image with {bayer_pattern} pattern")
-    
+
     # 4. THEN apply orientation correction to RGB image
     original_shape = result_image.shape
     result_image = np.transpose(result_image, (1, 0, 2))  # Transpose only spatial dimensions
     self.logger.debug(f"Image orientation corrected: {original_shape} -> {result_image.shape}")
-    
+
     return result_image
 ```
 
@@ -81,16 +81,16 @@ def _convert_to_opencv(self, image_data):
 def _save_fits_unified(self, frame, filename):
     # 1. Get raw Bayer data
     image_data = frame.data
-    
+
     # 2. Apply orientation correction to raw data
     original_shape = image_data.shape
     image_data = np.transpose(image_data)
     self.logger.info(f"Image orientation corrected: {original_shape} -> {image_data.shape}")
-    
+
     # 3. Note: For 90° rotation (transpose), Bayer patterns remain unchanged
     # RGGB -> RGGB, GRBG -> GRBG, GBRG -> GBRG, BGGR -> BGGR
     # No pattern adjustment needed for this rotation
-    
+
     # 4. Save with original Bayer pattern in header
     header['BAYERPAT'] = bayer_pattern
     header['COLORCAM'] = True
@@ -275,4 +275,4 @@ grep "debayered\|orientation" overlay_runner.log
 # FITS and PNG should have same colors and orientation
 ```
 
-This simplified approach ensures that color cameras work correctly with the orientation correction system while maintaining proper color reproduction and much simpler code. 
+This simplified approach ensures that color cameras work correctly with the orientation correction system while maintaining proper color reproduction and much simpler code.

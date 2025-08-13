@@ -27,7 +27,7 @@ overlay:
     font_size: 12                    # Schriftgröße
     text_color: [255, 255, 255, 255] # Textfarbe
     title_color: [255, 255, 0, 255]  # Titel-Farbe (Gelb)
-    
+
     # Anzuzeigende Informationen
     show_timestamp: true             # Zeitstempel
     show_coordinates: true           # RA/Dec Koordinaten
@@ -95,7 +95,7 @@ overlay:
     enabled: true
     position: "top_right"  # oder andere Position
     text: "Mein Teleskop Setup"  # Ihr Titel
-    
+
   title:
     enabled: true
     text: "Meine Astronomie-Session"
@@ -196,4 +196,4 @@ Falls keine TrueType-Schriftart verfügbar ist, wird die Standard-Schriftart ver
 Die neuen Features haben minimalen Einfluss auf die Performance:
 - Info Panel: ~1-2ms zusätzliche Render-Zeit
 - Titel: ~0.5ms zusätzliche Render-Zeit
-- Gesamte Overlay-Generierung: <5% zusätzliche Zeit 
+- Gesamte Overlay-Generierung: <5% zusätzliche Zeit

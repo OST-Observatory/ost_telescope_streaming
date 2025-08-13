@@ -4,24 +4,43 @@ ASCOM Camera integration for QHY, ZWO and other ASCOM-compatible cameras.
 Provides methods to connect, configure, expose, and download images.
 """
 
-from status import CameraStatus, success_status, error_status, warning_status
-from exceptions import CameraError
-from typing import Optional, Any
+# mypy: ignore-errors
+
+from typing import Any, Optional
+
+# Optional runtime dependencies
+try:  # pragma: no cover - optional dependency in some environments
+    import cv2  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    cv2 = None  # type: ignore[assignment]
+try:  # pragma: no cover - optional dependency in some environments
+    import numpy as np  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    np = None  # type: ignore[assignment]
+
+from status import CameraStatus, error_status, success_status, warning_status
+
 
 class ASCOMCamera:
+    # Explicit attribute types to help static typing
+    camera: Any
+    filter_wheel: Any
+    filter_wheel_driver_id: Optional[str]
+
     def __init__(self, driver_id: str, config=None, logger=None):
-        from config_manager import ConfigManager
         import logging
-        
+
+        from config_manager import ConfigManager
+
         # Only create default config if no config is provided
         # This prevents loading config.yaml when config is passed from tests
         if config is None:
             default_config = ConfigManager()
         else:
             default_config = None
-        
+
         self.config = config or default_config
-        
+
         # Use provided logger or get logger with proper name
         if logger:
             self.logger = logger
@@ -31,27 +50,30 @@ class ASCOMCamera:
             # Ensure logger has proper level if root logger is configured
             if logging.getLogger().handlers:
                 self.logger.setLevel(logging.getLogger().level)
-        
+
         self.driver_id = driver_id
         self.camera = None
-        
+
         # Store last known cooling values to bypass ASCOM driver cache issues
         self.last_cooling_info = {
-            'temperature': None,
-            'cooler_power': None,
-            'cooler_on': None,
-            'target_temperature': None
+            "temperature": None,
+            "cooler_power": None,
+            "cooler_on": None,
+            "target_temperature": None,
         }
-        
+
         # Cache file path for persistent storage
         import os
-        cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
+
+        cache_dir = os.path.join(os.path.dirname(__file__), "..", "cache")
         os.makedirs(cache_dir, exist_ok=True)
-        self.cache_file = os.path.join(cache_dir, f'cooling_cache_{driver_id.replace(".", "_").replace(":", "_")}.json')
-        
+        self.cache_file = os.path.join(
+            cache_dir, f'cooling_cache_{driver_id.replace(".", "_").replace(":", "_")}.json'
+        )
+
         # Load existing cache if available
         self.load_cooling_cache()
-        
+
         # Optional separate filter wheel driver
         self.filter_wheel = None
         self.filter_wheel_driver_id = None
@@ -62,15 +84,17 @@ class ASCOMCamera:
         try:
             import json
             import os
+
             if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
+                with open(self.cache_file, "r") as f:
                     cached_data = json.load(f)
                     # Check if cache is recent (less than 5 minutes old)
                     import time
-                    if 'timestamp' in cached_data:
-                        cache_age = time.time() - cached_data['timestamp']
+
+                    if "timestamp" in cached_data:
+                        cache_age = time.time() - cached_data["timestamp"]
                         if cache_age < 300:  # 5 minutes
-                            self.last_cooling_info.update(cached_data.get('cooling_info', {}))
+                            self.last_cooling_info.update(cached_data.get("cooling_info", {}))
                             self.logger.debug(f"Loaded cooling cache from {self.cache_file}")
                         else:
                             self.logger.debug(f"Cache too old ({cache_age:.1f}s), not loading")
@@ -86,11 +110,9 @@ class ASCOMCamera:
         try:
             import json
             import time
-            cache_data = {
-                'timestamp': time.time(),
-                'cooling_info': self.last_cooling_info.copy()
-            }
-            with open(self.cache_file, 'w') as f:
+
+            cache_data = {"timestamp": time.time(), "cooling_info": self.last_cooling_info.copy()}
+            with open(self.cache_file, "w") as f:
                 json.dump(cache_data, f, indent=2)
             self.logger.debug(f"Saved cooling cache to {self.cache_file}")
         except Exception as e:
@@ -99,15 +121,18 @@ class ASCOMCamera:
     def connect(self) -> CameraStatus:
         try:
             import win32com.client
+
             self.camera = win32com.client.Dispatch(self.driver_id)
             self.camera.Connected = True
-            
+
             # Connect to filter wheel if configured
             if self.filter_wheel_driver_id:
                 filter_wheel_status = self._connect_filter_wheel()
                 if not filter_wheel_status.is_success:
-                    self.logger.warning(f"Filter wheel connection failed: {filter_wheel_status.message}")
-            
+                    self.logger.warning(
+                        f"Filter wheel connection failed: {filter_wheel_status.message}"
+                    )
+
             return success_status("ASCOM camera connected")
         except Exception as e:
             return error_status(f"Failed to connect to ASCOM camera: {e}")
@@ -117,7 +142,7 @@ class ASCOMCamera:
             # Disconnect filter wheel first
             if self.filter_wheel_driver_id:
                 self._disconnect_filter_wheel()
-            
+
             # Disconnect camera
             if self.camera and self.camera.Connected:
                 self.camera.Connected = False
@@ -125,58 +150,67 @@ class ASCOMCamera:
         except Exception as e:
             return error_status(f"Failed to disconnect: {e}")
 
-    def expose(self, exposure_time_s: float, gain: Optional[int] = None, binning: int = 1, offset: Optional[int] = None, readout_mode: Optional[int] = None) -> CameraStatus:
+    def expose(
+        self,
+        exposure_time_s: float,
+        gain: Optional[int] = None,
+        binning: int = 1,
+        offset: Optional[int] = None,
+        readout_mode: Optional[int] = None,
+    ) -> CameraStatus:
         """Starte eine Belichtung mit der angegebenen Zeit in Sekunden."""
         try:
             # Set binning
             self.camera.BinX = binning
             self.camera.BinY = binning
-            
+
             # Set gain if provided and supported
-            if gain is not None and hasattr(self.camera, 'Gain'):
+            if gain is not None and hasattr(self.camera, "Gain"):
                 self.camera.Gain = gain
                 self.logger.debug(f"Gain set to {gain}")
-            
+
             # Set offset if provided and supported
-            if offset is not None and hasattr(self.camera, 'Offset'):
+            if offset is not None and hasattr(self.camera, "Offset"):
                 self.camera.Offset = offset
                 self.logger.debug(f"Offset set to {offset}")
-            
+
             # Set readout mode if provided and supported
-            if readout_mode is not None and hasattr(self.camera, 'ReadoutMode'):
+            if readout_mode is not None and hasattr(self.camera, "ReadoutMode"):
                 self.camera.ReadoutMode = readout_mode
                 self.logger.debug(f"Readout mode set to {readout_mode}")
-            
+
             # Start exposure
             self.camera.StartExposure(exposure_time_s, False)
-            
+
             # Wait for exposure to complete
             while not self.camera.ImageReady:
-                import time; time.sleep(0.1)
-            
+                import time
+
+                time.sleep(0.1)
+
             return success_status("Exposure complete")
         except Exception as e:
             return error_status(f"Exposure failed: {e}")
 
     def has_offset(self) -> bool:
         """Check if the camera supports offset control.
-        
+
         Returns:
             bool: True if offset is supported
         """
-        return hasattr(self.camera, 'Offset')
+        return hasattr(self.camera, "Offset")
 
     def has_readout_mode(self) -> bool:
         """Check if the camera supports readout mode selection.
-        
+
         Returns:
             bool: True if readout mode is supported
         """
-        return hasattr(self.camera, 'ReadoutMode')
+        return hasattr(self.camera, "ReadoutMode")
 
     def get_offset(self) -> CameraStatus:
         """Get the current offset setting.
-        
+
         Returns:
             CameraStatus: Status with current offset value
         """
@@ -190,10 +224,10 @@ class ASCOMCamera:
 
     def set_offset(self, offset: int) -> CameraStatus:
         """Set the camera offset.
-        
+
         Args:
             offset: Offset value (typically 0-255)
-            
+
         Returns:
             CameraStatus: Status of the operation
         """
@@ -202,19 +236,19 @@ class ASCOMCamera:
         try:
             # Get current offset before setting
             current_offset = self.camera.Offset
-            
+
             # Set new offset
             self.camera.Offset = offset
-            
+
             # Verify the setting
             new_offset = self.camera.Offset
-            
+
             details = {
-                'previous_offset': current_offset,
-                'new_offset': new_offset,
-                'requested_offset': offset
+                "previous_offset": current_offset,
+                "new_offset": new_offset,
+                "requested_offset": offset,
             }
-            
+
             self.logger.info(f"Offset changed from {current_offset} to {new_offset}")
             return success_status(f"Offset set to {new_offset}", details=details)
         except Exception as e:
@@ -222,7 +256,7 @@ class ASCOMCamera:
 
     def get_readout_mode(self) -> CameraStatus:
         """Get the current readout mode.
-        
+
         Returns:
             CameraStatus: Status with current readout mode
         """
@@ -236,10 +270,10 @@ class ASCOMCamera:
 
     def set_readout_mode(self, readout_mode: int) -> CameraStatus:
         """Set the camera readout mode.
-        
+
         Args:
             readout_mode: Readout mode index (camera-specific)
-            
+
         Returns:
             CameraStatus: Status of the operation
         """
@@ -248,19 +282,19 @@ class ASCOMCamera:
         try:
             # Get current readout mode before setting
             current_mode = self.camera.ReadoutMode
-            
+
             # Set new readout mode
             self.camera.ReadoutMode = readout_mode
-            
+
             # Verify the setting
             new_mode = self.camera.ReadoutMode
-            
+
             details = {
-                'previous_mode': current_mode,
-                'new_mode': new_mode,
-                'requested_mode': readout_mode
+                "previous_mode": current_mode,
+                "new_mode": new_mode,
+                "requested_mode": readout_mode,
             }
-            
+
             self.logger.info(f"Readout mode changed from {current_mode} to {new_mode}")
             return success_status(f"Readout mode set to {new_mode}", details=details)
         except Exception as e:
@@ -268,7 +302,7 @@ class ASCOMCamera:
 
     def get_readout_modes(self) -> CameraStatus:
         """Get available readout modes for this camera.
-        
+
         Returns:
             CameraStatus: Status with list of available readout modes
         """
@@ -276,7 +310,7 @@ class ASCOMCamera:
             return error_status("Readout mode not supported by this camera")
         try:
             # Try to get readout mode names if available
-            if hasattr(self.camera, 'ReadoutModes'):
+            if hasattr(self.camera, "ReadoutModes"):
                 modes = list(self.camera.ReadoutModes)
                 self.logger.info(f"Available readout modes: {modes}")
                 return success_status("Readout modes retrieved", data=modes)
@@ -284,51 +318,51 @@ class ASCOMCamera:
                 # Fallback: return range of available modes
                 # This is a guess based on common camera implementations
                 modes = list(range(10))  # Assume 0-9 as common range
-                self.logger.info(f"Readout modes not available, assuming range 0-9")
+                self.logger.info("Readout modes not available, assuming range 0-9")
                 return success_status("Readout modes estimated", data=modes)
         except Exception as e:
             return error_status(f"Failed to get readout modes: {e}")
 
     def get_camera_capabilities(self) -> CameraStatus:
         """Get comprehensive camera capabilities including offset and readout mode support.
-        
+
         Returns:
             CameraStatus: Status with camera capabilities
         """
         try:
             capabilities = {
-                'has_cooling': self.has_cooling(),
-                'has_offset': self.has_offset(),
-                'has_readout_mode': self.has_readout_mode(),
-                'has_gain': hasattr(self.camera, 'Gain'),
-                'has_binning': hasattr(self.camera, 'BinX') and hasattr(self.camera, 'BinY'),
-                'is_color': self.is_color_camera(),
-                'has_filter_wheel': self.has_filter_wheel()
+                "has_cooling": self.has_cooling(),
+                "has_offset": self.has_offset(),
+                "has_readout_mode": self.has_readout_mode(),
+                "has_gain": hasattr(self.camera, "Gain"),
+                "has_binning": hasattr(self.camera, "BinX") and hasattr(self.camera, "BinY"),
+                "is_color": self.is_color_camera(),
+                "has_filter_wheel": self.has_filter_wheel(),
             }
-            
+
             # Get current values for supported features
-            if capabilities['has_offset']:
+            if capabilities["has_offset"]:
                 offset_status = self.get_offset()
                 if offset_status.is_success:
-                    capabilities['current_offset'] = offset_status.data
-            
-            if capabilities['has_readout_mode']:
+                    capabilities["current_offset"] = offset_status.data
+
+            if capabilities["has_readout_mode"]:
                 readout_status = self.get_readout_mode()
                 if readout_status.is_success:
-                    capabilities['current_readout_mode'] = readout_status.data
-                
+                    capabilities["current_readout_mode"] = readout_status.data
+
                 # Get available readout modes
                 modes_status = self.get_readout_modes()
                 if modes_status.is_success:
-                    capabilities['available_readout_modes'] = modes_status.data
-            
-            if capabilities['has_gain']:
-                capabilities['current_gain'] = self.camera.Gain
-            
-            if capabilities['has_binning']:
-                capabilities['current_binning_x'] = self.camera.BinX
-                capabilities['current_binning_y'] = self.camera.BinY
-            
+                    capabilities["available_readout_modes"] = modes_status.data
+
+            if capabilities["has_gain"]:
+                capabilities["current_gain"] = self.camera.Gain
+
+            if capabilities["has_binning"]:
+                capabilities["current_binning_x"] = self.camera.BinX
+                capabilities["current_binning_y"] = self.camera.BinY
+
             return success_status("Camera capabilities retrieved", data=capabilities)
         except Exception as e:
             return error_status(f"Failed to get camera capabilities: {e}")
@@ -341,32 +375,37 @@ class ASCOMCamera:
             return error_status(f"Failed to get image: {e}")
 
     def has_cooling(self) -> bool:
-        return hasattr(self.camera, 'CanSetCCDTemperature') and self.camera.CanSetCCDTemperature
+        return hasattr(self.camera, "CanSetCCDTemperature") and self.camera.CanSetCCDTemperature
 
     def set_cooling(self, target_temp: float) -> CameraStatus:
         """Set the camera cooling target temperature.
-        
+
         Args:
             target_temp: Target temperature in Celsius
-            
+
         Returns:
             CameraStatus: Status of the operation
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        
+
         try:
             self.logger.info(f"Setting cooling target temperature to {target_temp}°C")
-            
+
             # Get current values before setting
             current_temp = self.camera.CCDTemperature
-            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
-            self.logger.debug(f"Before setting: temp={current_temp}°C, power={current_power}%, cooler_on={current_cooler_on}")
-            
+            current_power = self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
+            self.logger.debug(
+                "Before setting: temp=%s°C, power=%s%%, cooler_on=%s",
+                current_temp,
+                current_power,
+                current_cooler_on,
+            )
+
             # First, turn on the cooler if it's not already on
-            if hasattr(self.camera, 'CoolerOn'):
+            if hasattr(self.camera, "CoolerOn"):
                 if not self.camera.CoolerOn:
                     self.camera.CoolerOn = True
                     self.logger.info("Cooler turned on")
@@ -374,62 +413,86 @@ class ASCOMCamera:
                     self.logger.debug("Cooler was already on")
             else:
                 self.logger.warning("Cooler on/off control not available")
-            
+
             # Set target temperature
-            if hasattr(self.camera, 'SetCCDTemperature'):
+            if hasattr(self.camera, "SetCCDTemperature"):
                 self.camera.SetCCDTemperature = target_temp
                 self.logger.info(f"Target temperature set to {target_temp}°C")
             else:
                 return error_status("Target temperature setting not available")
-            
+
             # Add a small delay to allow the camera to process the setting
             import time
+
             time.sleep(0.5)
-            
+
             # Get values after setting
             new_temp = self.camera.CCDTemperature
-            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
-            self.logger.debug(f"After setting: temp={new_temp}°C, power={new_power}%, cooler_on={new_cooler_on}")
-            
+            new_power = self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
+            self.logger.debug(
+                f"After setting: temp={new_temp}°C, power={new_power}%, cooler_on={new_cooler_on}"
+            )
+
             # Verify the target temperature was set correctly
-            actual_target = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
+            actual_target = (
+                self.camera.SetCCDTemperature if hasattr(self.camera, "SetCCDTemperature") else None
+            )
             if actual_target is not None:
                 self.logger.debug(f"Actual target temperature: {actual_target}°C")
                 if abs(actual_target - target_temp) > 0.1:
-                    self.logger.warning(f"Target temperature mismatch: requested {target_temp}°C, actual {actual_target}°C")
-            
+                    self.logger.warning(
+                        "Target temperature mismatch: requested %s°C, actual %s°C",
+                        target_temp,
+                        actual_target,
+                    )
+
             details = {
-                'target_temp': target_temp,
-                'actual_target': actual_target,
-                'current_temp': current_temp,
-                'new_temp': new_temp,
-                'current_power': current_power,
-                'new_power': new_power,
-                'current_cooler_on': current_cooler_on,
-                'new_cooler_on': new_cooler_on
+                "target_temp": target_temp,
+                "actual_target": actual_target,
+                "current_temp": current_temp,
+                "new_temp": new_temp,
+                "current_power": current_power,
+                "new_power": new_power,
+                "current_cooler_on": current_cooler_on,
+                "new_cooler_on": new_cooler_on,
             }
-            
+
             # Update cache with new values
-            self.update_cooling_cache({
-                'temperature': new_temp,
-                'cooler_power': new_power,
-                'cooler_on': new_cooler_on,
-                'target_temperature': target_temp
-            })
-            
+            self.update_cooling_cache(
+                {
+                    "temperature": new_temp,
+                    "cooler_power": new_power,
+                    "cooler_on": new_cooler_on,
+                    "target_temperature": target_temp,
+                }
+            )
+
             # Check if cooling is working
             if new_cooler_on and new_power is not None and new_power > 0:
-                self.logger.info(f"Cooling set successfully: target={target_temp}°C, current={new_temp}°C, power={new_power}%")
+                self.logger.info(
+                    "Cooling set successfully: target=%s°C, current=%s°C, power=%s%%",
+                    target_temp,
+                    new_temp,
+                    new_power,
+                )
                 return success_status(f"Cooling set to {target_temp}°C", details=details)
             elif new_cooler_on:
-                self.logger.info(f"Cooling set: target={target_temp}°C, current={new_temp}°C, cooler on")
+                self.logger.info(
+                    f"Cooling set: target={target_temp}°C, current={new_temp}°C, cooler on"
+                )
                 return success_status(f"Cooling set to {target_temp}°C", details=details)
             else:
-                self.logger.warning(f"Cooling set but cooler appears to be off: target={target_temp}°C, current={new_temp}°C")
-                return warning_status(f"Cooling set to {target_temp}°C but cooler may not be active", details=details)
-                
+                self.logger.warning(
+                    "Cooling set but cooler appears to be off: target=%s°C, current=%s°C",
+                    target_temp,
+                    new_temp,
+                )
+                return warning_status(
+                    f"Cooling set to {target_temp}°C but cooler may not be active", details=details
+                )
+
         except Exception as e:
             self.logger.error(f"Failed to set cooling: {e}")
             return error_status(f"Failed to set cooling: {e}")
@@ -443,30 +506,34 @@ class ASCOMCamera:
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        if not hasattr(self.camera, 'CoolerOn'):
+        if not hasattr(self.camera, "CoolerOn"):
             return error_status("Cooler on/off control not available")
         try:
-            # Get current values before changing
-            current_temp = self.camera.CCDTemperature
-            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
+            # Get current values before changing (not used further, kept for potential debugging)
+            _current_temp = self.camera.CCDTemperature
+            _current_power = (
+                self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            )
+            _current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
             # Set cooler state
             self.camera.CoolerOn = on
-            
+
             # Get values after changing
             new_temp = self.camera.CCDTemperature
-            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
+            new_power = self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
             # Update cache with new values
-            self.update_cooling_cache({
-                'temperature': new_temp,
-                'cooler_power': new_power,
-                'cooler_on': new_cooler_on,
-                'target_temperature': self.last_cooling_info.get('target_temperature')
-            })
-            
+            self.update_cooling_cache(
+                {
+                    "temperature": new_temp,
+                    "cooler_power": new_power,
+                    "cooler_on": new_cooler_on,
+                    "target_temperature": self.last_cooling_info.get("target_temperature"),
+                }
+            )
+
             status = "on" if on else "off"
             return success_status(f"Cooler turned {status}")
         except Exception as e:
@@ -481,41 +548,43 @@ class ASCOMCamera:
             return error_status("Cooling not supported by this camera")
         try:
             # Get current values before turning off
-            current_temp = self.camera.CCDTemperature
-            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
+            _cur_temp = self.camera.CCDTemperature
+            _cur_power = self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            _cur_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
             # Turn off the cooler
-            if hasattr(self.camera, 'CoolerOn'):
+            if hasattr(self.camera, "CoolerOn"):
                 self.camera.CoolerOn = False
-            
+
             # Set target temperature to ambient (or a high value to stop cooling)
             # Some cameras need this to actually stop cooling
-            if hasattr(self.camera, 'SetCCDTemperature'):
+            if hasattr(self.camera, "SetCCDTemperature"):
                 self.camera.SetCCDTemperature = 50.0  # High temperature to stop cooling
-            
+
             # Get values after turning off
             new_temp = self.camera.CCDTemperature
-            new_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
+            new_power = self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            new_cooler_on = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
             # Update cache with new values
-            self.update_cooling_cache({
-                'temperature': new_temp,
-                'cooler_power': new_power,
-                'cooler_on': new_cooler_on,
-                'target_temperature': 50.0
-            })
-            
+            self.update_cooling_cache(
+                {
+                    "temperature": new_temp,
+                    "cooler_power": new_power,
+                    "cooler_on": new_cooler_on,
+                    "target_temperature": 50.0,
+                }
+            )
+
             details = {
-                'current_temp': current_temp,
-                'new_temp': new_temp,
-                'current_power': current_power,
-                'new_power': new_power,
-                'current_cooler_on': current_cooler_on,
-                'new_cooler_on': new_cooler_on
+                "current_temp": _cur_temp,
+                "new_temp": new_temp,
+                "current_power": _cur_power,
+                "new_power": new_power,
+                "current_cooler_on": _cur_on,
+                "new_cooler_on": new_cooler_on,
             }
-            
+
             return success_status("Cooling turned off", details=details)
         except Exception as e:
             return error_status(f"Failed to turn off cooling: {e}")
@@ -549,44 +618,46 @@ class ASCOMCamera:
             return error_status("Cooling not supported by this camera")
         try:
             info = {}
-            
+
             # Try to force a refresh by reading properties multiple times
             # Some ASCOM drivers cache values and need multiple reads to update
             import time
-            
+
             # Read temperature multiple times to ensure we get the latest value
             temp_reads = []
-            for i in range(3):
+            for _i in range(3):
                 temp_reads.append(self.camera.CCDTemperature)
                 time.sleep(0.1)
-            info['temperature'] = temp_reads[-1]  # Use the last reading
-            
+            info["temperature"] = temp_reads[-1]  # Use the last reading
+
             # Read cooler power multiple times
-            if hasattr(self.camera, 'CoolerPower'):
+            if hasattr(self.camera, "CoolerPower"):
                 power_reads = []
-                for i in range(3):
+                for _i in range(3):
                     power_reads.append(self.camera.CoolerPower)
                     time.sleep(0.1)
-                info['cooler_power'] = power_reads[-1]
+                info["cooler_power"] = power_reads[-1]
             else:
-                info['cooler_power'] = None
-            
+                info["cooler_power"] = None
+
             # Read cooler on/off status multiple times
-            if hasattr(self.camera, 'CoolerOn'):
+            if hasattr(self.camera, "CoolerOn"):
                 cooler_on_reads = []
-                for i in range(3):
+                for _i in range(3):
                     cooler_on_reads.append(self.camera.CoolerOn)
                     time.sleep(0.1)
-                info['cooler_on'] = cooler_on_reads[-1]
+                info["cooler_on"] = cooler_on_reads[-1]
             else:
-                info['cooler_on'] = None
-            
+                info["cooler_on"] = None
+
             # Check if we can control cooler power directly
-            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
-            
+            info["can_set_cooler_power"] = hasattr(self.camera, "SetCoolerPower")
+
             # Check target temperature
-            info['target_temperature'] = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
-            
+            info["target_temperature"] = (
+                self.camera.SetCCDTemperature if hasattr(self.camera, "SetCCDTemperature") else None
+            )
+
             return success_status("Cooling information retrieved", data=info)
         except Exception as e:
             return error_status(f"Failed to get cooling info: {e}")
@@ -601,29 +672,40 @@ class ASCOMCamera:
             return error_status("Cooling not supported by this camera")
         try:
             info = {}
-            
+
             # Get current target temperature first
-            current_target = self.camera.SetCCDTemperature if hasattr(self.camera, 'SetCCDTemperature') else None
-            
+            current_target = (
+                self.camera.SetCCDTemperature if hasattr(self.camera, "SetCCDTemperature") else None
+            )
+
             # Simulate a cooling operation to force driver to update values
             # This is the same logic as set_cooling() but without changing anything
-            current_temp = self.camera.CCDTemperature
-            current_power = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            current_cooler_on = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            
+            _current_temp2 = self.camera.CCDTemperature
+            _current_power2 = (
+                self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            )
+            _current_on2 = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+
             # Force a refresh by setting the same target temperature
-            if hasattr(self.camera, 'SetCCDTemperature'):
+            if hasattr(self.camera, "SetCCDTemperature"):
                 self.camera.SetCCDTemperature = current_target
-            
+
             # Read fresh values after the "operation"
-            info['temperature'] = self.camera.CCDTemperature
-            info['cooler_power'] = self.camera.CoolerPower if hasattr(self.camera, 'CoolerPower') else None
-            info['cooler_on'] = self.camera.CoolerOn if hasattr(self.camera, 'CoolerOn') else None
-            info['target_temperature'] = current_target
-            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
-            
-            self.logger.debug(f"Fresh cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
-            
+            info["temperature"] = self.camera.CCDTemperature
+            info["cooler_power"] = (
+                self.camera.CoolerPower if hasattr(self.camera, "CoolerPower") else None
+            )
+            info["cooler_on"] = self.camera.CoolerOn if hasattr(self.camera, "CoolerOn") else None
+            info["target_temperature"] = current_target
+            info["can_set_cooler_power"] = hasattr(self.camera, "SetCoolerPower")
+
+            self.logger.debug(
+                "Fresh cooling info - Temp: %s°C, Power: %s%%, On: %s",
+                info.get("temperature"),
+                info.get("cooler_power"),
+                info.get("cooler_on"),
+            )
+
             return success_status("Fresh cooling information retrieved", data=info)
         except Exception as e:
             return error_status(f"Failed to get fresh cooling info: {e}")
@@ -635,12 +717,17 @@ class ASCOMCamera:
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        
+
         # Use cached values if available, otherwise try to get from ASCOM
-        if self.last_cooling_info['temperature'] is not None:
+        if self.last_cooling_info["temperature"] is not None:
             info = self.last_cooling_info.copy()
-            info['can_set_cooler_power'] = hasattr(self.camera, 'SetCoolerPower')
-            self.logger.debug(f"Using cached cooling info - Temp: {info['temperature']}°C, Power: {info['cooler_power']}%, On: {info['cooler_on']}")
+            info["can_set_cooler_power"] = hasattr(self.camera, "SetCoolerPower")
+            self.logger.debug(
+                "Using cached cooling info - Temp: %s°C, Power: %s%%, On: %s",
+                info.get("temperature"),
+                info.get("cooler_power"),
+                info.get("cooler_on"),
+            )
             return success_status("Cached cooling information retrieved", data=info)
         else:
             # Fallback to ASCOM values if no cache available
@@ -654,35 +741,37 @@ class ASCOMCamera:
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        
+
         try:
             # Check if this is a QHY camera (known for caching issues)
-            is_qhy = 'QHYCCD' in self.driver_id or 'QHY' in self.driver_id
-            
+            is_qhy = "QHYCCD" in self.driver_id or "QHY" in self.driver_id
+
             # Check if we have valid cached data
             has_valid_cache = (
-                self.last_cooling_info['temperature'] is not None and
-                self.last_cooling_info['cooler_power'] is not None and
-                self.last_cooling_info['cooler_on'] is not None
+                self.last_cooling_info["temperature"] is not None
+                and self.last_cooling_info["cooler_power"] is not None
+                and self.last_cooling_info["cooler_on"] is not None
             )
-            
+
             # Debug output
             self.logger.debug(f"Smart cooling info - QHY: {is_qhy}, Valid cache: {has_valid_cache}")
             self.logger.debug(f"Cache state: {self.last_cooling_info}")
-            
+
             if is_qhy:
                 # For QHY cameras, use cached values if available, otherwise use fresh method
                 if has_valid_cache:
                     self.logger.info("QHY camera detected - using cached cooling info")
                     return self.get_cached_cooling_info()
                 else:
-                    self.logger.info("QHY camera detected - no valid cache, using fresh cooling info method")
+                    self.logger.info(
+                        "QHY camera detected - no valid cache, using fresh cooling info method"
+                    )
                     return self.get_fresh_cooling_info()
             else:
                 # For other cameras, try normal method first, then fresh if needed
                 self.logger.info("Non-QHY camera - trying normal cooling info method")
                 return self.get_cooling_info()
-                
+
         except Exception as e:
             self.logger.warning(f"Smart cooling info failed: {e}, falling back to normal method")
             return self.get_cooling_info()
@@ -693,55 +782,59 @@ class ASCOMCamera:
             info: Dictionary with cooling information
         """
         if info and isinstance(info, dict):
-            self.last_cooling_info.update({
-                'temperature': info.get('temperature'),
-                'cooler_power': info.get('cooler_power'),
-                'cooler_on': info.get('cooler_on'),
-                'target_temperature': info.get('target_temperature')
-            })
+            self.last_cooling_info.update(
+                {
+                    "temperature": info.get("temperature"),
+                    "cooler_power": info.get("cooler_power"),
+                    "cooler_on": info.get("cooler_on"),
+                    "target_temperature": info.get("target_temperature"),
+                }
+            )
             self.logger.debug(f"Updated cooling cache: {self.last_cooling_info}")
-            
+
             # Save cache to persistent storage
             self.save_cooling_cache()
 
     def has_filter_wheel(self) -> bool:
         """Check if filter wheel is available (integrated or separate)."""
         # Check integrated filter wheel
-        if hasattr(self.camera, 'FilterNames'):
+        if hasattr(self.camera, "FilterNames"):
             return True
-        
+
         # Check separate filter wheel
         if self.filter_wheel_driver_id and self.filter_wheel:
             return True
-        
+
         return False
 
     def _get_filter_wheel_device(self):
         """Get the appropriate filter wheel device (integrated or separate)."""
         # Try integrated filter wheel first
-        if hasattr(self.camera, 'FilterNames'):
+        if hasattr(self.camera, "FilterNames"):
             return self.camera, "integrated"
-        
+
         # Try separate filter wheel
         if self.filter_wheel_driver_id and self.filter_wheel:
             return self.filter_wheel, "separate"
-        
+
         return None, None
 
     def _is_qhy_filter_wheel(self, device_type: str) -> bool:
         """Check if this is a QHY filter wheel."""
-        return (device_type == "separate" and 
-                self.filter_wheel_driver_id and 
-                ('QHY' in self.filter_wheel_driver_id or 'QHYCFW' in self.filter_wheel_driver_id))
+        return (
+            device_type == "separate"
+            and self.filter_wheel_driver_id
+            and ("QHY" in self.filter_wheel_driver_id or "QHYCFW" in self.filter_wheel_driver_id)
+        )
 
     def get_filter_names(self) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
-        
+
         device, device_type = self._get_filter_wheel_device()
         if not device:
             return error_status("No filter wheel device available")
-        
+
         try:
             # Handle QHY filter wheels differently
             if self._is_qhy_filter_wheel(device_type):
@@ -749,118 +842,132 @@ class ASCOMCamera:
                 # Try alternative properties or return default names
                 try:
                     names = list(device.FilterNames)
-                except:
+                except Exception:
                     # QHY default filter names (common setup)
-                    names = ['Halpha', 'OIII', 'SII', 'U', 'B', 'V', 'R', 'I', 'Clear']
+                    names = ["Halpha", "OIII", "SII", "U", "B", "V", "R", "I", "Clear"]
                     self.logger.info("Using default QHY filter names")
-                
+
                 self.logger.debug(f"Filter names retrieved from QHY filter wheel: {names}")
-                return success_status(f"Filter names retrieved from QHY filter wheel", data=names)
+                return success_status("Filter names retrieved from QHY filter wheel", data=names)
             else:
                 # Standard ASCOM filter wheel
                 names = list(device.FilterNames)
                 self.logger.debug(f"Filter names retrieved from {device_type} filter wheel")
-                return success_status(f"Filter names retrieved from {device_type} filter wheel", data=names)
+                return success_status(
+                    f"Filter names retrieved from {device_type} filter wheel", data=names
+                )
         except Exception as e:
             return error_status(f"Failed to get filter names from {device_type} filter wheel: {e}")
 
     def set_filter_position(self, position: int) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
-        
+
         device, device_type = self._get_filter_wheel_device()
         if not device:
             return error_status("No filter wheel device available")
-        
+
         try:
             # Handle QHY filter wheels with position validation
             if self._is_qhy_filter_wheel(device_type):
                 # QHY filter wheels might need position validation
                 if position < 0:
                     return error_status(f"Invalid filter position for QHY filter wheel: {position}")
-                
+
                 # Set position
                 device.Position = position
-                
+
                 # Wait a bit for QHY filter wheel to settle
                 import time
+
                 time.sleep(0.5)
-                
+
                 self.logger.info(f"Filter position set to {position} on QHY filter wheel")
                 return success_status(f"Filter position set to {position} on QHY filter wheel")
             else:
                 # Standard ASCOM filter wheel
                 device.Position = position
                 self.logger.info(f"Filter position set to {position} on {device_type} filter wheel")
-                return success_status(f"Filter position set to {position} on {device_type} filter wheel")
+                return success_status(
+                    f"Filter position set to {position} on {device_type} filter wheel"
+                )
         except Exception as e:
             return error_status(f"Failed to set filter position on {device_type} filter wheel: {e}")
 
     def get_filter_position(self) -> CameraStatus:
         if not self.has_filter_wheel():
             return error_status("No filter wheel present")
-        
+
         device, device_type = self._get_filter_wheel_device()
         if not device:
             return error_status("No filter wheel device available")
-        
+
         try:
             pos = device.Position
-            
+
             # Handle QHY filter wheel position -1 (unknown/not set)
             if self._is_qhy_filter_wheel(device_type) and pos == -1:
                 self.logger.warning("QHY filter wheel position is -1 (unknown/not set)")
-                
+
                 # Try multiple approaches for QHY filter wheels
                 import time
-                
+
                 # Method 1: Wait and retry
                 time.sleep(0.2)
                 pos = device.Position
-                
+
                 # Method 2: Try to read from alternative properties
                 if pos == -1:
                     try:
                         # Some QHY filter wheels have different property names
-                        if hasattr(device, 'CurrentPosition'):
+                        if hasattr(device, "CurrentPosition"):
                             pos = device.CurrentPosition
                             self.logger.info("Using CurrentPosition property for QHY filter wheel")
-                        elif hasattr(device, 'FilterPosition'):
+                        elif hasattr(device, "FilterPosition"):
                             pos = device.FilterPosition
                             self.logger.info("Using FilterPosition property for QHY filter wheel")
-                    except:
+                    except Exception:
                         pass
-                
+
                 # Method 3: Final retry
                 if pos == -1:
                     time.sleep(0.3)
                     pos = device.Position
-                
+
                 if pos == -1:
-                    self.logger.warning("QHY filter wheel still reporting position -1 after multiple attempts")
-                    # For QHY filter wheels, -1 might be acceptable if we can't get the real position
-                    self.logger.info("QHY filter wheel position -1 is acceptable (common QHY behavior)")
-            
+                    self.logger.warning(
+                        "QHY filter wheel still reporting position -1 after multiple attempts"
+                    )
+                    # For QHY filter wheels, -1 might be acceptable if we can't get the real
+                    # position
+                    self.logger.info(
+                        "QHY filter wheel position -1 is acceptable (common QHY behavior)"
+                    )
+
             self.logger.debug(f"Current filter position from {device_type} filter wheel: {pos}")
-            return success_status(f"Current filter position from {device_type} filter wheel", data=pos)
+            return success_status(
+                f"Current filter position from {device_type} filter wheel", data=pos
+            )
         except Exception as e:
-            return error_status(f"Failed to get filter position from {device_type} filter wheel: {e}")
+            return error_status(
+                f"Failed to get filter position from {device_type} filter wheel: {e}"
+            )
 
     def is_color_camera(self) -> bool:
         """Check if the camera is a color camera.
-        
+
         Returns:
             bool: True if color camera, False if monochrome
         """
         try:
             if not self.camera or not self.camera.Connected:
                 return False
-            
+
             # Method 1: Check SensorType property
-            if hasattr(self.camera, 'SensorType'):
+            if hasattr(self.camera, "SensorType"):
                 sensor_type = self.camera.SensorType
                 self.logger.debug(f"Camera SensorType: {sensor_type}")
-                
+
                 # ASCOM SensorType enum values:
                 # 0 = Monochrome, 1 = Color, 2 = RgGg, 3 = RGGB, 4 = GRBG, 5 = GBRG, 6 = BGGR
                 if sensor_type in [1, 2, 3, 4, 5, 6]:  # All color types
@@ -869,9 +976,9 @@ class ASCOMCamera:
                 elif sensor_type == 0:  # Monochrome
                     self.logger.info("Monochrome camera detected via SensorType: 0")
                     return False
-            
+
             # Method 2: Check IsColor property
-            if hasattr(self.camera, 'IsColor'):
+            if hasattr(self.camera, "IsColor"):
                 is_color = self.camera.IsColor
                 self.logger.debug(f"Camera IsColor: {is_color}")
                 if is_color:
@@ -880,31 +987,39 @@ class ASCOMCamera:
                 else:
                     self.logger.info("Monochrome camera detected via IsColor property")
                     return False
-            
+
             # Method 3: Check driver name for common color cameras
             driver_name = self.driver_id.lower()
-            color_indicators = ['color', 'rgb', 'bayer', 'asi2600mc', 'asi2600mmc', 'qhy600c', 'qhy600mc']
-            mono_indicators = ['mono', 'asi2600mm', 'asi2600mm-pro', 'qhy600m', 'qhy600mm']
-            
+            color_indicators = [
+                "color",
+                "rgb",
+                "bayer",
+                "asi2600mc",
+                "asi2600mmc",
+                "qhy600c",
+                "qhy600mc",
+            ]
+            mono_indicators = ["mono", "asi2600mm", "asi2600mm-pro", "qhy600m", "qhy600mm"]
+
             for indicator in color_indicators:
                 if indicator in driver_name:
                     self.logger.info(f"Color camera detected via driver name: {indicator}")
                     return True
-            
+
             for indicator in mono_indicators:
                 if indicator in driver_name:
                     self.logger.info(f"Monochrome camera detected via driver name: {indicator}")
                     return False
-            
+
             # Method 4: Check if Bayer pattern is available
             if self.sensor_type is not None:
                 self.logger.info(f"Color camera detected via Bayer pattern: {self.sensor_type}")
                 return True
-            
+
             # Default: assume monochrome if no clear indication
             self.logger.warning("Could not determine camera type, assuming monochrome")
             return False
-            
+
         except Exception as e:
             self.logger.warning(f"Error detecting camera type: {e}")
             return False
@@ -918,31 +1033,35 @@ class ASCOMCamera:
             CameraStatus: Status with debayered image data
         """
         try:
+            # Ensure optional deps are available
+            if cv2 is None or np is None:
+                return error_status("OpenCV and numpy are required for debayering")
+
             # Use provided pattern or auto-detect from sensor_type
             if pattern is None:
                 pattern = self.sensor_type
-            
+
             if pattern is None:
                 return error_status("No Bayer pattern available and none provided")
-            
+
             # Apply debayering based on detected pattern
-            if pattern == 'RGGB':
+            if pattern == "RGGB":
                 bayer_pattern = cv2.COLOR_BayerRG2BGR
-            elif pattern == 'GRBG':
+            elif pattern == "GRBG":
                 bayer_pattern = cv2.COLOR_BayerGR2BGR
-            elif pattern == 'GBRG':
+            elif pattern == "GBRG":
                 bayer_pattern = cv2.COLOR_BayerGB2BGR
-            elif pattern == 'BGGR':
+            elif pattern == "BGGR":
                 bayer_pattern = cv2.COLOR_BayerBG2BGR
             else:
                 return error_status(f"Unsupported Bayer pattern: {pattern}")
-            
+
             # Convert to numpy array and apply debayering
             image_array = np.array(img_array)
             debayered_image = cv2.cvtColor(image_array, bayer_pattern)
-            
+
             return success_status(f"Image debayered with {pattern} pattern", data=debayered_image)
-            
+
         except Exception as e:
             return error_status(f"Debayering failed: {e}")
 
@@ -957,41 +1076,41 @@ class ASCOMCamera:
                 return None
 
             # Try to get Bayer pattern from ASCOM camera
-            if hasattr(self.camera, 'SensorType'):
+            if hasattr(self.camera, "SensorType"):
                 sensor_type = self.camera.SensorType
                 # ASCOM SensorType enum values: 0=Monochrome, 1=Color, 2=RgGg, 3=RGGB, etc.
                 if sensor_type == 0:  # Monochrome
                     return None
                 elif sensor_type == 1:  # Color (generic)
-                    return 'RGGB'  # Default assumption
+                    return "RGGB"  # Default assumption
                 elif sensor_type == 2:  # RgGg
-                    return 'RGGB'
+                    return "RGGB"
                 elif sensor_type == 3:  # RGGB
-                    return 'RGGB'
+                    return "RGGB"
                 elif sensor_type == 4:  # GRBG
-                    return 'GRBG'
+                    return "GRBG"
                 elif sensor_type == 5:  # GBRG
-                    return 'GBRG'
+                    return "GBRG"
                 elif sensor_type == 6:  # BGGR
-                    return 'BGGR'
+                    return "BGGR"
 
             # Fallback: check if camera is color
-            if hasattr(self.camera, 'IsColor') and self.camera.IsColor:
-                return 'RGGB'  # Default assumption for color cameras
+            if hasattr(self.camera, "IsColor") and self.camera.IsColor:
+                return "RGGB"  # Default assumption for color cameras
 
             return None  # Assume monochrome
 
         except Exception as e:
             self.logger.warning(f"Could not determine sensor type: {e}")
-            return None 
+            return None
 
     def _setup_filter_wheel(self) -> None:
         """Setup optional separate filter wheel driver."""
         try:
             # Get filter wheel driver from config
             camera_config = self.config.get_camera_config()
-            if 'filter_wheel_driver' in camera_config.get('ascom', {}):
-                self.filter_wheel_driver_id = camera_config['ascom']['filter_wheel_driver']
+            if "filter_wheel_driver" in camera_config.get("ascom", {}):
+                self.filter_wheel_driver_id = camera_config["ascom"]["filter_wheel_driver"]
                 self.logger.info(f"Filter wheel driver configured: {self.filter_wheel_driver_id}")
             else:
                 self.logger.debug("No separate filter wheel driver configured")
@@ -1002,16 +1121,17 @@ class ASCOMCamera:
         """Connect to separate filter wheel driver if configured."""
         if not self.filter_wheel_driver_id:
             return error_status("No filter wheel driver configured")
-        
+
         try:
             if self.filter_wheel is None:
                 import win32com.client
+
                 self.filter_wheel = win32com.client.Dispatch(self.filter_wheel_driver_id)
-            
+
             if not self.filter_wheel.Connected:
                 self.filter_wheel.Connected = True
                 self.logger.info(f"Connected to filter wheel: {self.filter_wheel_driver_id}")
-            
+
             return success_status(f"Filter wheel connected: {self.filter_wheel_driver_id}")
         except Exception as e:
             return error_status(f"Failed to connect to filter wheel: {e}")
@@ -1024,140 +1144,161 @@ class ASCOMCamera:
                 self.logger.info("Filter wheel disconnected")
             return success_status("Filter wheel disconnected")
         except Exception as e:
-            return error_status(f"Failed to disconnect filter wheel: {e}") 
+            return error_status(f"Failed to disconnect filter wheel: {e}")
 
     def force_refresh_cooling_status(self) -> CameraStatus:
         """Force a refresh of the cooling status by reading multiple times.
         This helps with ASCOM drivers that cache values.
-        
+
         Returns:
             CameraStatus: Status with refreshed cooling information
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        
+
         try:
             import time
-            
+
             self.logger.info("Forcing cooling status refresh...")
-            
+
             # Read multiple times to force driver to update
             temperatures = []
             powers = []
             cooler_states = []
-            
+
             for i in range(5):  # Read 5 times
                 try:
                     # Read temperature
                     temp = self.camera.CCDTemperature
                     temperatures.append(temp)
-                    
+
                     # Read cooler power
-                    if hasattr(self.camera, 'CoolerPower'):
+                    if hasattr(self.camera, "CoolerPower"):
                         power = self.camera.CoolerPower
                         powers.append(power)
-                    
+
                     # Read cooler state
-                    if hasattr(self.camera, 'CoolerOn'):
+                    if hasattr(self.camera, "CoolerOn"):
                         cooler_on = self.camera.CoolerOn
                         cooler_states.append(cooler_on)
-                    
+
                     # Small delay between reads
                     time.sleep(0.2)
-                    
+
                 except Exception as e:
                     self.logger.warning(f"Error during refresh read {i+1}: {e}")
-            
+
             # Use the last reading (most recent)
             final_temp = temperatures[-1] if temperatures else None
             final_power = powers[-1] if powers else None
             final_cooler_on = cooler_states[-1] if cooler_states else None
-            
+
             # Get target temperature
             target_temp = None
-            if hasattr(self.camera, 'SetCCDTemperature'):
+            if hasattr(self.camera, "SetCCDTemperature"):
                 target_temp = self.camera.SetCCDTemperature
-            
+
             info = {
-                'temperature': final_temp,
-                'cooler_power': final_power,
-                'cooler_on': final_cooler_on,
-                'target_temperature': target_temp,
-                'can_set_cooler_power': hasattr(self.camera, 'SetCoolerPower'),
-                'refresh_attempts': len(temperatures)
+                "temperature": final_temp,
+                "cooler_power": final_power,
+                "cooler_on": final_cooler_on,
+                "target_temperature": target_temp,
+                "can_set_cooler_power": hasattr(self.camera, "SetCoolerPower"),
+                "refresh_attempts": len(temperatures),
             }
-            
+
             # Update cache with fresh values
-            self.update_cooling_cache({
-                'temperature': final_temp,
-                'cooler_power': final_power,
-                'cooler_on': final_cooler_on,
-                'target_temperature': target_temp
-            })
-            
-            self.logger.info(f"Cooling status refreshed: temp={final_temp}°C, power={final_power}%, on={final_cooler_on}")
-            
+            self.update_cooling_cache(
+                {
+                    "temperature": final_temp,
+                    "cooler_power": final_power,
+                    "cooler_on": final_cooler_on,
+                    "target_temperature": target_temp,
+                }
+            )
+
+            self.logger.info(
+                "Cooling status refreshed: temp=%s°C, power=%s%%, on=%s",
+                final_temp,
+                final_power,
+                final_cooler_on,
+            )
+
             return success_status("Cooling status refreshed", data=info)
-            
+
         except Exception as e:
             self.logger.error(f"Error forcing cooling refresh: {e}")
             return error_status(f"Failed to refresh cooling status: {e}")
 
-    def wait_for_cooling_stabilization(self, timeout: int = 60, check_interval: float = 2.0) -> CameraStatus:
+    def wait_for_cooling_stabilization(
+        self, timeout: int = 60, check_interval: float = 2.0
+    ) -> CameraStatus:
         """Wait for cooling system to stabilize and show power consumption.
-        
+
         Args:
             timeout: Maximum time to wait in seconds
             check_interval: Interval between checks in seconds
-            
+
         Returns:
             CameraStatus: Status with stabilization information
         """
         if not self.has_cooling():
             return error_status("Cooling not supported by this camera")
-        
+
         try:
             import time
-            
+
             self.logger.info(f"Waiting for cooling stabilization (timeout: {timeout}s)...")
-            
+
             start_time = time.time()
             last_power = None
             stable_count = 0
-            
+
             while time.time() - start_time < timeout:
                 # Force refresh
                 refresh_status = self.force_refresh_cooling_status()
                 if not refresh_status.is_success:
                     return refresh_status
-                
+
                 info = refresh_status.data
-                current_power = info.get('cooler_power')
-                current_temp = info.get('temperature')
-                cooler_on = info.get('cooler_on')
-                
-                self.logger.info(f"Status: temp={current_temp}°C, power={current_power}%, on={cooler_on}")
-                
+                current_power = info.get("cooler_power")
+                current_temp = info.get("temperature")
+                cooler_on = info.get("cooler_on")
+
+                self.logger.info(
+                    f"Status: temp={current_temp}°C, power={current_power}%, on={cooler_on}"
+                )
+
                 # Check if power is changing
                 if current_power is not None:
                     if last_power is not None and abs(current_power - last_power) < 1.0:
                         stable_count += 1
                     else:
                         stable_count = 0
-                    
+
                     last_power = current_power
-                    
+
                     # If power is stable for 3 consecutive readings, consider it stabilized
                     if stable_count >= 3:
-                        self.logger.info(f"Cooling stabilized: power={current_power}%, stable for {stable_count} readings")
+                        self.logger.info(
+                            "Cooling stabilized: power=%s%%, stable for %s readings",
+                            current_power,
+                            stable_count,
+                        )
                         return success_status("Cooling stabilized", data=info)
-                
+
                 time.sleep(check_interval)
-            
+
             # Timeout reached
-            final_info = self.get_smart_cooling_info().data if self.get_smart_cooling_info().is_success else {}
-            return warning_status(f"Cooling stabilization timeout after {timeout}s", data=final_info)
-            
+            final_info = (
+                self.get_smart_cooling_info().data
+                if self.get_smart_cooling_info().is_success
+                else {}
+            )
+            return warning_status(
+                f"Cooling stabilization timeout after {timeout}s", data=final_info
+            )
+
         except Exception as e:
             self.logger.error(f"Error waiting for cooling stabilization: {e}")
-            return error_status(f"Failed to wait for cooling stabilization: {e}") 
+            return error_status(f"Failed to wait for cooling stabilization: {e}")

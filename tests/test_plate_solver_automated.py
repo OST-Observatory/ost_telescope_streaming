@@ -1,30 +1,32 @@
 import logging
-import sys
 from pathlib import Path
+import sys
 
 # Add the code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
+
 try:
     from platesolve.platesolve2 import PlateSolve2Automated
 except Exception:
     from platesolve2_automated import PlateSolve2Automated
 import argparse
 
+
 def main():
     parser = argparse.ArgumentParser(description="Test automated PlateSolve 2")
     parser.add_argument("--config", type=str, help="Path to configuration file")
-    
+
     # Parse config argument first to load the right configuration
     args, remaining = parser.parse_known_args()
-    
+
     # Load configuration
     if args.config:
         config = ConfigManager(config_path=args.config)
     else:
         config = ConfigManager()
-    
+
     # Recreate parser with the loaded configuration defaults
     parser = argparse.ArgumentParser(description="Test automated PlateSolve 2")
     parser.add_argument("--config", type=str, help="Path to configuration file")
@@ -46,7 +48,7 @@ def main():
         ra_deg=args.ra,
         dec_deg=args.dec,
         fov_width_deg=args.fov_width,
-        fov_height_deg=args.fov_height
+        fov_height_deg=args.fov_height,
     )
     print(f"Status: {status.level.value.upper()} - {status.message}")
     if status.details:
@@ -59,10 +61,11 @@ def main():
         print(f"  Position angle: {result.get('position_angle', 'N/A'):.1f}°")
         print(f"  Confidence: {result.get('confidence', 0):.2f}")
         print(f"  Stars detected: {result.get('stars_detected', 0)}")
-        if result.get('flipped', 0) >= 1:
-            print(f"  Image is flipped")
+        if result.get("flipped", 0) >= 1:
+            print("  Image is flipped")
     else:
         exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

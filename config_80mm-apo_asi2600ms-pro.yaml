@@ -7,14 +7,14 @@
 camera:
   # Camera type and basic settings
   camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
-  
+
   # Sensor specifications (important for calibration)
   sensor_width: 23.5     # Sensor width in mm
   sensor_height: 15.7    # Sensor height in mm
   pixel_size: 3.76       # Pixel size in micrometers
   type: "color"          # Camera type (mono, color)
   bit_depth: 16          # Bit depth
-  
+
   # Cooling settings for ASCOM cameras
   cooling:
     enable_cooling: true           # Enable camera cooling
@@ -26,7 +26,7 @@ camera:
     warmup_final_temp: 15.0       # Final temperature for warmup
     warmup_at_end: true           # Start warmup when stopping observation
     status_interval: 30           # Status update interval in seconds
-  
+
   # ASCOM camera settings
   ascom:
     ascom_driver: "ASCOM.ASICamera2.Camera"  # ASCOM driver ID for astro cameras
@@ -37,7 +37,7 @@ camera:
     binning: 1  # Binning factor (1x1, 2x2, etc.)
     # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
     filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
-    
+
   # Alpaca camera settings
   alpaca:
     host: "localhost"
@@ -48,7 +48,7 @@ camera:
     offset: 50  # Offset setting (0-255 typically)
     readout_mode: 0  # Readout mode (camera-specific)
     binning: [1, 1]  # Binning factor [x, y] for Alpaca
-    
+
   # OpenCV camera settings
   opencv:
     camera_index: 0  # Camera device index
@@ -62,21 +62,21 @@ camera:
 # =============================================================================
 frame_processing:
   enabled: true
-  
+
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  
+
   # Processing settings
   auto_debayer: true  # Auto-debayer color images
   debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
-  
+
   # Normalization settings for display (OpenCV conversion)
   normalization:
     method: zscale    # zscale | hist
     contrast: 0.15    # zscale contrast parameter
-  
+
   # Output settings
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files
@@ -177,7 +177,7 @@ overlay:
     text_color: [255, 255, 255]
     marker_size: 20
     text_offset: [30, -30]
-  
+
   # Information panel settings
   info_panel:
     enabled: true
@@ -197,7 +197,7 @@ overlay:
     show_camera_info: true
     show_fov_info: true
     show_plate_solve_info: true
-  
+
   # Title/Header settings
   title:
     enabled: true
@@ -209,30 +209,30 @@ overlay:
     padding: 10
     border_color: [255, 255, 255, 255]
     border_width: 1
-  
+
   # Secondary telescope FOV overlay settings
   secondary_fov:
     enabled: true  # Enable/disable secondary FOV display
     type: "camera"  # "camera" or "eyepiece"
-    
+
     # Secondary telescope parameters
     telescope:
       focal_length: 3454  # Focal length in mm
       aperture: 508       # Aperture in mm
       type: "reflector"   # Telescope type
-    
+
     # For camera-based FOV
     camera:
       sensor_width: 36.0   # Sensor width in mm
       sensor_height: 24.0  # Sensor height in mm
       pixel_size: 3.76     # Pixel size in micrometers
       type: "mono"         # Camera type (mono/color)
-    
+
     # For eyepiece-based FOV
     eyepiece:
       focal_length: 36     # Eyepiece focal length in mm
       afov: 68             # Apparent Field of View in degrees
-    
+
     # Display settings
     display:
       color: [0, 255, 255, 255]  # Cyan color (RGBA)
@@ -243,7 +243,7 @@ overlay:
       label_color: [0, 255, 255, 255]  # Label color
       label_font_size: 15
       label_offset: [5, 5]  # Label offset from FOV border
-    
+
     # Position offset (if secondary telescope is not perfectly aligned)
     position_offset:
       ra_offset_arcmin: 0.0   # RA offset in arcminutes
@@ -275,4 +275,4 @@ advanced:
   debug_coordinates: false
   debug_simbad: false
   save_empty_overlays: true
-  auto_recovery: true 
+  auto_recovery: true

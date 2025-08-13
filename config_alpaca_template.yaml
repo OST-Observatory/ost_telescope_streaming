@@ -7,14 +7,14 @@
 camera:
   # Camera type and basic settings
   camera_type: "alpaca"  # "ascom", "alpaca", or "opencv"
-  
+
   # Sensor specifications (important for calibration)
   sensor_width: 23.5     # Sensor width in mm
   sensor_height: 15.7    # Sensor height in mm
   pixel_size: 3.76       # Pixel size in micrometers
   type: "color"          # Camera type (mono, color)
   bit_depth: 16          # Bit depth
-  
+
   # Cooling settings
   cooling:
     enable_cooling: true
@@ -26,7 +26,7 @@ camera:
     warmup_final_temp: 15.0   # Final temperature for warmup
     warmup_at_end: true       # Start warmup when stopping observation
     status_interval: 30       # Status update interval in seconds
-  
+
   # ASCOM camera settings
   ascom:
     ascom_driver: "ASCOM.ZWOASI.Camera"  # ASCOM driver ID for astro cameras
@@ -37,7 +37,7 @@ camera:
     binning: 1  # Binning factor (1x1, 2x2, etc.)
     # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
     filter_wheel_driver: null  # Filter wheel driver ID (if applicable)
-    
+
   # Alpaca camera settings
   alpaca:
     host: "localhost"
@@ -48,7 +48,7 @@ camera:
     offset: 50  # Offset setting (0-255 typically)
     readout_mode: 0  # Readout mode (camera-specific)
     binning: [1, 1]  # Binning factor [x, y] for Alpaca
-    
+
   # OpenCV camera settings
   opencv:
     camera_index: 0  # Camera device index
@@ -62,16 +62,16 @@ camera:
 # =============================================================================
 frame_processing:
   enabled: true
-  
+
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  
+
   # Processing settings
   auto_debayer: false  # Auto-debayer color images
   debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
-  
+
   # Output settings
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files
@@ -117,7 +117,7 @@ plate_solve:
   save_plate_solve_frames: true
   plate_solve_dir: "plate_solve_frames"
   default_solver: "platesolve2"
-  
+
   # Settings for PlateSolve2
   platesolve2:
     executable_path: "C:/Program Files (x86)/PlaneWave Instruments/PWI3/PlateSolve2/PlateSolve2.exe"
@@ -128,7 +128,7 @@ plate_solve:
     number_of_regions: 150
     min_stars: 20
     max_stars: 200
-  
+
   # Settings for Astrometry.net
   astrometry:
     api_key: ""
@@ -185,4 +185,4 @@ advanced:
   debug_coordinates: false
   debug_simbad: false
   save_empty_overlays: true
-  auto_recovery: true 
+  auto_recovery: true

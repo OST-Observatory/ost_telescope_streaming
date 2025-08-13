@@ -4,17 +4,17 @@ Exception hierarchy for the telescope streaming system.
 Provides structured error handling across all modules.
 """
 
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 
 class TelescopeStreamingError(Exception):
     """Base exception for all telescope streaming errors."""
-    
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(message)
         self.message = message
         self.details = details or {}
-    
+
     def __str__(self) -> str:
         if self.details:
             return f"{self.message} (Details: {self.details})"
@@ -23,84 +23,101 @@ class TelescopeStreamingError(Exception):
 
 class ConfigurationError(TelescopeStreamingError):
     """Raised when configuration is invalid or missing."""
+
     pass
 
 
 class HardwareError(TelescopeStreamingError):
     """Base exception for hardware-related errors."""
+
     pass
 
 
 class MountError(HardwareError):
     """Raised when telescope mount operations fail."""
+
     pass
 
 
 class CameraError(HardwareError):
     """Raised when camera operations fail."""
+
     pass
 
 
 class PlateSolveError(TelescopeStreamingError):
     """Raised when plate-solving operations fail."""
+
     pass
 
 
 class OverlayError(TelescopeStreamingError):
     """Raised when overlay generation fails."""
+
     pass
 
 
 class VideoProcessingError(TelescopeStreamingError):
     """Raised when video processing operations fail."""
+
     pass
 
 
 class SIMBADError(TelescopeStreamingError):
     """Raised when SIMBAD queries fail."""
+
     pass
 
 
 class ValidationError(TelescopeStreamingError):
     """Raised when input validation fails."""
+
     pass
 
 
 class TimeoutError(TelescopeStreamingError):
     """Raised when operations timeout."""
+
     pass
 
 
 class ConnectionError(TelescopeStreamingError):
     """Raised when connection to external services fails."""
+
     pass
 
 
 class FileError(TelescopeStreamingError):
     """Raised when file operations fail."""
+
     pass
 
 
 class CalibrationError(TelescopeStreamingError):
     """Raised when calibration operations fail."""
+
     pass
 
 
 class CoolingError(HardwareError):
     """Raised when camera cooling operations fail."""
+
     pass
 
 
 class DarkCaptureError(TelescopeStreamingError):
     """Raised when dark frame capture operations fail."""
+
     pass
 
 
 class FlatCaptureError(TelescopeStreamingError):
     """Raised when flat frame capture operations fail."""
+
     pass
 
 
 class MasterFrameError(TelescopeStreamingError):
     """Raised when master frame creation operations fail."""
-    pass 
+
+    pass

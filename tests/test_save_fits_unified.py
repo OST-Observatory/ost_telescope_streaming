@@ -2,38 +2,38 @@ from __future__ import annotations
 
 import os
 import sys
-import tempfile
+
 import numpy as np
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-CODE_DIR = os.path.join(PROJECT_ROOT, 'code')
+CODE_DIR = os.path.join(PROJECT_ROOT, "code")
 if CODE_DIR not in sys.path:
     sys.path.insert(0, CODE_DIR)
 
-from capture.controller import VideoCapture
-from status import success_status
+from capture.controller import VideoCapture  # noqa: E402
+from status import success_status  # noqa: E402
 
 
 class DummyCamera:
     def __init__(self):
-        self.name = 'dummy'
+        self.name = "dummy"
         self.ccdtemperature = -5.0
         self.cooler_power = 10.0
         self.cooler_on = False
-        self.sensor_type = 'RGGB'
+        self.sensor_type = "RGGB"
 
 
 class DummyConfig:
     def __init__(self):
         self._camera = {
-            'camera_type': 'alpaca',
-            'pixel_size': 3.76,
-            'sensor_width': 23.5,
-            'sensor_height': 15.6,
-            'ascom': {'gain': 100, 'offset': 50, 'readout_mode': 0},
-            'alpaca': {},
+            "camera_type": "alpaca",
+            "pixel_size": 3.76,
+            "sensor_width": 23.5,
+            "sensor_height": 15.6,
+            "ascom": {"gain": 100, "offset": 50, "readout_mode": 0},
+            "alpaca": {},
         }
-        self._telescope = {'focal_length': 400.0}
+        self._telescope = {"focal_length": 400.0}
         self._overlay = {}
         self._frame = {}
 
@@ -66,8 +66,8 @@ def test_save_fits_unified_writes_header_and_data(tmp_path):
     vc = DummyVC(cfg, logger=None, enable_calibration=False)
     vc.camera = DummyCamera()
 
-    img = (np.linspace(0, 65535, 10000, dtype=np.uint16).reshape(100, 100))
-    details = {'exposure_time_s': 10.0, 'gain': 100, 'offset': 50, 'readout_mode': 0, 'binning': 1}
+    img = np.linspace(0, 65535, 10000, dtype=np.uint16).reshape(100, 100)
+    details = {"exposure_time_s": 10.0, "gain": 100, "offset": 50, "readout_mode": 0, "binning": 1}
     status = success_status("frame", data=img, details=details)
 
     out_file = tmp_path / "test_frame.fits"
@@ -79,8 +79,6 @@ def test_save_fits_unified_writes_header_and_data(tmp_path):
     with fits.open(out_file) as hdul:
         hdr = hdul[0].header
         data = hdul[0].data
-        assert hdr.get('EXPTIME') == 10.0
-        assert int(hdr.get('READOUT')) == 0
+        assert hdr.get("EXPTIME") == 10.0
+        assert int(hdr.get("READOUT")) == 0
         assert data.shape == (100, 100)
-
-

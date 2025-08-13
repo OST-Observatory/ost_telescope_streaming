@@ -53,7 +53,7 @@ import json
 
 class AlpycaCameraWrapper:
     """Python-native ASCOM camera wrapper using Alpyca."""
-    
+
     def __init__(self, host="localhost", port=11111, device_id=0, config=None, logger=None):
         self.host = host
         self.port = port
@@ -63,20 +63,20 @@ class AlpycaCameraWrapper:
         self.camera = None
         self.cooling_cache = {}
         self.cache_file = None
-        
+
     def connect(self):
         """Connect to the Alpyca camera."""
         try:
             self.camera = AlpycaCamera(self.host, self.port, self.device_id)
             self.camera.Connected = True
-            
+
             # Initialize cache file
             self._init_cache()
-            
+
             return success_status(f"Alpyca camera connected: {self.camera.Name}")
         except Exception as e:
             return error_status(f"Failed to connect to Alpyca camera: {e}")
-    
+
     def disconnect(self):
         """Disconnect from the Alpyca camera."""
         try:
@@ -97,27 +97,27 @@ class AlpycaCameraWrapper:
     def name(self):
         """Get camera name."""
         return self.camera.Name if self.camera else None
-    
+
     @property
     def description(self):
         """Get camera description."""
         return self.camera.Description if self.camera else None
-    
+
     @property
     def driver_info(self):
         """Get driver information."""
         return self.camera.DriverInfo if self.camera else None
-    
+
     @property
     def driver_version(self):
         """Get driver version."""
         return self.camera.DriverVersion if self.camera else None
-    
+
     @property
     def interface_version(self):
         """Get interface version."""
         return self.camera.InterfaceVersion if self.camera else None
-    
+
     @property
     def connected(self):
         """Check if camera is connected."""
@@ -133,42 +133,42 @@ class AlpycaCameraWrapper:
     def sensor_name(self):
         """Get sensor name."""
         return self.camera.SensorName if self.camera else None
-    
+
     @property
     def sensor_type(self):
         """Get sensor type (monochrome/color)."""
         return self.camera.SensorType if self.camera else None
-    
+
     @property
     def camera_x_size(self):
         """Get camera X size in pixels."""
         return self.camera.CameraXSize if self.camera else None
-    
+
     @property
     def camera_y_size(self):
         """Get camera Y size in pixels."""
         return self.camera.CameraYSize if self.camera else None
-    
+
     @property
     def pixel_size_x(self):
         """Get pixel size X in microns."""
         return self.camera.PixelSizeX if self.camera else None
-    
+
     @property
     def pixel_size_y(self):
         """Get pixel size Y in microns."""
         return self.camera.PixelSizeY if self.camera else None
-    
+
     @property
     def max_adu(self):
         """Get maximum ADU value."""
         return self.camera.MaxADU if self.camera else None
-    
+
     @property
     def electrons_per_adu(self):
         """Get electrons per ADU."""
         return self.camera.ElectronsPerADU if self.camera else None
-    
+
     @property
     def full_well_capacity(self):
         """Get full well capacity."""
@@ -182,37 +182,37 @@ class AlpycaCameraWrapper:
     def exposure_min(self):
         """Get minimum exposure time."""
         return self.camera.ExposureMin if self.camera else None
-    
+
     @property
     def exposure_max(self):
         """Get maximum exposure time."""
         return self.camera.ExposureMax if self.camera else None
-    
+
     @property
     def exposure_resolution(self):
         """Get exposure resolution."""
         return self.camera.ExposureResolution if self.camera else None
-    
+
     @property
     def last_exposure_duration(self):
         """Get last exposure duration."""
         return self.camera.LastExposureDuration if self.camera else None
-    
+
     @property
     def last_exposure_start_time(self):
         """Get last exposure start time."""
         return self.camera.LastExposureStartTime if self.camera else None
-    
+
     @property
     def image_ready(self):
         """Check if image is ready."""
         return self.camera.ImageReady if self.camera else False
-    
+
     @property
     def camera_state(self):
         """Get camera state."""
         return self.camera.CameraState if self.camera else None
-    
+
     @property
     def percent_completed(self):
         """Get exposure completion percentage."""
@@ -226,34 +226,34 @@ class AlpycaCameraWrapper:
     def bin_x(self):
         """Get X binning."""
         return self.camera.BinX if self.camera else None
-    
+
     @bin_x.setter
     def bin_x(self, value):
         """Set X binning."""
         if self.camera:
             self.camera.BinX = value
-    
+
     @property
     def bin_y(self):
         """Get Y binning."""
         return self.camera.BinY if self.camera else None
-    
+
     @bin_y.setter
     def bin_y(self, value):
         """Set Y binning."""
         if self.camera:
             self.camera.BinY = value
-    
+
     @property
     def max_bin_x(self):
         """Get maximum X binning."""
         return self.camera.MaxBinX if self.camera else None
-    
+
     @property
     def max_bin_y(self):
         """Get maximum Y binning."""
         return self.camera.MaxBinY if self.camera else None
-    
+
     @property
     def can_asymmetric_bin(self):
         """Check if asymmetric binning is supported."""
@@ -267,40 +267,40 @@ class AlpycaCameraWrapper:
     def start_x(self):
         """Get start X position."""
         return self.camera.StartX if self.camera else None
-    
+
     @start_x.setter
     def start_x(self, value):
         """Set start X position."""
         if self.camera:
             self.camera.StartX = value
-    
+
     @property
     def start_y(self):
         """Get start Y position."""
         return self.camera.StartY if self.camera else None
-    
+
     @start_y.setter
     def start_y(self, value):
         """Set start Y position."""
         if self.camera:
             self.camera.StartY = value
-    
+
     @property
     def num_x(self):
         """Get number of X pixels."""
         return self.camera.NumX if self.camera else None
-    
+
     @num_x.setter
     def num_x(self, value):
         """Set number of X pixels."""
         if self.camera:
             self.camera.NumX = value
-    
+
     @property
     def num_y(self):
         """Get number of Y pixels."""
         return self.camera.NumY if self.camera else None
-    
+
     @num_y.setter
     def num_y(self, value):
         """Set number of Y pixels."""
@@ -317,44 +317,44 @@ class AlpycaCameraWrapper:
     def can_set_ccd_temperature(self):
         """Check if CCD temperature can be set."""
         return self.camera.CanSetCCDTemperature if self.camera else False
-    
+
     @property
     def can_get_cooler_power(self):
         """Check if cooler power can be read."""
         return self.camera.CanGetCoolerPower if self.camera else False
-    
+
     @property
     def ccd_temperature(self):
         """Get current CCD temperature."""
         return self.camera.CCDTemperature if self.camera else None
-    
+
     @property
     def set_ccd_temperature(self):
         """Get target CCD temperature."""
         return self.camera.SetCCDTemperature if self.camera else None
-    
+
     @set_ccd_temperature.setter
     def set_ccd_temperature(self, value):
         """Set target CCD temperature."""
         if self.camera:
             self.camera.SetCCDTemperature = value
-    
+
     @property
     def cooler_on(self):
         """Get cooler on/off state."""
         return self.camera.CoolerOn if self.camera else None
-    
+
     @cooler_on.setter
     def cooler_on(self, value):
         """Set cooler on/off state."""
         if self.camera:
             self.camera.CoolerOn = value
-    
+
     @property
     def cooler_power(self):
         """Get cooler power percentage."""
         return self.camera.CoolerPower if self.camera else None
-    
+
     @property
     def heat_sink_temperature(self):
         """Get heat sink temperature."""
@@ -368,49 +368,49 @@ class AlpycaCameraWrapper:
     def gain(self):
         """Get current gain."""
         return self.camera.Gain if self.camera else None
-    
+
     @gain.setter
     def gain(self, value):
         """Set gain."""
         if self.camera:
             self.camera.Gain = value
-    
+
     @property
     def gain_min(self):
         """Get minimum gain."""
         return self.camera.GainMin if self.camera else None
-    
+
     @property
     def gain_max(self):
         """Get maximum gain."""
         return self.camera.GainMax if self.camera else None
-    
+
     @property
     def gains(self):
         """Get available gains."""
         return self.camera.Gains if self.camera else None
-    
+
     @property
     def offset(self):
         """Get current offset."""
         return self.camera.Offset if self.camera else None
-    
+
     @offset.setter
     def offset(self, value):
         """Set offset."""
         if self.camera:
             self.camera.Offset = value
-    
+
     @property
     def offset_min(self):
         """Get minimum offset."""
         return self.camera.OffsetMin if self.camera else None
-    
+
     @property
     def offset_max(self):
         """Get maximum offset."""
         return self.camera.OffsetMax if self.camera else None
-    
+
     @property
     def offsets(self):
         """Get available offsets."""
@@ -424,28 +424,28 @@ class AlpycaCameraWrapper:
     def readout_mode(self):
         """Get current readout mode."""
         return self.camera.ReadoutMode if self.camera else None
-    
+
     @readout_mode.setter
     def readout_mode(self, value):
         """Set readout mode."""
         if self.camera:
             self.camera.ReadoutMode = value
-    
+
     @property
     def readout_modes(self):
         """Get available readout modes."""
         return self.camera.ReadoutModes if self.camera else None
-    
+
     @property
     def can_fast_readout(self):
         """Check if fast readout is supported."""
         return self.camera.CanFastReadout if self.camera else False
-    
+
     @property
     def fast_readout(self):
         """Get fast readout state."""
         return self.camera.FastReadout if self.camera else None
-    
+
     @fast_readout.setter
     def fast_readout(self, value):
         """Set fast readout state."""
@@ -465,7 +465,7 @@ class AlpycaCameraWrapper:
             return success_status("Exposure started")
         except Exception as e:
             return error_status(f"Failed to start exposure: {e}")
-    
+
     def stop_exposure(self):
         """Stop the current exposure."""
         try:
@@ -473,7 +473,7 @@ class AlpycaCameraWrapper:
             return success_status("Exposure stopped")
         except Exception as e:
             return error_status(f"Failed to stop exposure: {e}")
-    
+
     def abort_exposure(self):
         """Abort the current exposure."""
         try:
@@ -481,7 +481,7 @@ class AlpycaCameraWrapper:
             return success_status("Exposure aborted")
         except Exception as e:
             return error_status(f"Failed to abort exposure: {e}")
-    
+
     def get_image_array(self):
         """Get the image array."""
         try:
@@ -498,36 +498,36 @@ class AlpycaCameraWrapper:
         try:
             if not self.can_set_ccd_temperature:
                 return error_status("Cooling not supported by this camera")
-            
+
             # Set target temperature
             self.set_ccd_temperature = target_temp
-            
+
             # Turn on cooler
             self.cooler_on = True
-            
+
             # Update cache
             self._update_cooling_cache()
-            
+
             return success_status(f"Cooling set to {target_temp}°C")
         except Exception as e:
             return error_status(f"Failed to set cooling: {e}")
-    
+
     def turn_cooling_off(self):
         """Turn off cooling."""
         try:
             if not self.can_set_ccd_temperature:
                 return error_status("Cooling not supported by this camera")
-            
+
             # Turn off cooler
             self.cooler_on = False
-            
+
             # Update cache
             self._update_cooling_cache()
-            
+
             return success_status("Cooling turned off")
         except Exception as e:
             return error_status(f"Failed to turn off cooling: {e}")
-    
+
     def get_cooling_status(self):
         """Get current cooling status."""
         try:
@@ -552,7 +552,7 @@ class AlpycaCameraWrapper:
 def get_frame_processing_config(self):
     """Get video configuration with Alpyca support."""
     video_config = self.config.get('video', {})
-    
+
     # Add Alpyca defaults
     if 'alpaca' not in video_config:
         video_config['alpaca'] = {
@@ -567,7 +567,7 @@ def get_frame_processing_config(self):
             'timestamp_format': '%Y%m%d_%H%M%S',
             'file_format': 'fits'
         }
-    
+
     return video_config
 ```
 
@@ -577,7 +577,7 @@ def get_frame_processing_config(self):
 ```python
 def __init__(self, config, logger=None):
     # ... existing code ...
-    
+
     # Add Alpyca support
     if self.camera_type == 'alpaca':
         from drivers.alpaca.camera import AlpycaCameraWrapper
@@ -596,13 +596,13 @@ def __init__(self, config, logger=None):
 ```python
 class CameraFactory:
     """Factory for creating camera instances."""
-    
+
     @staticmethod
     def create_camera(config, logger=None):
         """Create camera instance based on configuration."""
         video_config = config.get_frame_processing_config()
         camera_type = video_config.get('camera_type', 'opencv')
-        
+
         if camera_type == 'alpaca':
             from drivers.alpaca.camera import AlpycaCameraWrapper
             return AlpycaCameraWrapper(
@@ -679,14 +679,14 @@ from config_manager import ConfigManager
 
 def test_alpaca_camera():
     """Test Alpyca camera functionality."""
-    
+
     # Setup logging
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger("alpaca_test")
-    
+
     # Load configuration
     config = ConfigManager("config_alpaca_template.yaml")
-    
+
     # Create camera
     camera = AlpycaCameraWrapper(
         host="localhost",
@@ -695,7 +695,7 @@ def test_alpaca_camera():
         config=config,
         logger=logger
     )
-    
+
     # Test connection
     print("Testing Alpyca camera connection...")
     # Adapter handles connection internally as needed
@@ -703,27 +703,27 @@ def test_alpaca_camera():
     if not status.is_success:
         print(f"❌ Connection failed: {status.message}")
         return False
-    
+
     print(f"✅ Connected to: {camera.name}")
-    
+
     # Test properties
     print(f"Description: {camera.description}")
     print(f"Driver: {camera.driver_info}")
     print(f"Version: {camera.driver_version}")
     print(f"Interface: {camera.interface_version}")
-    
+
     # Test sensor properties
     print(f"Sensor: {camera.sensor_name}")
     print(f"Type: {camera.sensor_type}")
     print(f"Size: {camera.camera_x_size}x{camera.camera_y_size}")
     print(f"Pixel size: {camera.pixel_size_x}x{camera.pixel_size_y} μm")
-    
+
     # Test cooling
     if camera.can_set_ccd_temperature:
         print("Testing cooling...")
         cooling_status = camera.set_cooling(-10.0)
         print(f"Cooling status: {cooling_status.message}")
-        
+
         status = camera.get_cooling_status()
         if status.is_success:
             info = status.data
@@ -731,7 +731,7 @@ def test_alpaca_camera():
             print(f"Target: {info['target_temperature']}°C")
             print(f"Cooler on: {info['cooler_on']}")
             print(f"Cooler power: {info['cooler_power']}%")
-    
+
     # Disconnect
     camera.disconnect()
     print("✅ Test completed")
@@ -966,4 +966,4 @@ image = camera.get_image_array()
 
 ## Conclusion
 
-The integration of Alpyca as a third camera method will provide significant improvements over the current classic ASCOM implementation, particularly in terms of reliability, performance, and cross-platform compatibility. The step-by-step approach outlined in this plan ensures a smooth transition while maintaining system stability. 
+The integration of Alpyca as a third camera method will provide significant improvements over the current classic ASCOM implementation, particularly in terms of reliability, performance, and cross-platform compatibility. The step-by-step approach outlined in this plan ensures a smooth transition while maintaining system stability.

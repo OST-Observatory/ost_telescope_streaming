@@ -273,4 +273,4 @@ The ASCOM color camera improvements provide:
 🎯 **Extensive Testing**: Dedicated test functionality with detailed output
 🎯 **Clear Documentation**: Complete guides and examples
 
-These improvements ensure that color cameras work seamlessly with the existing plate-solving and overlay generation system while maintaining optimal performance and quality for both processing and display purposes. 
+These improvements ensure that color cameras work seamlessly with the existing plate-solving and overlay generation system while maintaining optimal performance and quality for both processing and display purposes.

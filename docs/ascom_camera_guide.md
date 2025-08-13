@@ -69,7 +69,7 @@ video_capture = VideoCapture(config=config)
 # Connection is handled during initialization; verify via adapter
 if hasattr(video_capture, 'camera') and video_capture.camera:
     print("Camera available via adapter")
-    
+
     # Get camera information
     # Adapter-provided camera info when available
     if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
@@ -138,7 +138,7 @@ if video_capture.ascom_camera.has_offset():
     # Get current offset
     offset_status = video_capture.ascom_camera.get_offset()
     print(f"Current offset: {offset_status.data}")
-    
+
     # Set new offset
     set_status = video_capture.ascom_camera.set_offset(20)
     if set_status.is_success:
@@ -162,11 +162,11 @@ if video_capture.ascom_camera.has_readout_mode():
     modes_status = video_capture.ascom_camera.get_readout_modes()
     if modes_status.is_success:
         print(f"Available readout modes: {modes_status.data}")
-    
+
     # Get current readout mode
     current_status = video_capture.ascom_camera.get_readout_mode()
     print(f"Current readout mode: {current_status.data}")
-    
+
     # Set readout mode
     set_status = video_capture.ascom_camera.set_readout_mode(1)
     if set_status.is_success:
@@ -193,11 +193,11 @@ if video_capture.ascom_camera.has_filter_wheel():
     filters_status = video_capture.ascom_camera.get_filter_names()
     if filters_status.is_success:
         print(f"Available filters: {filters_status.data}")
-    
+
     # Get current filter position
     position_status = video_capture.ascom_camera.get_filter_position()
     print(f"Current filter position: {position_status.data}")
-    
+
     # Set filter position
     set_status = video_capture.ascom_camera.set_filter_position(2)
     if set_status.is_success:
@@ -213,7 +213,7 @@ The system automatically detects camera capabilities:
 capabilities = video_capture.ascom_camera.get_camera_capabilities()
 if capabilities.is_success:
     caps = capabilities.data
-    
+
     print("Camera Capabilities:")
     print(f"  Cooling: {caps['has_cooling']}")
     print(f"  Offset: {caps['has_offset']}")
@@ -222,18 +222,18 @@ if capabilities.is_success:
     print(f"  Binning: {caps['has_binning']}")
     print(f"  Color: {caps['is_color']}")
     print(f"  Filter Wheel: {caps['has_filter_wheel']}")
-    
+
     # Show current values for supported features
     if caps['has_offset']:
         print(f"  Current Offset: {caps['current_offset']}")
-    
+
     if caps['has_readout_mode']:
         print(f"  Current Readout Mode: {caps['current_readout_mode']}")
         print(f"  Available Readout Modes: {caps['available_readout_modes']}")
-    
+
     if caps['has_gain']:
         print(f"  Current Gain: {caps['current_gain']}")
-    
+
     if caps['has_binning']:
         print(f"  Current Binning: {caps['current_binning_x']}x{caps['current_binning_y']}")
 ```
@@ -296,13 +296,13 @@ while imaging_session_active:
         camera_info = info_status.data if info_status.is_success else {}
     else:
         camera_info = {}
-    
+
     # Log important parameters
     print(f"Temperature: {camera_info.get('current_temperature', 'N/A')}°C")
     print(f"Gain: {camera_info.get('gain', 'N/A')}")
     print(f"Offset: {camera_info.get('offset', 'N/A')}")
     print(f"Readout Mode: {camera_info.get('readout_mode', 'N/A')}")
-    
+
     time.sleep(60)  # Check every minute
 ```
 
@@ -351,4 +351,4 @@ This will show:
 - **Camera Profiles**: Pre-configured settings for different imaging types
 - **Auto-Optimization**: Automatic parameter optimization based on conditions
 - **Multi-Camera Support**: Support for multiple cameras simultaneously
-- **Advanced Filtering**: Enhanced filter wheel control and automation 
+- **Advanced Filtering**: Enhanced filter wheel control and automation

@@ -25,19 +25,19 @@ Dependencies:
 - Status and exception handling
 """
 
-import os
-import time
+from abc import ABC, abstractmethod
 import logging
 import math
-from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Tuple
+import os
+import time
+from typing import Dict, Optional, Tuple
 
-from exceptions import PlateSolveError, FileError, ConfigurationError
-from status import PlateSolveStatus, success_status, error_status, warning_status
+from status import PlateSolveStatus, error_status, success_status
 
 
 class PlateSolveResult:
     """Container for plate-solving results."""
+
     def __init__(
         self,
         ra_center: float,
@@ -94,6 +94,7 @@ class PlateSolver(ABC):
 
     def __init__(self, config=None, logger=None):
         from config_manager import ConfigManager
+
         if config is None:
             default_config = ConfigManager()
         else:
@@ -120,17 +121,18 @@ class PlateSolve2(PlateSolver):
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
         self.plate_solve_config = self.config.get_plate_solve_config()
-        ps2_cfg = self.plate_solve_config.get('platesolve2', {})
-        self.executable_path: str = ps2_cfg.get('executable_path', '')
-        self.working_directory: str = ps2_cfg.get('working_directory', '')
-        self.timeout: int = ps2_cfg.get('timeout', 60)
-        self.verbose: bool = ps2_cfg.get('verbose', False)
-        self.auto_mode: bool = ps2_cfg.get('auto_mode', True)
-        self.number_of_regions: int = ps2_cfg.get('number_of_regions', 1)
-        self.min_stars: int = ps2_cfg.get('min_stars', 20)
-        self.max_stars: int = ps2_cfg.get('max_stars', 200)
+        ps2_cfg = self.plate_solve_config.get("platesolve2", {})
+        self.executable_path: str = ps2_cfg.get("executable_path", "")
+        self.working_directory: str = ps2_cfg.get("working_directory", "")
+        self.timeout: int = ps2_cfg.get("timeout", 60)
+        self.verbose: bool = ps2_cfg.get("verbose", False)
+        self.auto_mode: bool = ps2_cfg.get("auto_mode", True)
+        self.number_of_regions: int = ps2_cfg.get("number_of_regions", 1)
+        self.min_stars: int = ps2_cfg.get("min_stars", 20)
+        self.max_stars: int = ps2_cfg.get("max_stars", 200)
         try:
             from .platesolve2 import PlateSolve2Automated
+
             self.automated_solver = PlateSolve2Automated(config=self.config, logger=self.logger)
             self.automated_available: bool = True
             self.logger.info("Automated PlateSolve 2 solver available")
@@ -159,13 +161,18 @@ class PlateSolve2(PlateSolver):
                 dec_deg = None
                 try:
                     from ascom_mount import ASCOMMount
+
                     mount = ASCOMMount(config=self.config, logger=self.logger)
                     mount_status = mount.get_coordinates()
                     if mount_status.is_success:
                         ra_deg, dec_deg = mount_status.data
-                        self.logger.info(f"Using mount coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°")
+                        self.logger.info(
+                            f"Using mount coordinates: RA={ra_deg:.4f}°, Dec={dec_deg:.4f}°"
+                        )
                     else:
-                        self.logger.warning(f"Could not get mount coordinates: {mount_status.message}")
+                        self.logger.warning(
+                            f"Could not get mount coordinates: {mount_status.message}"
+                        )
                 except Exception as e:
                     self.logger.warning(f"Could not get mount coordinates: {e}")
 
@@ -174,14 +181,19 @@ class PlateSolve2(PlateSolver):
                 try:
                     telescope_config = self.config.get_telescope_config()
                     camera_config = self.config.get_camera_config()
-                    focal_length = telescope_config.get('focal_length', 1000)
-                    sensor_width = camera_config.get('sensor_width', 6.17)
-                    sensor_height = camera_config.get('sensor_height', 4.55)
+                    focal_length = telescope_config.get("focal_length", 1000)
+                    sensor_width = camera_config.get("sensor_width", 6.17)
+                    sensor_height = camera_config.get("sensor_height", 4.55)
                     # width/height swapped per ASCOM transposition
                     fov_width_deg = math.degrees(2 * math.atan(sensor_height / (2 * focal_length)))
                     fov_height_deg = math.degrees(2 * math.atan(sensor_width / (2 * focal_length)))
                     self.logger.info(
-                        f"Calculated FOV (transposed): {fov_width_deg:.4f}° x {fov_height_deg:.4f}° (focal={focal_length}mm, sensor={sensor_width}x{sensor_height}mm)"
+                        "Calculated FOV (transposed): %.4f° x %.4f° (focal=%smm, sensor=%sx%smm)",
+                        fov_width_deg,
+                        fov_height_deg,
+                        str(focal_length),
+                        str(sensor_width),
+                        str(sensor_height),
                     )
                 except Exception as e:
                     self.logger.warning(f"Could not calculate FOV: {e}")
@@ -205,7 +217,9 @@ class PlateSolve2(PlateSolver):
                 else:
                     solving_time = time.time() - start_time
                     self.logger.warning(
-                        f"Automated solving failed after {solving_time:.2f} seconds: {automated_result.message}"
+                        "Automated solving failed after %.2f seconds: %s",
+                        solving_time,
+                        automated_result.message,
                     )
                     self.logger.info("Continuing with next exposure - conditions may improve")
                     return error_status(
@@ -223,7 +237,9 @@ class PlateSolve2(PlateSolver):
         except Exception as e:
             solving_time = time.time() - start_time
             self.logger.error(f"PlateSolve 2 exception after {solving_time:.2f} seconds: {e}")
-            return error_status(f"PlateSolve 2 error: {str(e)}", details={"solving_time": solving_time})
+            return error_status(
+                f"PlateSolve 2 error: {str(e)}", details={"solving_time": solving_time}
+            )
 
 
 class AstrometryNetSolver(PlateSolver):
@@ -231,7 +247,9 @@ class AstrometryNetSolver(PlateSolver):
 
     def __init__(self, config=None, logger=None):
         super().__init__(config=config, logger=logger)
-        self.api_key: str = self.config.get_plate_solve_config().get('astrometry', {}).get('api_key', '')
+        self.api_key: str = (
+            self.config.get_plate_solve_config().get("astrometry", {}).get("api_key", "")
+        )
         self.api_url: str = "http://nova.astrometry.net/api/"
 
     def get_name(self) -> str:
@@ -248,18 +266,23 @@ class PlateSolverFactory:
     """Factory for plate solver instances."""
 
     @staticmethod
-    def create_solver(solver_type: Optional[str] = None, config=None, logger=None) -> Optional[PlateSolver]:
+    def create_solver(
+        solver_type: Optional[str] = None, config=None, logger=None
+    ) -> Optional[PlateSolver]:
         if solver_type is None:
             if config:
-                solver_type = config.get_plate_solve_config().get('default_solver', 'platesolve2')
+                solver_type = config.get_plate_solve_config().get("default_solver", "platesolve2")
             else:
                 from config_manager import ConfigManager
+
                 default_config = ConfigManager()
-                solver_type = default_config.get_plate_solve_config().get('default_solver', 'platesolve2')
+                solver_type = default_config.get_plate_solve_config().get(
+                    "default_solver", "platesolve2"
+                )
 
         solvers = {
-            'platesolve2': PlateSolve2,
-            'astrometry': AstrometryNetSolver,
+            "platesolve2": PlateSolve2,
+            "astrometry": AstrometryNetSolver,
         }
 
         solver_class = solvers.get(solver_type.lower())
@@ -275,8 +298,7 @@ class PlateSolverFactory:
     @staticmethod
     def get_available_solvers(config=None, logger=None) -> Dict[str, bool]:
         solvers = {
-            'platesolve2': PlateSolve2(config=config, logger=logger),
-            'astrometry': AstrometryNetSolver(config=config, logger=logger),
+            "platesolve2": PlateSolve2(config=config, logger=logger),
+            "astrometry": AstrometryNetSolver(config=config, logger=logger),
         }
         return {name: solver.is_available() for name, solver in solvers.items()}
-

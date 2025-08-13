@@ -24,8 +24,8 @@ The OST Telescope Streaming system now implements a robust plate-solving strateg
 ```python
 # System attempts automated plate-solving
 automated_result = self.automated_solver.solve(
-    image_path, 
-    ra_deg=ra_deg, 
+    image_path,
+    ra_deg=ra_deg,
     dec_deg=dec_deg,
     fov_width_deg=fov_width_deg,
     fov_height_deg=fov_height_deg
@@ -252,4 +252,4 @@ The robust plate-solving behavior ensures:
 🎯 **Intelligent Monitoring**: Distinguishes normal failures from system errors
 🎯 **Performance Tracking**: Monitors success rates and performance metrics
 
-This makes the system much more suitable for real-world astronomical imaging where conditions are constantly changing. 
+This makes the system much more suitable for real-world astronomical imaging where conditions are constantly changing.

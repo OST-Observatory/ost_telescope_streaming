@@ -5,11 +5,11 @@ import sys
 
 # Ensure we can import from the project 'code' directory
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-CODE_DIR = os.path.join(PROJECT_ROOT, 'code')
+CODE_DIR = os.path.join(PROJECT_ROOT, "code")
 if CODE_DIR not in sys.path:
     sys.path.insert(0, CODE_DIR)
 
-from overlay.projection import skycoord_to_pixel_with_rotation
+from overlay.projection import skycoord_to_pixel_with_rotation  # noqa: E402
 
 
 def test_projection_center_maps_to_center_pixel():
@@ -85,5 +85,3 @@ def test_projection_position_angle_rotates_coordinates():
     )
     assert y_pa0 < height // 2  # above center
     assert x_pa90 > width // 2  # rotated into +x direction
-
-

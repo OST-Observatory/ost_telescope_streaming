@@ -28,7 +28,7 @@ For OpenCV cameras, only the configured `file_format` is saved.
 video:
   # Frame saving settings
   file_format: "png"  # Display format (png, jpg, tiff, etc.)
-  
+
   # ASCOM camera settings
   ascom:
     ascom_driver: "ASCOM.QHYCCD.Camera"
@@ -138,4 +138,4 @@ The system logs both file saves:
 ### Plate-Solving Issues
 - Ensure FITS file exists
 - Check FITS file format
-- Verify plate-solving configuration 
+- Verify plate-solving configuration

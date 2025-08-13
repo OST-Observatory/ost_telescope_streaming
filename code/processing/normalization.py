@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 import numpy as np
 
 
@@ -42,21 +43,23 @@ def normalize_to_uint8(image: np.ndarray, config: Any, logger: Any = None) -> np
       - zscale (default): astropy ZScaleInterval(contrast)
       - hist: histogram/percentile-based scaling
     """
-    method = 'zscale'
+    method = "zscale"
     contrast = 0.15
     try:
-        norm_cfg = config.get_frame_processing_config().get('normalization', {})
-        method = str(norm_cfg.get('method', 'zscale')).lower()
-        contrast = float(norm_cfg.get('contrast', 0.15))
+        norm_cfg = config.get_frame_processing_config().get("normalization", {})
+        method = str(norm_cfg.get("method", "zscale")).lower()
+        contrast = float(norm_cfg.get("contrast", 0.15))
     except Exception:
         pass
 
-    if method == 'zscale':
+    if method == "zscale":
         try:
             from astropy.visualization import ImageNormalize, ZScaleInterval
 
             def zscale_channel(ch: np.ndarray) -> np.ndarray:
-                norm = ImageNormalize(ch.astype(np.float32), interval=ZScaleInterval(contrast=contrast))
+                norm = ImageNormalize(
+                    ch.astype(np.float32), interval=ZScaleInterval(contrast=contrast)
+                )
                 arr = norm(ch.astype(np.float32))
                 return np.clip(arr * 255.0, 0, 255).astype(np.uint8)
 
@@ -68,14 +71,14 @@ def normalize_to_uint8(image: np.ndarray, config: Any, logger: Any = None) -> np
                     out[:, :, c] = zscale_channel(image[:, :, c])
                 return out
             # Fallback to hist if shapes unexpected
-            method = 'hist'
+            method = "hist"
         except Exception as e:
             if logger:
                 logger.debug(f"ZScale normalization failed, falling back to hist: {e}")
-            method = 'hist'
+            method = "hist"
 
     # Histogram/percentile fallback
-    if method in ('hist', 'histogram', 'percentile'):
+    if method in ("hist", "histogram", "percentile"):
         if image.ndim == 2:
             img16 = image.astype(np.uint16) if image.dtype != np.uint16 else image
             return scale_16bit_to_8bit(img16)
@@ -90,5 +93,3 @@ def normalize_to_uint8(image: np.ndarray, config: Any, logger: Any = None) -> np
 
     # Final fallback
     return (image / 256).astype(np.uint8)
-
-

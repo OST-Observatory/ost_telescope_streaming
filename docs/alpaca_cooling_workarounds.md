@@ -97,12 +97,12 @@ def control_cooling(config_file, target_temp, action='set'):
     """Control cooling using ASCOM interface."""
     config = ConfigManager(config_file)
     video_config = config.get_video_config()
-    
+
     camera = ASCOMCamera(
         driver_id=video_config['ascom']['ascom_driver'],
         config=config
     )
-    
+
     if camera.connect().is_success:
         if action == 'set':
             status = camera.set_cooling(target_temp)
@@ -117,7 +117,7 @@ def control_cooling(config_file, target_temp, action='set'):
                 print(f"Temperature: {info['temperature']}°C")
                 print(f"Cooler power: {info['cooler_power']}%")
                 print(f"Cooler on: {info['cooler_on']}")
-        
+
         camera.disconnect()
 
 if __name__ == "__main__":
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", required=True)
     parser.add_argument("--temp", type=float, help="Target temperature")
     parser.add_argument("--action", choices=['set', 'off', 'status'], default='status')
-    
+
     args = parser.parse_args()
     control_cooling(args.config, args.temp, args.action)
 ```
@@ -211,4 +211,4 @@ The Alpyca cooling issue is a **known limitation** of the ZWO Alpaca server impl
 - **Use Alpyca for image capture**
 - **Keep both running simultaneously**
 
-This provides the best of both worlds: reliable cooling control and modern Python-based image capture. 
+This provides the best of both worlds: reliable cooling control and modern Python-based image capture.

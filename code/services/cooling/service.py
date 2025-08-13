@@ -8,28 +8,33 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from status import success_status, error_status, warning_status
+from status import error_status, success_status, warning_status
 
 
 class CoolingService:
     def __init__(self, config, logger=None) -> None:
         self.config = config
         self.logger = logger
-        self.manager = None
-        self.enabled: bool = bool(self.config.get_camera_config().get('cooling', {}).get('enable_cooling', False))
+        self.manager: Optional[Any] = None
+        self.enabled: bool = bool(
+            self.config.get_camera_config().get("cooling", {}).get("enable_cooling", False)
+        )
 
     def initialize(self, camera: Any):
         if not self.enabled:
             return success_status("Cooling disabled")
         try:
             from services.cooling.backend import create_cooling_manager
+
             self.manager = create_cooling_manager(camera, self.config, self.logger)
             return success_status("Cooling manager initialized")
         except Exception as e:
             self.manager = None
             return error_status(f"Failed to initialize cooling manager: {e}")
 
-    def initialize_and_stabilize(self, target_temp: float, wait_for_cooling: bool, timeout_s: float):
+    def initialize_and_stabilize(
+        self, target_temp: float, wait_for_cooling: bool, timeout_s: float
+    ):
         if not self.enabled:
             return success_status("Cooling not enabled")
         if not self.manager:
@@ -41,7 +46,11 @@ class CoolingService:
             if wait_for_cooling:
                 stabilization_status = self.manager.wait_for_stabilization(timeout=timeout_s)
                 if not stabilization_status.is_success:
-                    return warning_status(f"Cooling initialized but stabilization failed: {stabilization_status.message}")
+                    msg = (
+                        "Cooling initialized but stabilization failed: "
+                        f"{stabilization_status.message}"
+                    )
+                    return warning_status(msg)
             return success_status("Cooling initialized successfully")
         except Exception as e:
             return error_status(f"Failed to initialize cooling: {e}")
@@ -68,21 +77,25 @@ class CoolingService:
 
     @property
     def is_cooling(self) -> bool:
+        mgr = self.manager
+        if mgr is None:
+            return False
         try:
-            return bool(self.manager and self.manager.is_cooling)
+            return bool(getattr(mgr, "is_cooling", False))
         except Exception:
             return False
 
     @property
     def is_warming_up(self) -> bool:
+        mgr = self.manager
+        if mgr is None:
+            return False
         try:
-            return bool(self.manager and self.manager.is_warming_up)
+            return bool(getattr(mgr, "is_warming_up", False))
         except Exception:
             return False
 
     def get_cooling_status(self):
         if not self.manager:
-            return {'error': 'Cooling manager not available'}
+            return {"error": "Cooling manager not available"}
         return self.manager.get_cooling_status()
-
-

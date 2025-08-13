@@ -7,14 +7,14 @@
 camera:
   # Camera type and basic settings
   camera_type: "ascom"  # "ascom", "alpaca", or "opencv"
-  
+
   # Sensor specifications (important for calibration)
   sensor_width: 35.9     # Sensor width in mm
   sensor_height: 23.9    # Sensor height in mm
   pixel_size: 3.76       # Pixel size in micrometers
   type: "mono"           # Camera type (mono, color)
   bit_depth: 16          # Bit depth
-  
+
   # Cooling settings for ASCOM cameras
   cooling:
     enable_cooling: true           # Enable camera cooling
@@ -26,7 +26,7 @@ camera:
     warmup_rate: 2.0              # Warmup rate in °C per minute
     warmup_final_temp: 15.0       # Final temperature for warmup
     warmup_at_end: true           # Start warmup when stopping observation
-  
+
   # ASCOM camera settings
   ascom:
     ascom_driver: "ASCOM.QHYCCD.Camera"  # ASCOM driver ID for QHY cameras
@@ -37,7 +37,7 @@ camera:
     binning: 1  # Binning factor (1x1, 2x2, etc.)
     # Optional: Separate filter wheel driver (e.g., for QHY cameras -- "ASCOM.QHYCFW.FilterWheel")
     filter_wheel_driver: "ASCOM.QHYCFW.FilterWheel"  # QHY filter wheel driver
-    
+
   # Alpaca camera settings
   alpaca:
     host: "localhost"
@@ -48,7 +48,7 @@ camera:
     offset: 50  # Offset setting (0-255 typically)
     readout_mode: 0  # Readout mode (camera-specific)
     binning: [1, 1]  # Binning factor [x, y] for Alpaca
-    
+
   # OpenCV camera settings
   opencv:
     camera_index: 0  # Camera device index
@@ -62,16 +62,16 @@ camera:
 # =============================================================================
 frame_processing:
   enabled: true
-  
+
   # Frame saving settings
   use_timestamps: false  # Enable timestamps in frame filenames
   timestamp_format: "%Y%m%d_%H%M%S"  # Timestamp format for filenames
   use_capture_count: false  # Enable capture count in frame filenames
-  
+
   # Processing settings
   auto_debayer: false  # Auto-debayer color images
   debayer_method: "RGGB"  # Debayer pattern (RGGB, BGGR, GRBG, GBRG)
-  
+
   # Output settings
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files
@@ -199,4 +199,4 @@ advanced:
   debug_coordinates: false
   debug_simbad: false
   save_empty_overlays: true
-  auto_recovery: true 
+  auto_recovery: true

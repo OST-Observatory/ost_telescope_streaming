@@ -69,5 +69,3 @@
 - All tests pass; saving paths use `FrameWriter`; `VideoCapture` has no direct FITS/image writes.
 - Camera-specific code is limited to adapters; `VideoCapture` is camera-agnostic.
 - Processing loop uses `time.monotonic()` + `Condition`; files carry telemetry and structured logs include `capture_id`.
-
-

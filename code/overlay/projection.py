@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Tuple
+
 import numpy as np
 
 
@@ -58,5 +59,3 @@ def skycoord_to_pixel_with_rotation(
 
     # Use rounding to make flip symmetry exact in tests
     return int(round(x)), int(round(y))
-
-

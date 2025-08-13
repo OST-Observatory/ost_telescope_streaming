@@ -209,13 +209,13 @@ from test_utils import (
 def main():
     # Parse arguments
     args = parse_test_args("Test Description")
-    
+
     # Setup environment
     config, logger, driver_id = setup_test_environment(args)
-    
+
     # Print header
     print_test_header("Test Name", driver_id, args.config)
-    
+
     # Run tests
     # ...
 ```
@@ -327,7 +327,7 @@ from test_utils import (
 def test_feature() -> bool:
     """Test specific feature."""
     print("Testing feature...")
-    
+
     try:
         # Test implementation
         print("✓ Feature test completed")
@@ -340,20 +340,20 @@ def main() -> None:
     """Main test function."""
     # Parse command line arguments
     args = parse_test_args("Feature Test")
-    
+
     # Setup test environment
     config, logger, driver_id = setup_test_environment(args)
-    
+
     # Print test header
     print_test_header("Feature Test", driver_id, args.config)
-    
+
     tests = [
         ("Feature", test_feature),
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test_name, test_func in tests:
         print(f"\n--- {test_name} ---")
         if test_func():
@@ -361,10 +361,10 @@ def main() -> None:
             passed += 1
         else:
             print(f"✗ {test_name} failed")
-    
+
     print(f"\n--- Results ---")
     print(f"Completed: {passed}/{total}")
-    
+
     if passed == total:
         print("\n🎉 All tests passed!")
     else:
@@ -391,4 +391,4 @@ All tests now support the `--config` option for flexible configuration managemen
 - ✅ Enable debug output when needed
 - ✅ Run tests consistently across environments
 
-The test suite is now fully standardized and ready for comprehensive testing of the telescope streaming system. 
+The test suite is now fully standardized and ready for comprehensive testing of the telescope streaming system.

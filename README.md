@@ -128,7 +128,7 @@ camera:
     device_id: 0
     exposure_time: 10.0
     gain: 100.0
-  
+
   # Cooling Configuration
   cooling:
     enable_cooling: true

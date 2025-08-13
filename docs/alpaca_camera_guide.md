@@ -83,13 +83,13 @@ camera = AlpycaCameraWrapper(
 status = camera.connect()
 if status.is_success:
     print(f"Connected to: {camera.name}")
-    
+
     # Set cooling
     camera.set_cooling(-10.0)
-    
+
     # Take exposure
     camera.start_exposure(1.0, True)
-    
+
     # Get image
     image_status = camera.get_image_array()
     if image_status.is_success:
@@ -355,7 +355,7 @@ camera = AlpycaCameraWrapper(host="localhost", port=11111, device_id=0)
      camera_type: ascom
      ascom:
        ascom_driver: "ASCOM.ASICamera2.Camera"
-   
+
    # New: Alpyca
    video:
      camera_type: alpaca
@@ -375,7 +375,7 @@ camera = AlpycaCameraWrapper(host="localhost", port=11111, device_id=0)
    # Old: ASCOMCamera
    from drivers.ascom.camera import ASCOMCamera
    camera = ASCOMCamera(driver_id="ASCOM.ASICamera2.Camera")
-   
+
    # New: AlpycaCameraWrapper
    from drivers.alpaca.camera import AlpycaCameraWrapper
    camera = AlpycaCameraWrapper(host="localhost", port=11111, device_id=0)
@@ -437,4 +437,4 @@ To contribute to Alpyca integration:
 
 Alpyca provides a modern, reliable interface to ASCOM cameras that resolves many of the issues present in classic ASCOM implementations. The Python-native approach, better error handling, and cross-platform compatibility make it the recommended choice for new projects and a worthwhile upgrade for existing systems.
 
-For more information, see the [Alpyca documentation](https://ascom-standards.org/alpyca/index.html) and the [ASCOM Alpaca specification](https://ascom-standards.org/Developer/Alpaca.htm). 
+For more information, see the [Alpyca documentation](https://ascom-standards.org/alpyca/index.html) and the [ASCOM Alpaca specification](https://ascom-standards.org/Developer/Alpaca.htm).

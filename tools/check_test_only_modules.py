@@ -15,11 +15,9 @@ Exit non-zero if any such modules are found, printing a concise report.
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CODE_DIR = REPO_ROOT / "code"
@@ -89,18 +87,21 @@ def main() -> int:
         if py_file in usages["code"]:
             usages["code"] = [p for p in usages["code"] if p != py_file]
 
-        non_test_refs = len(usages["overlay"]) + len(usages["calibration"]) + len(usages["code"]) > 0
+        non_test_refs = (
+            len(usages["overlay"]) + len(usages["calibration"]) + len(usages["code"]) > 0
+        )
         test_refs = len(usages["tests"]) > 0
 
         if test_refs and not non_test_refs:
             flagged.append((module, py_file, usages))
 
     if flagged:
-        print("\nThe following modules appear to be referenced only in tests and not in overlay_pipeline/calibration/code:")
+        print("\nLikely test-only modules (not used in overlay_pipeline/calibration/code):")
         for module, path, usages in flagged:
             print(f"- {module} ({path.relative_to(REPO_ROOT)})")
             if usages["tests"]:
-                print(f"  tests: {len(usages['tests'])} refs (e.g., {usages['tests'][0].relative_to(REPO_ROOT)})")
+                ex = usages["tests"][0].relative_to(REPO_ROOT)
+                print(f"  tests: {len(usages['tests'])} refs (e.g., {ex})")
         print("\nIf these are truly obsolete, consider removing them along with their tests.")
         return 1
 
@@ -110,5 +111,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

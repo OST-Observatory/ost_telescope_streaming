@@ -418,4 +418,4 @@ python calibration/master_frame_runner.py --config config_calibration_frames.yam
 - **Real-time Monitoring**: Live quality metrics during capture
 - **Advanced Quality Control**: More sophisticated quality assessment
 - **Automated Scheduling**: Automatic calibration at regular intervals
-- **Integration**: Seamless integration with main observation system 
+- **Integration**: Seamless integration with main observation system

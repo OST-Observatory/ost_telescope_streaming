@@ -62,17 +62,17 @@ camera = ASCOMCamera(driver_id="ASCOM.QHYCCD.Camera", config=config)
 # Check if filter wheel is available
 if camera.has_filter_wheel():
     print("Filter wheel available!")
-    
+
     # Get filter names
     names_status = camera.get_filter_names()
     if names_status.is_success:
         print(f"Available filters: {names_status.data}")
-    
+
     # Get current position
     pos_status = camera.get_filter_position()
     if pos_status.is_success:
         print(f"Current position: {pos_status.data}")
-    
+
     # Change filter position
     camera.set_filter_position(1)  # Change to position 1
 ```
@@ -337,10 +337,10 @@ if camera.has_filter_wheel():
     # Get available filters
     names = camera.get_filter_names().data
     print(f"Available filters: {names}")
-    
+
     # Change to Ha filter (position 4)
     camera.set_filter_position(4)
-    
+
     # Take exposure with Ha filter
     camera.expose(60.0, gain=100)
 ```
@@ -356,19 +356,19 @@ def lrgb_imaging_sequence(camera):
         'Green': 2,
         'Blue': 3
     }
-    
+
     for filter_name, position in filters.items():
         print(f"Imaging with {filter_name} filter...")
-        
+
         # Change filter
         camera.set_filter_position(position)
-        
+
         # Take exposure
         camera.expose(30.0, gain=100)
-        
+
         # Get image
         image = camera.get_image().data
-        
+
         # Save image
         save_image(image, f"lrgb_{filter_name.lower()}.fits")
 ```
@@ -383,17 +383,17 @@ def narrowband_imaging(camera):
         'OIII': 5,
         'SII': 6  # If available
     }
-    
+
     for filter_name, position in narrowband_filters.items():
         print(f"Imaging with {filter_name} filter...")
-        
+
         # Change filter
         camera.set_filter_position(position)
-        
+
         # Take longer exposure for narrowband
         camera.expose(300.0, gain=100)
-        
+
         # Get and save image
         image = camera.get_image().data
         save_image(image, f"narrowband_{filter_name.lower()}.fits")
-``` 
+```

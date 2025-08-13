@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from typing import Any
+
 import numpy as np
+
 try:
     import cv2  # optional for environments without OpenCV during tests
 except Exception:  # pragma: no cover
     cv2 = None
 
-from processing.normalization import normalize_to_uint8
 
-
-def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, logger: Any = None) -> np.ndarray | None:
+def convert_camera_data_to_opencv(
+    image_data: Any, camera: Any, config: Any, logger: Any = None
+) -> np.ndarray | None:
     """Convert camera image data (Status or raw) to OpenCV BGR8.
 
     Handles:
@@ -23,7 +25,7 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
     """
     try:
         # Unwrap data if Status-like
-        raw_data = image_data.data if hasattr(image_data, 'data') else image_data
+        raw_data = image_data.data if hasattr(image_data, "data") else image_data
         if raw_data is None:
             if logger:
                 logger.error("Image data is None")
@@ -38,9 +40,9 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
         # Determine color
         is_color_camera = False
         bayer_pattern = None
-        if hasattr(camera, 'sensor_type'):
+        if hasattr(camera, "sensor_type"):
             sensor_type = camera.sensor_type
-            if sensor_type in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
+            if sensor_type in ["RGGB", "GRBG", "GBRG", "BGGR"]:
                 is_color_camera = True
                 bayer_pattern = sensor_type
                 if logger:
@@ -49,9 +51,9 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
         if not is_color_camera:
             try:
                 camera_config = config.get_camera_config()
-                if camera_config.get('auto_debayer', False):
-                    debayer_method = camera_config.get('debayer_method', 'RGGB')
-                    if debayer_method in ['RGGB', 'GRBG', 'GBRG', 'BGGR']:
+                if camera_config.get("auto_debayer", False):
+                    debayer_method = camera_config.get("debayer_method", "RGGB")
+                    if debayer_method in ["RGGB", "GRBG", "GBRG", "BGGR"]:
                         is_color_camera = True
                         bayer_pattern = debayer_method
                         if logger:
@@ -75,16 +77,17 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
         if cv2 is None:
             # Without cv2 we cannot do color conversion; return a safe uint8 grayscale image
             from processing.normalization import normalize_to_uint8
+
             return normalize_to_uint8(image_array, config, logger)
 
         if is_color_camera and len(image_array.shape) == 2:
-            if bayer_pattern == 'RGGB':
+            if bayer_pattern == "RGGB":
                 code = cv2.COLOR_BayerRG2BGR
-            elif bayer_pattern == 'GRBG':
+            elif bayer_pattern == "GRBG":
                 code = cv2.COLOR_BayerGR2BGR
-            elif bayer_pattern == 'GBRG':
+            elif bayer_pattern == "GBRG":
                 code = cv2.COLOR_BayerGB2BGR
-            elif bayer_pattern == 'BGGR':
+            elif bayer_pattern == "BGGR":
                 code = cv2.COLOR_BayerBG2BGR
             else:
                 code = cv2.COLOR_BayerRG2BGR
@@ -112,7 +115,11 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
         else:
             h, w = result_image.shape
         if h > w:
-            result_image = np.transpose(result_image, (1, 0, 2)) if result_image.ndim == 3 else np.transpose(result_image, (1, 0))
+            result_image = (
+                np.transpose(result_image, (1, 0, 2))
+                if result_image.ndim == 3
+                else np.transpose(result_image, (1, 0))
+            )
             if logger:
                 logger.info(f"Image orientation corrected: {(h, w)} -> {result_image.shape[:2]}")
 
@@ -125,5 +132,3 @@ def convert_camera_data_to_opencv(image_data: Any, camera: Any, config: Any, log
         if logger:
             logger.error(f"Error converting image: {e}")
         return None
-
-

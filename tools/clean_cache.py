@@ -4,24 +4,20 @@
 Clean Python cache files
 """
 
+import glob
 import os
 import shutil
-import glob
+
 
 def clean_python_cache():
     """Remove all Python cache files and directories."""
     print("Cleaning Python cache files...")
-    
+
     # Patterns to match cache files
-    cache_patterns = [
-        "**/__pycache__",
-        "**/*.pyc",
-        "**/*.pyo",
-        "**/*.pyd"
-    ]
-    
+    cache_patterns = ["**/__pycache__", "**/*.pyc", "**/*.pyo", "**/*.pyd"]
+
     cleaned_count = 0
-    
+
     for pattern in cache_patterns:
         for path in glob.glob(pattern, recursive=True):
             try:
@@ -34,9 +30,10 @@ def clean_python_cache():
                 cleaned_count += 1
             except Exception as e:
                 print(f"Warning: Could not remove {path}: {e}")
-    
+
     print(f"Cleaned {cleaned_count} cache files/directories")
     print("Cache cleaning completed!")
 
+
 if __name__ == "__main__":
-    clean_python_cache() 
+    clean_python_cache()
