@@ -171,9 +171,9 @@ Telemetry:
                     logger.info("✅ Observation session stopped successfully")
                     
                     # Wait for warmup to complete if it was started
-                    if global_runner.cooling_manager and global_runner.cooling_manager.is_warming_up:
+                    if hasattr(global_runner, 'cooling_service') and global_runner.cooling_service and global_runner.cooling_service.is_warming_up:
                         logger.info("🔥 Waiting for warmup to complete...")
-                        warmup_status = global_runner.cooling_manager.wait_for_warmup_completion(timeout=600)
+                        warmup_status = global_runner.cooling_service.wait_for_warmup_completion(timeout=600)
                         if warmup_status.is_success:
                             logger.info("🔥 Warmup completed successfully")
                         else:

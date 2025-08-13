@@ -14,7 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from generate_overlay import OverlayGenerator
+try:
+    from overlay.generator import OverlayGenerator
+except Exception:
+    from generate_overlay import OverlayGenerator
 import logging
 
 def test_ellipse_overlay_features():

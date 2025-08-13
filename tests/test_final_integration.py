@@ -30,7 +30,10 @@ def test_automated_platesolve2_integration() -> bool:
     print("Testing automated PlateSolve 2 integration...")
     
     try:
-        from plate_solver import PlateSolve2Solver
+        try:
+            from platesolve.solver import PlateSolve2Solver
+        except Exception:
+            from plate_solver import PlateSolve2Solver
         
         # Create solver
         solver = PlateSolve2Solver()
@@ -81,7 +84,10 @@ def test_video_processor_integration():
     
     try:
         from video_processor import VideoProcessor
-        from plate_solver import PlateSolve2Solver
+        try:
+            from platesolve.solver import PlateSolve2Solver
+        except Exception:
+            from plate_solver import PlateSolve2Solver
         
         # Create video processor
         video_processor = VideoProcessor()
@@ -174,7 +180,10 @@ def test_command_line_format():
     print("\n--- Testing command line format ---")
     
     try:
-        from platesolve2_automated import PlateSolve2Automated
+        try:
+            from platesolve.platesolve2 import PlateSolve2Automated
+        except Exception:
+            from platesolve2_automated import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         
@@ -241,7 +250,10 @@ def test_complete_workflow() -> bool:
         # This would test the complete workflow
         # For now, just verify all components are available
         
-        from plate_solver import PlateSolve2Solver
+        try:
+            from platesolve.solver import PlateSolve2Solver
+        except Exception:
+            from plate_solver import PlateSolve2Solver
         from video_processor import VideoProcessor
         from overlay_runner import OverlayRunner
         from generate_overlay import generate_overlay

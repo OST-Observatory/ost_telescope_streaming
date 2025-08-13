@@ -40,10 +40,16 @@ import numpy as np
 
 # Import local modules
 from video_capture import VideoCapture
-from plate_solver import PlateSolverFactory, PlateSolveResult
+try:
+    from platesolve.solver import PlateSolverFactory, PlateSolveResult  # new location
+except Exception:
+    from plate_solver import PlateSolverFactory, PlateSolveResult  # fallback for dev
 from services.frame_writer import FrameWriter
 from utils.status_utils import unwrap_status
-from generate_overlay import OverlayGenerator
+try:
+    from overlay.generator import OverlayGenerator  # new location
+except Exception:
+    from generate_overlay import OverlayGenerator  # fallback for dev
 
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status

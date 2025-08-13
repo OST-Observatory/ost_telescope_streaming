@@ -43,6 +43,20 @@
    - TODO: add full exposure latency and solve timing aggregation in processor logs.
 
 9) Config and docs (done)
+10) Module renames and structure (planned)
+   - Move calibration helpers into `code/calibration/`:
+     - `code/dark_capture.py` → `code/calibration/dark_capture.py`
+     - `code/flat_capture.py` → `code/calibration/flat_capture.py`
+     - `code/master_frame_creator.py` → `code/calibration/master_frame_builder.py`
+   - Group overlay generation under `code/overlay/`:
+     - `code/generate_overlay.py` → `code/overlay/generator.py`
+   - Group plate solving under `code/platesolve/`:
+     - `code/plate_solver.py` → `code/platesolve/solver.py`
+     - `code/platesolve2_automated.py` → `code/platesolve/platesolve2.py`
+   - Clarify cooling backend naming:
+     - `code/cooling_manager.py` → `code/services/cooling_backend.py`
+   - Update imports across code, calibration scripts, tests, and docs.
+
    - `overlay.info_panel.show_cooling_info` documented in README.
    - Orientation/scaling config flags added and documented under frame_processing.
 

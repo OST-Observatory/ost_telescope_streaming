@@ -30,7 +30,10 @@ def test_plate_solver() -> bool:
     print("Testing plate solver module...")
     
     try:
-        from plate_solver import PlateSolverFactory, PlateSolveResult
+        try:
+            from platesolve.solver import PlateSolverFactory, PlateSolveResult
+        except Exception:
+            from plate_solver import PlateSolverFactory, PlateSolveResult
         
         # Test factory
         print("Available solvers:")
@@ -124,7 +127,10 @@ def test_overlay_generator() -> bool:
     print("\nTesting overlay generator...")
     
     try:
-        from generate_overlay import OverlayGenerator
+        try:
+            from overlay.generator import OverlayGenerator
+        except Exception:
+            from generate_overlay import OverlayGenerator
         
         # Create generator
         generator = OverlayGenerator()
@@ -174,7 +180,10 @@ def test_overlay_generation() -> bool:
     print("\nTesting overlay generation...")
     
     try:
-        from generate_overlay import OverlayGenerator
+        try:
+            from overlay.generator import OverlayGenerator
+        except Exception:
+            from generate_overlay import OverlayGenerator
         
         # Test coordinates
         ra = 47.4166

@@ -28,10 +28,20 @@ __author__ = "OST Telescope Streaming Team"
 try:
     from .video_capture import VideoCapture
     from .video_processor import VideoProcessor
-    from .plate_solver import PlateSolve2
-    from .platesolve2_automated import PlateSolve2Automated
+    # Updated locations after module reorg (maintain best-effort imports)
+    try:
+        from .platesolve.solver import PlateSolve2  # type: ignore
+    except Exception:
+        from .plate_solver import PlateSolve2  # fallback for dev
+    try:
+        from .platesolve.platesolve2 import PlateSolve2Automated  # type: ignore
+    except Exception:
+        from .platesolve2_automated import PlateSolve2Automated  # fallback for dev
     from .overlay_runner import OverlayRunner
-    from .generate_overlay import OverlayGenerator
+    try:
+        from .overlay.generator import OverlayGenerator  # type: ignore
+    except Exception:
+        from .generate_overlay import OverlayGenerator
     from .ascom_mount import ASCOMMount
     from .ascom_camera import ASCOMCamera
     from .exceptions import TelescopeStreamingError

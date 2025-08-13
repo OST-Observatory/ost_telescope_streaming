@@ -25,11 +25,15 @@ except ImportError as e:
     VIDEO_AVAILABLE = False
 
 try:
-    from generate_overlay import OverlayGenerator
+    from overlay.generator import OverlayGenerator  # new location
     OVERLAY_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: Overlay generator not available: {e}")
-    OVERLAY_AVAILABLE = False
+except Exception:
+    try:
+        from generate_overlay import OverlayGenerator  # fallback for dev
+        OVERLAY_AVAILABLE = True
+    except ImportError as e:
+        print(f"Warning: Overlay generator not available: {e}")
+        OVERLAY_AVAILABLE = False
 
 from exceptions import MountError, OverlayError, VideoProcessingError
 from status import MountStatus, OverlayStatus, success_status, error_status, warning_status, Status
@@ -55,7 +59,7 @@ class OverlayRunner:
         
         # Components
         self.video_processor = None
-        self.cooling_manager = None
+        self.cooling_service = None
         
         # State
         self.running = False
@@ -80,7 +84,7 @@ class OverlayRunner:
             if self.frame_enabled and VIDEO_AVAILABLE:
                 self.video_processor = VideoProcessor(self.config, self.logger)
                 
-                # Cooling manager will be initialized after video capture is available
+                # Cooling service will be initialized after video capture is available
                 
                 # Start observation session immediately
                 session_status = self.video_processor.start_observation_session()
@@ -102,8 +106,8 @@ class OverlayRunner:
                 self.logger.info("Video processor observation session already active")
                 
                 # Try to initialize cooling manager now that video capture should be available
-                if self.enable_cooling and not self.cooling_manager:
-                    self._initialize_cooling_manager()
+                if self.enable_cooling and not self.cooling_service:
+                    self._initialize_cooling_service()
             
             self.running = True
             self.last_update = datetime.now()
@@ -133,29 +137,32 @@ class OverlayRunner:
                     self.logger.info("Video processor processing stopped successfully")
             
             # Stop cooling with warmup if enabled
-            if self.cooling_manager:
-                # Shutdown cooling manager (starts warmup if cooling was active)
-                shutdown_status = self.cooling_manager.shutdown()
-                if shutdown_status.is_success:
-                    self.logger.info("🌡️  Cooling manager shutdown initiated")
-                    
-                    # If warmup was started, wait for it to complete
-                    if self.cooling_manager.is_warming_up:
-                        self.logger.info("🔥 Waiting for warmup to complete before stopping other components...")
-                        warmup_status = self.cooling_manager.wait_for_warmup_completion(timeout=600)
-                        if not warmup_status.is_success:
-                            self.logger.warning(f"Warmup issue: {warmup_status.message}")
-                        else:
-                            self.logger.info("🔥 Warmup completed, now stopping other components")
-                else:
-                    self.logger.warning(f"Failed to shutdown cooling manager: {shutdown_status.message}")
-                
-                # Now stop the status monitor
-                stop_status = self.cooling_manager.stop_status_monitor()
-                if stop_status.is_success:
-                    self.logger.info("🌡️  Cooling status monitor stopped")
-                else:
-                    self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
+            if self.cooling_service:
+                # Start warmup if cooling was active
+                try:
+                    warmup_status = self.cooling_service.start_warmup()
+                    if warmup_status.is_success:
+                        self.logger.info("🌡️  Cooling warmup initiated")
+                        if self.cooling_service.is_warming_up:
+                            self.logger.info("🔥 Waiting for warmup to complete before stopping other components...")
+                            wait_status = self.cooling_service.wait_for_warmup_completion(timeout=600)
+                            if not wait_status.is_success:
+                                self.logger.warning(f"Warmup issue: {wait_status.message}")
+                            else:
+                                self.logger.info("🔥 Warmup completed, now stopping other components")
+                    else:
+                        self.logger.info(f"Cooling warmup not started: {warmup_status.message}")
+                except Exception as e:
+                    self.logger.warning(f"Cooling warmup step skipped: {e}")
+                # Stop status monitor
+                try:
+                    stop_status = self.cooling_service.stop_status_monitor()
+                    if stop_status.is_success:
+                        self.logger.info("🌡️  Cooling status monitor stopped")
+                    else:
+                        self.logger.warning(f"Failed to stop cooling status monitor: {stop_status.message}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to stop cooling status monitor: {e}")
             
             return success_status("Observation session stopped successfully")
             
@@ -182,23 +189,22 @@ class OverlayRunner:
             self.logger.error(f"Failed to finalize shutdown: {e}")
             return error_status(f"Failed to finalize shutdown: {e}")
     
-    def _initialize_cooling_manager(self) -> bool:
-        """Initialize cooling manager after video capture is available."""
+    def _initialize_cooling_service(self) -> bool:
+        """Initialize cooling service after video capture is available."""
         if not self.enable_cooling:
             return False
             
         try:
-            # Try to get cooling manager from video processor
+            # Try to get cooling service from video processor
             if hasattr(self.video_processor, 'video_capture') and self.video_processor.video_capture:
-                if hasattr(self.video_processor.video_capture, 'cooling_manager') and self.video_processor.video_capture.cooling_manager:
-                    self.cooling_manager = self.video_processor.video_capture.cooling_manager
-                    self.logger.info("Cooling manager initialized from video capture")
-                    
+                service = getattr(self.video_processor, 'cooling_service', None)
+                if service:
+                    self.cooling_service = service
+                    self.logger.info("Cooling service available from video processor")
                     # Start cooling status monitor automatically
                     cooling_config = self.config.get_camera_config().get('cooling', {})
                     status_interval = cooling_config.get('status_interval', 30)
-                    
-                    monitor_status = self.cooling_manager.start_status_monitor(interval=status_interval)
+                    monitor_status = self.cooling_service.start_status_monitor(interval=status_interval)
                     if monitor_status.is_success:
                         self.logger.info(f"🌡️  Cooling status monitor started automatically (interval: {status_interval}s)")
                         return True
@@ -206,20 +212,20 @@ class OverlayRunner:
                         self.logger.warning(f"Failed to start cooling status monitor: {monitor_status.message}")
                         return False
                 else:
-                    self.logger.warning("Cooling enabled but no cooling manager available in video capture")
+                    self.logger.warning("Cooling enabled but no cooling service available in video processor")
                     return False
             else:
                 self.logger.debug("Cooling enabled but video capture not yet available")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Failed to initialize cooling manager: {e}")
+            self.logger.error(f"Failed to initialize cooling service: {e}")
             return False
     
     def get_cooling_status(self) -> Dict[str, Any]:
         """Get current cooling status."""
-        if self.cooling_manager:
-            return self.cooling_manager.get_cooling_status()
+        if self.cooling_service:
+            return self.cooling_service.get_cooling_status()
         return {}
     
     def generate_overlay_with_coords(self, ra_deg: float, dec_deg: float, output_file: Optional[str] = None,
@@ -275,8 +281,8 @@ class OverlayRunner:
                 if self.video_processor:
                     try:
                         # Try to initialize cooling manager one more time if not already done
-                        if self.enable_cooling and not self.cooling_manager:
-                            self._initialize_cooling_manager()
+                        if self.enable_cooling and not self.cooling_service:
+                            self._initialize_cooling_service()
                         
                         # Set up callbacks
                         def on_solve_result(result):
@@ -316,11 +322,11 @@ class OverlayRunner:
                         if not self.running:
                             break
                         # Check if we need to wait for warmup
-                        if self.cooling_manager and self.cooling_manager.is_warming_up:
+                        if self.cooling_service and self.cooling_service.is_warming_up:
                             self.logger.info("🔥 Warmup in progress, pausing main loop...")
-                            while self.cooling_manager.is_warming_up and self.running:
+                            while self.cooling_service.is_warming_up and self.running:
                                 time.sleep(5)  # Check every 5 seconds
-                            if self.cooling_manager.is_warming_up:
+                            if self.cooling_service.is_warming_up:
                                 self.logger.info("🔥 Warmup completed, resuming main loop")
                         
                         # Read coordinates

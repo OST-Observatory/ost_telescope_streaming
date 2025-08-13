@@ -6,7 +6,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from platesolve2_automated import PlateSolve2Automated
+try:
+    from platesolve.platesolve2 import PlateSolve2Automated
+except Exception:
+    from platesolve2_automated import PlateSolve2Automated
 import argparse
 
 def main():

@@ -312,7 +312,10 @@ def perform_plate_solving(fits_path: str, parameters: Dict[str, Any], config, lo
         Plate-solving result or None
     """
     try:
-        from plate_solver import PlateSolverFactory
+        try:
+            from platesolve.solver import PlateSolverFactory
+        except Exception:
+            from plate_solver import PlateSolverFactory
         
         # Create plate solver
         solver = PlateSolverFactory.create_solver("platesolve2", config=config, logger=logger)
@@ -355,7 +358,10 @@ def generate_overlay(plate_solve_result: Dict[str, Any], parameters: Dict[str, A
         True if successful, False otherwise
     """
     try:
-        from generate_overlay import OverlayGenerator
+        try:
+            from overlay.generator import OverlayGenerator
+        except Exception:
+            from generate_overlay import OverlayGenerator
         
         # Create overlay generator
         overlay_gen = OverlayGenerator(config=config, logger=logger)
