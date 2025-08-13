@@ -698,6 +698,7 @@ def test_alpaca_camera():
     
     # Test connection
     print("Testing Alpyca camera connection...")
+    # Adapter handles connection internally as needed
     status = camera.connect()
     if not status.is_success:
         print(f"❌ Connection failed: {status.message}")
@@ -799,7 +800,7 @@ from alpaca_camera import AlpycaCameraWrapper
 camera = AlpycaCameraWrapper("localhost", 11111, 0)
 
 # Connect
-camera.connect()
+# Connection is performed by higher-level components (VideoCapture/Processor)
 
 # Set cooling
 camera.set_cooling(-10.0)

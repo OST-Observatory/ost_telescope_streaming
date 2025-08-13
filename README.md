@@ -15,6 +15,7 @@ A comprehensive astronomical telescope streaming and overlay system with plate-s
 - **Mount Integration**: ASCOM mount support for coordinate tracking
 - **Camera Cooling**: Advanced cooling management with thermal shock prevention
 - **Configurable**: Flexible configuration system for all components
+- **Telemetry & Timing**: Structured logs include capture_id and per-cycle timings (capture/save/solve)
 
 ## Quick Start
 
@@ -78,6 +79,17 @@ python overlay_pipeline.py --enable-frame-processing --wait-for-plate-solve --in
 ### Debug Mode
 ```bash
 python overlay_pipeline.py --enable-frame-processing --debug
+```
+
+### View Timing Telemetry
+When running with INFO level (default) you will see per-capture timing aggregation logs:
+```
+capture_id=42 timings_ms capture=10024.6 save=185.2 solve=920.5
+```
+and per-file save durations:
+```
+Frame saved: plate_solve_frames/capture_0042.PNG save_ms=120.4
+FITS frame saved: plate_solve_frames/capture_0042.fits save_ms=62.7
 ```
 
 ## Output Files

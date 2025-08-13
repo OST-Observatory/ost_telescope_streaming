@@ -181,7 +181,7 @@ config = ConfigManager()
 camera = ASCOMCamera(driver_id="ASCOM.QHYCCD.Camera", config=config)
 
 # Connect
-camera.connect()
+# Ensure adapter is initialized (connection managed by adapter)
 
 # Turn on cooling
 camera.set_cooling(-10.0)

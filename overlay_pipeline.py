@@ -42,6 +42,16 @@ Examples:
   
   # Run with cooling enabled (status monitoring is automatic)
   python overlay_pipeline.py --enable-cooling --cooling-temp -10.0
+
+Telemetry:
+  The processor emits per-capture timing telemetry at INFO level:
+
+    capture_id=42 timings_ms capture=10024.6 save=185.2 solve=920.5
+
+  and per-file save durations:
+
+    Frame saved: plate_solve_frames/capture_0042.PNG save_ms=120.4
+    FITS frame saved: plate_solve_frames/capture_0042.fits save_ms=62.7
         """
     )
     

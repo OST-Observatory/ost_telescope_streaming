@@ -57,7 +57,7 @@ config = ConfigManager()
 camera = ASCOMCamera(driver_id="ASCOM.QHYCCD.Camera", config=config)
 
 # Connect (automatically connects to filter wheel if configured)
-camera.connect()
+# Ensure camera is available via adapter
 
 # Check if filter wheel is available
 if camera.has_filter_wheel():
