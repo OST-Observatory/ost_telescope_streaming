@@ -167,11 +167,17 @@ def test_video_capture_module() -> bool:
     try:
         from video_capture import VideoCapture
         
-        video_capture = VideoCapture()
+        video_capture = VideoCapture(config=get_test_config(), logger=setup_logging())
         
-        # Test camera info
-        info = video_capture.get_camera_info()
-        print(f"Camera info: {info}")
+        # Test camera info via adapter when available
+        if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
+            info_status = video_capture.camera.get_camera_info()
+            if getattr(info_status, 'is_success', False):
+                print(f"Camera info: {info_status.data}")
+            else:
+                print("Camera info not available")
+        else:
+            print("Camera adapter does not expose get_camera_info()")
         
         # Test FOV calculation
         fov_width, fov_height = video_capture.get_field_of_view()

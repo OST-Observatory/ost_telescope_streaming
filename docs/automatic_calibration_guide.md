@@ -249,7 +249,15 @@ python overlay_runner.py
 
 ```python
 # Validate camera settings before capturing calibration frames
-camera_info = video_capture.get_camera_info()
+# Camera info via adapter when available
+if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
+    info_status = video_capture.camera.get_camera_info()
+    if info_status.is_success:
+        camera_info = info_status.data
+    else:
+        camera_info = {}
+else:
+    camera_info = {}
 print(f"Current camera settings:")
 print(f"  Gain: {camera_info['gain']}")
 print(f"  Offset: {camera_info['offset']}")

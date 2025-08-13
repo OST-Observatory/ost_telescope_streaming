@@ -369,23 +369,27 @@ class VideoProcessor:
             details = {}
         details_with_id = {**details, 'capture_id': self.capture_count}
 
-        # Save display image
+        # Save display image (measure duration)
         frame_filename = self.frame_dir / f"{base}.{self.file_format}"
+        t0 = time.monotonic()
         img_status = self.frame_writer.save(frame, str(frame_filename)) if self.frame_writer else None
+        img_ms = (time.monotonic() - t0) * 1000.0
         if not (img_status and getattr(img_status, 'is_success', False)):
             self.logger.warning(f"Failed to save frame: {getattr(img_status, 'message', 'No status')}")
             frame_filename = None
         else:
-            self.logger.info(f"Frame saved: {frame_filename}")
+            self.logger.info(f"Frame saved: {frame_filename} save_ms={img_ms:.1f}")
 
-        # Save FITS with metadata
+        # Save FITS with metadata (measure duration)
         fits_filename = self.frame_dir / f"{base}.fits"
+        t1 = time.monotonic()
         fits_status = self.frame_writer.save(frame, str(fits_filename), metadata=details_with_id) if self.frame_writer else None
+        fits_ms = (time.monotonic() - t1) * 1000.0
         if not (fits_status and getattr(fits_status, 'is_success', False)):
             self.logger.warning(f"Failed to save FITS frame: {getattr(fits_status, 'message', 'No status')}")
             fits_filename = None
         else:
-            self.logger.info(f"FITS frame saved: {fits_filename}")
+            self.logger.info(f"FITS frame saved: {fits_filename} save_ms={fits_ms:.1f}")
 
         return frame_filename, fits_filename
 
@@ -554,11 +558,13 @@ class VideoProcessor:
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
             
-            # Obtain frame (one-shot for long exposures, current for OpenCV)
+            # Obtain frame (one-shot for long exposures, current for OpenCV) and time it
+            t_capture_start = time.monotonic()
             frame = self._obtain_frame()
             if frame is None:
                 self.logger.warning("No frame available for capture")
                 return
+            capture_ms = (time.monotonic() - t_capture_start) * 1000.0
             # Increment capture counter once per cycle
             self.capture_count += 1
             # Capture and store frame metadata for downstream consumers; attach capture_id
@@ -583,14 +589,25 @@ class VideoProcessor:
             frame_filename: Optional[Path] = None
             fits_filename: Optional[Path] = None
             if self.save_frames:
+                t_save_start = time.monotonic()
                 frame_filename, fits_filename = self._save_outputs(frame)
+                total_save_ms = (time.monotonic() - t_save_start) * 1000.0
+            else:
+                total_save_ms = 0.0
             
             # Trigger capture callback
             if self.on_capture_frame:
                 self.on_capture_frame(frame, frame_filename)
             
             # Plate-solve if enabled and interval elapsed
+            t_solve_start = time.monotonic()
             self._maybe_plate_solve(fits_filename, frame_filename)
+            solve_ms = (time.monotonic() - t_solve_start) * 1000.0
+
+            # Aggregate and log timings
+            self.logger.info(
+                f"capture_id={self.capture_count} timings_ms capture={capture_ms:.1f} save={total_save_ms:.1f} solve={solve_ms:.1f}"
+            )
             
         except Exception as e:
             self.logger.error(f"Error in capture and solve: {e}")

@@ -30,19 +30,21 @@ def test_image_orientation():
     # Create video capture
     video_capture = VideoCapture(config=config, logger=logger, return_frame_objects=True)
     
-    # Connect to camera
-    logger.info("Connecting to ASCOM camera...")
-    connect_status = video_capture.connect()
+    # Connection is performed during VideoCapture initialization now
+    logger.info("VideoCapture initialized (connection handled internally)")
     
-    if not connect_status.is_success:
-        logger.error(f"Failed to connect to camera: {connect_status.message}")
-        return False
-    
-    logger.info("Camera connected successfully")
-    
-    # Get camera info
-    camera_info = video_capture.get_camera_info()
-    logger.info(f"Camera info: {camera_info}")
+    # Get camera info via adapter if available
+    try:
+        if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
+            info_status = video_capture.camera.get_camera_info()
+            if getattr(info_status, 'is_success', False):
+                logger.info(f"Camera info: {info_status.data}")
+            else:
+                logger.info("Camera info not available")
+        else:
+            logger.info("Camera adapter does not provide get_camera_info()")
+    except Exception as e:
+        logger.info(f"Camera info retrieval skipped: {e}")
     
     # Capture a single frame
     logger.info("Capturing single frame...")

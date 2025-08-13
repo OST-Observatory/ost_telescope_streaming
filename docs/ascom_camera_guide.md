@@ -66,13 +66,17 @@ config = ConfigManager('config.yaml')
 # Initialize camera
 video_capture = VideoCapture(config=config)
 
-# Connect to camera
-status = video_capture.connect()
-if status.is_success:
-    print("Camera connected successfully")
+# Connection is handled during initialization; verify via adapter
+if hasattr(video_capture, 'camera') and video_capture.camera:
+    print("Camera available via adapter")
     
     # Get camera information
-    camera_info = video_capture.get_camera_info()
+    # Adapter-provided camera info when available
+    if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
+        info_status = video_capture.camera.get_camera_info()
+        camera_info = info_status.data if info_status.is_success else {}
+    else:
+        camera_info = {}
     print(f"Camera: {camera_info['driver_id']}")
     print(f"Resolution: {camera_info['frame_width']}x{camera_info['frame_height']}")
 ```
@@ -287,7 +291,11 @@ video:
 # Monitor camera performance during long sessions
 while imaging_session_active:
     # Get current camera status
-    camera_info = video_capture.get_camera_info()
+    if hasattr(video_capture, 'camera') and video_capture.camera and hasattr(video_capture.camera, 'get_camera_info'):
+        info_status = video_capture.camera.get_camera_info()
+        camera_info = info_status.data if info_status.is_success else {}
+    else:
+        camera_info = {}
     
     # Log important parameters
     print(f"Temperature: {camera_info.get('current_temperature', 'N/A')}°C")

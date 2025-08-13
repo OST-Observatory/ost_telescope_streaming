@@ -59,9 +59,8 @@ The cooling system is automatically initialized when connecting to an ASCOM came
 ```python
 from video_capture import VideoCapture
 
-# Initialize with cooling enabled
 video_capture = VideoCapture(config=config)
-status = video_capture.connect()  # Cooling initialized automatically
+# Connection is handled internally; cooling initializes when using ASCOM/Alpaca via adapter
 ```
 
 ### Manual Cooling Control

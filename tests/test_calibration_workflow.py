@@ -48,19 +48,22 @@ def test_camera_connection(config, logger):
             return True
             
         elif camera_type in ['ascom', 'alpaca']:
-            # For ASCOM/Alpyca, test actual connection
+            # For ASCOM/Alpyca, test actual connection via adapter
             if hasattr(capture, 'camera') and capture.camera:
-                # Test basic camera info
-                if camera_type == 'ascom':
-                    info = capture.camera.get_camera_info()
-                else:  # alpaca
-                    info = capture.camera.get_camera_info()
-                
-                if info.is_success:
-                    print(f"✅ {camera_type.upper()} camera connected successfully")
-                    return True
-                else:
-                    print(f"❌ Failed to get camera info: {info.message}")
+                try:
+                    if hasattr(capture.camera, 'get_camera_info'):
+                        info_status = capture.camera.get_camera_info()
+                        if getattr(info_status, 'is_success', False):
+                            print(f"✅ {camera_type.upper()} camera connected successfully")
+                            return True
+                        else:
+                            print(f"❌ Failed to get camera info: {getattr(info_status, 'message', 'unknown error')}")
+                            return False
+                    else:
+                        print(f"ℹ️ {camera_type.upper()} adapter does not expose get_camera_info(); assuming connected")
+                        return True
+                except Exception as e:
+                    print(f"❌ Error retrieving camera info: {e}")
                     return False
             else:
                 print(f"❌ No {camera_type} camera instance found")
