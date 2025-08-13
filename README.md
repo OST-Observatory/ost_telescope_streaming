@@ -4,7 +4,7 @@ A comprehensive astronomical telescope streaming and overlay system with plate-s
 
 ## Features
 
-- **Real-time Video Capture**: Support for ASCOM cameras and OpenCV
+- **Real-time Video Capture**: Support for ASCOM, Alpaca, and OpenCV cameras
 - **Plate-Solving**: Automated coordinate determination using PlateSolve2
 - **Astronomical Overlays**: Generate overlays showing stars, deep sky objects, and annotations
 - **Information Panel**: Display camera/telescope parameters and field of view information
@@ -173,6 +173,45 @@ plate_solve:
 - **OverlayGenerator**: Creates astronomical overlays
 - **ASCOMMount**: Telescope mount integration
 - **ConfigManager**: Configuration management
+
+## Module Renaming Map
+
+To improve structure and clarity, several modules were renamed and moved. Update imports accordingly.
+
+- code/video_capture.py → code/capture/controller.py
+- code/video_processor.py → code/processing/processor.py
+- code/ascom_camera.py → code/drivers/ascom/camera.py
+- code/ascom_mount.py → code/drivers/ascom/mount.py
+- code/alpaca_camera.py → code/drivers/alpaca/camera.py
+- code/services/cooling_service.py → code/services/cooling/service.py
+- code/services/cooling_backend.py → code/services/cooling/backend.py
+- code/overlay_runner.py → code/overlay/runner.py
+- code/plate_solver.py → code/platesolve/solver.py
+- code/platesolve2_automated.py → code/platesolve/platesolve2.py
+- code/dark_capture.py → code/calibration/dark_capture.py
+- code/flat_capture.py → code/calibration/flat_capture.py
+- code/master_frame_creator.py → code/calibration/master_frame_builder.py
+- code/generate_overlay.py → code/overlay/generator.py
+
+Import migration examples:
+
+```python
+# Old
+from video_capture import VideoCapture
+from video_processor import VideoProcessor
+from ascom_camera import ASCOMCamera
+from alpaca_camera import AlpycaCameraWrapper
+from services.cooling_service import CoolingService
+from services.cooling_backend import create_cooling_manager
+
+# New
+from capture.controller import VideoCapture
+from processing.processor import VideoProcessor
+from drivers.ascom.camera import ASCOMCamera
+from drivers.alpaca.camera import AlpycaCameraWrapper
+from services.cooling.service import CoolingService
+from services.cooling.backend import create_cooling_manager
+```
 
 ## Documentation
 
