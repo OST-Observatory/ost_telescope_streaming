@@ -287,8 +287,8 @@ This will show:
 The dark capture system can be integrated with the main overlay runner:
 
 ```python
-from dark_capture import DarkCapture
-from video_capture import VideoCapture
+from code.calibration.dark_capture import DarkCapture
+from capture.controller import VideoCapture
 
 # Initialize components
 video_capture = VideoCapture(config=config)

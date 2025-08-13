@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from config_manager import ConfigManager
-from video_capture import VideoCapture
+from capture.controller import VideoCapture
 import argparse
 import sys
 
@@ -83,7 +83,7 @@ def main():
         if args.action == 'info':
             # Show camera information
             if args.camera_type == 'ascom' and args.ascom_driver:
-                from ascom_camera import ASCOMCamera
+                from drivers.ascom.camera import ASCOMCamera
                 camera = ASCOMCamera(driver_id=args.ascom_driver, config=config, logger=logger)
                 connect_status = camera.connect()
                 if connect_status.is_success:
@@ -125,7 +125,7 @@ def main():
                     print(f"Failed to connect: {connect_status.message}")
                     
             elif args.camera_type == 'alpaca':
-                from alpaca_camera import AlpycaCameraWrapper
+                from drivers.alpaca.camera import AlpycaCameraWrapper
                 camera = AlpycaCameraWrapper(
                     host=args.alpaca_host,
                     port=args.alpaca_port,

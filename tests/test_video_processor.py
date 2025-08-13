@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from video_processor import VideoProcessor
+from processing.processor import VideoProcessor
 import time
 import argparse
 

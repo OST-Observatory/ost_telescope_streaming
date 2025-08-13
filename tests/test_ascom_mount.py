@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from ascom_mount import ASCOMMount
+from drivers.ascom.mount import ASCOMMount
 import argparse
 import time
 

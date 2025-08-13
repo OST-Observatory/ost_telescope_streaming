@@ -10,7 +10,7 @@ CODE_DIR = os.path.join(PROJECT_ROOT, 'code')
 if CODE_DIR not in sys.path:
     sys.path.insert(0, CODE_DIR)
 
-from video_capture import VideoCapture
+from capture.controller import VideoCapture
 from status import success_status
 
 

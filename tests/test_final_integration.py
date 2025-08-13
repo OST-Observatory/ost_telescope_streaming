@@ -83,7 +83,7 @@ def test_video_processor_integration():
     print("\n--- Testing video processor integration ---")
     
     try:
-        from video_processor import VideoProcessor
+        from processing.processor import VideoProcessor
         try:
             from platesolve.solver import PlateSolve2Solver
         except Exception:
@@ -116,7 +116,7 @@ def test_overlay_runner_integration():
     print("\n--- Testing overlay runner integration ---")
     
     try:
-        from overlay_runner import OverlayRunner
+        from overlay.runner import OverlayRunner
         
         # Create overlay runner
         runner = OverlayRunner()
@@ -254,9 +254,8 @@ def test_complete_workflow() -> bool:
             from platesolve.solver import PlateSolve2Solver
         except Exception:
             from plate_solver import PlateSolve2Solver
-        from video_processor import VideoProcessor
-        from overlay_runner import OverlayRunner
-        from generate_overlay import generate_overlay
+        from processing.processor import VideoProcessor
+        from overlay.runner import OverlayRunner
         
         print("✓ All core components imported successfully")
         

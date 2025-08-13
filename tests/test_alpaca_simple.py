@@ -38,7 +38,7 @@ def test_simple_connection():
 def test_wrapper_connection():
     """Test AlpycaCameraWrapper connection."""
     try:
-        from alpaca_camera import AlpycaCameraWrapper
+        from drivers.alpaca.camera import AlpycaCameraWrapper
         
         print("\n=== WRAPPER TEST ===")
         print("Testing AlpycaCameraWrapper connection...")

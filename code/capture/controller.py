@@ -85,7 +85,7 @@ class VideoCapture:
             self._frame_writer = None
         if self.enable_cooling:
             try:
-                from services.cooling_service import CoolingService
+                from services.cooling.service import CoolingService
                 self.cooling_service = CoolingService(self.config, logger=self.logger)
                 if self.camera:
                     self.cooling_service.initialize(self.camera)
@@ -129,7 +129,7 @@ class VideoCapture:
             if not self.ascom_driver:
                 return error_status("ASCOM driver ID not configured")
             # Lazy import to avoid import-time dependency in environments without ASCOM
-            from ascom_camera import ASCOMCamera
+            from drivers.ascom.camera import ASCOMCamera
             cam = ASCOMCamera(driver_id=self.ascom_driver, config=self.config, logger=self.logger)
             status = cam.connect()
             if status.is_success:
@@ -163,7 +163,7 @@ class VideoCapture:
             self.alpaca_device_id = cam_cfg.get('alpaca_device_id', 0)
             self.alpaca_camera_name = cam_cfg.get('alpaca_camera_name', 'Unknown')
             # Lazy import to avoid import-time dependency if alpaca lib is not installed
-            from alpaca_camera import AlpycaCameraWrapper
+            from drivers.alpaca.camera import AlpycaCameraWrapper
             cam = AlpycaCameraWrapper(self.alpaca_host, self.alpaca_port, self.alpaca_device_id, self.config, self.logger)
             status = cam.connect()
             if status.is_success:
@@ -197,7 +197,7 @@ class VideoCapture:
         try:
             if self.enable_cooling:
                 try:
-                    from services.cooling_service import CoolingService
+                    from services.cooling.service import CoolingService
                     # Ensure service exists and initialized
                     if not hasattr(self, 'cooling_service') or self.cooling_service is None:
                         self.cooling_service = CoolingService(self.config, logger=self.logger)

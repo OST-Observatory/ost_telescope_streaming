@@ -15,8 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from config_manager import ConfigManager
-from overlay_runner import OverlayRunner
-from alpaca_camera import AlpycaCameraWrapper
+from overlay.runner import OverlayRunner
+from drivers.alpaca.camera import AlpycaCameraWrapper
 
 def setup_logging():
     """Setup logging for the test."""

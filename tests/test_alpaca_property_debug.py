@@ -14,7 +14,7 @@ from pathlib import Path
 # Add the parent code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-from alpaca_camera import AlpycaCameraWrapper
+from drivers.alpaca.camera import AlpycaCameraWrapper
 from config_manager import ConfigManager
 
 def setup_logging():

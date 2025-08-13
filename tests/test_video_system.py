@@ -199,7 +199,7 @@ def test_video_processor():
     print("\nTesting video processor module...")
     
     try:
-        from video_processor import VideoProcessor
+        from processing.processor import VideoProcessor
         
         processor = VideoProcessor()
         
@@ -225,7 +225,7 @@ def test_overlay_runner_integration():
     print("\nTesting overlay runner integration...")
     
     try:
-        from overlay_runner import OverlayRunner
+        from overlay.runner import OverlayRunner
         
         runner = OverlayRunner()
         

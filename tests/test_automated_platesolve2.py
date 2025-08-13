@@ -34,10 +34,7 @@ def test_automated_platesolve2() -> bool:
     print("Testing automated PlateSolve 2 with known coordinates...")
     
     try:
-        try:
-            from platesolve.platesolve2 import PlateSolve2Automated
-        except Exception:
-            from platesolve2_automated import PlateSolve2Automated
+        from platesolve.platesolve2 import PlateSolve2Automated
         
         # Create solver
         solver = PlateSolve2Automated()
@@ -128,10 +125,7 @@ def test_command_string_building() -> bool:
     print("\n--- Testing command string building ---")
     
     try:
-        try:
-            from platesolve.platesolve2 import PlateSolve2Automated
-        except Exception:
-            from platesolve2_automated import PlateSolve2Automated
+        from platesolve.platesolve2 import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         
@@ -182,10 +176,7 @@ def test_fov_calculation() -> bool:
     print("\n--- Testing FOV calculation ---")
     
     try:
-        try:
-            from platesolve.platesolve2 import PlateSolve2Automated
-        except Exception:
-            from platesolve2_automated import PlateSolve2Automated
+        from platesolve.platesolve2 import PlateSolve2Automated
         
         solver = PlateSolve2Automated()
         

@@ -23,7 +23,7 @@ from datetime import datetime
 
 from status import Status, success_status, error_status, warning_status
 from exceptions import FlatCaptureError
-from video_capture import VideoCapture
+from capture.controller import VideoCapture
 from utils.status_utils import unwrap_status
 
 

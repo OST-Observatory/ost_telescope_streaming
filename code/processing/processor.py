@@ -39,17 +39,11 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 # Import local modules
-from video_capture import VideoCapture
-try:
-    from platesolve.solver import PlateSolverFactory, PlateSolveResult  # new location
-except Exception:
-    from plate_solver import PlateSolverFactory, PlateSolveResult  # fallback for dev
+from capture.controller import VideoCapture
+from platesolve.solver import PlateSolverFactory, PlateSolveResult
 from services.frame_writer import FrameWriter
 from utils.status_utils import unwrap_status
-try:
-    from overlay.generator import OverlayGenerator  # new location
-except Exception:
-    from generate_overlay import OverlayGenerator  # fallback for dev
+from overlay.generator import OverlayGenerator
 
 from exceptions import VideoProcessingError, FileError
 from status import VideoProcessingStatus, success_status, error_status, warning_status
@@ -195,7 +189,7 @@ class VideoProcessor:
                 )
                 # Initialize CoolingService and kick off status monitoring if enabled
                 try:
-                    from services.cooling_service import CoolingService
+                    from services.cooling.service import CoolingService
                     self.cooling_service = CoolingService(self.config, logger=self.logger)
                     if self.video_capture and self.video_capture.camera:
                         self.cooling_service.initialize(self.video_capture.camera)

@@ -90,7 +90,7 @@ import time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 from config_manager import ConfigManager
 
 def control_cooling(config_file, target_temp, action='set'):

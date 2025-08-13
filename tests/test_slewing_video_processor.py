@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
 from test_utils import get_test_config, setup_logging
-from video_processor import VideoProcessor
+from processing.processor import VideoProcessor
 
 def test_video_processor_slewing_integration():
     """Test VideoProcessor slewing detection integration."""

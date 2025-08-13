@@ -50,7 +50,7 @@ video:
 The system automatically detects and uses the appropriate filter wheel:
 
 ```python
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 from config_manager import ConfigManager
 
 config = ConfigManager()
@@ -322,7 +322,7 @@ This will show:
 ### Example 1: QHY Camera with Separate Filter Wheel
 
 ```python
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 from config_manager import ConfigManager
 
 # Load config with separate filter wheel

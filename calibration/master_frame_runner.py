@@ -22,7 +22,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from master_frame_creator import MasterFrameCreator
+from calibration.master_frame_builder import MasterFrameCreator
 
 
 def setup_logging(level=logging.INFO):

@@ -9,7 +9,7 @@ from test_utils import (
     print_test_header,
     print_test_result
 )
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 
 def test_filter_wheel_functionality():
     """Test filter wheel functionality."""

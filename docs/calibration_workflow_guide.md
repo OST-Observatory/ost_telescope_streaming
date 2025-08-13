@@ -360,7 +360,7 @@ The calibration workflow integrates with the main system:
 
 ```python
 # Apply calibration to science images
-from master_frame_creator import MasterFrameCreator
+from calibration.master_frame_builder import MasterFrameCreator
 
 # Load master frames
 master_creator = MasterFrameCreator(config=config)

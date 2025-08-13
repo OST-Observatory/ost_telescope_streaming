@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'code'))
 
 from test_utils import get_test_config, setup_logging
-from ascom_mount import ASCOMMount
+from drivers.ascom.mount import ASCOMMount
 
 def test_slewing_detection():
     """Test slewing detection with ASCOM mount."""

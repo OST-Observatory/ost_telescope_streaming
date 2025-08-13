@@ -70,7 +70,7 @@ camera:
 ### Basic Camera Control
 
 ```python
-from alpaca_camera import AlpycaCameraWrapper
+from drivers.alpaca.camera import AlpycaCameraWrapper
 
 # Create camera instance
 camera = AlpycaCameraWrapper(
@@ -373,11 +373,11 @@ camera = AlpycaCameraWrapper(host="localhost", port=11111, device_id=0)
 4. **Update Code**
    ```python
    # Old: ASCOMCamera
-   from ascom_camera import ASCOMCamera
+   from drivers.ascom.camera import ASCOMCamera
    camera = ASCOMCamera(driver_id="ASCOM.ASICamera2.Camera")
    
    # New: AlpycaCameraWrapper
-   from alpaca_camera import AlpycaCameraWrapper
+   from drivers.alpaca.camera import AlpycaCameraWrapper
    camera = AlpycaCameraWrapper(host="localhost", port=11111, device_id=0)
    ```
 

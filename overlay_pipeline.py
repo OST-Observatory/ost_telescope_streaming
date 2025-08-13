@@ -12,7 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from overlay_runner import OverlayRunner
+from code.overlay.runner import OverlayRunner
 
 def main():
     """Command-line interface for the overlay runner with image combination functionality.

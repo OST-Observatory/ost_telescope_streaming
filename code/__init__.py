@@ -11,8 +11,8 @@ Modules:
 - config_manager: Configuration management
 - video_capture: Video capture and ASCOM camera integration
 - video_processor: Video processing pipeline
-- plate_solver: Plate-solving functionality
-- platesolve2_automated: Automated plate-solving
+- platesolve.solver: Plate-solving functionality
+- platesolve.platesolve2: Automated plate-solving
 - overlay_runner: Overlay generation and management
 - generate_overlay: Overlay creation utilities
 - ascom_mount: ASCOM mount control
@@ -26,22 +26,13 @@ __author__ = "OST Telescope Streaming Team"
 
 # Import main classes for easy access
 try:
-    from .video_capture import VideoCapture
-    from .video_processor import VideoProcessor
+    from .capture.controller import VideoCapture
+    from .processing.processor import VideoProcessor
     # Updated locations after module reorg (maintain best-effort imports)
-    try:
-        from .platesolve.solver import PlateSolve2  # type: ignore
-    except Exception:
-        from .plate_solver import PlateSolve2  # fallback for dev
-    try:
-        from .platesolve.platesolve2 import PlateSolve2Automated  # type: ignore
-    except Exception:
-        from .platesolve2_automated import PlateSolve2Automated  # fallback for dev
+    from .platesolve.solver import PlateSolve2  # type: ignore
+    from .platesolve.platesolve2 import PlateSolve2Automated  # type: ignore
     from .overlay_runner import OverlayRunner
-    try:
-        from .overlay.generator import OverlayGenerator  # type: ignore
-    except Exception:
-        from .generate_overlay import OverlayGenerator
+    from .overlay.generator import OverlayGenerator  # type: ignore
     from .ascom_mount import ASCOMMount
     from .ascom_camera import ASCOMCamera
     from .exceptions import TelescopeStreamingError

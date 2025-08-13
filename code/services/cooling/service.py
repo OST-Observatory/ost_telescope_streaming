@@ -22,7 +22,7 @@ class CoolingService:
         if not self.enabled:
             return success_status("Cooling disabled")
         try:
-            from cooling_manager import create_cooling_manager
+            from services.cooling.backend import create_cooling_manager
             self.manager = create_cooling_manager(camera, self.config, self.logger)
             return success_status("Cooling manager initialized")
         except Exception as e:

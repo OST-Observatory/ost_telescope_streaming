@@ -6,10 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-try:
-    from platesolve.solver import PlateSolve2, PlateSolverFactory
-except Exception:
-    from plate_solver import PlateSolve2, PlateSolverFactory
+from platesolve.solver import PlateSolve2, PlateSolverFactory
 import argparse
 
 def main():

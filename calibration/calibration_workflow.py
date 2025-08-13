@@ -22,10 +22,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from dark_capture import DarkCapture
-from flat_capture import FlatCapture
-from master_frame_creator import MasterFrameCreator
-from cooling_manager import create_cooling_manager
+from calibration.dark_capture import DarkCapture
+from calibration.flat_capture import FlatCapture
+from calibration.master_frame_builder import MasterFrameCreator
+from services.cooling.backend import create_cooling_manager
 from status import success_status, error_status, warning_status
 
 
@@ -51,7 +51,7 @@ def initialize_cooling(config, logger):
         
         # Create camera instance
         if camera_type == 'ascom':
-            from ascom_camera import ASCOMCamera
+            from drivers.ascom.camera import ASCOMCamera
             camera_config = config.get_camera_config()
             ascom_config = camera_config.get('ascom', {})
             camera = ASCOMCamera(
@@ -60,7 +60,7 @@ def initialize_cooling(config, logger):
                 logger=logger
             )
         elif camera_type == 'alpaca':
-            from alpaca_camera import AlpycaCameraWrapper
+            from drivers.alpaca.camera import AlpycaCameraWrapper
             camera_config = config.get_camera_config()
             alpaca_config = camera_config.get('alpaca', {})
             camera = AlpycaCameraWrapper(
@@ -127,7 +127,7 @@ def capture_darks_with_cooling(config, logger, camera=None):
         
         # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
-        from video_capture import VideoCapture
+        from capture.controller import VideoCapture
         video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False, return_frame_objects=True)
         
         # Check if camera was initialized successfully
@@ -170,7 +170,7 @@ def capture_flats_with_cooling(config, logger, camera=None):
         
         # Initialize video capture with calibration disabled (we're capturing calibration data)
         logger.info("Initializing video capture...")
-        from video_capture import VideoCapture
+        from capture.controller import VideoCapture
         video_capture = VideoCapture(config=config, logger=logger, enable_calibration=False, return_frame_objects=True)
         
         # Check if camera was initialized successfully

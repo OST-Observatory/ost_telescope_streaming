@@ -15,10 +15,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from config_manager import ConfigManager
-from video_capture import VideoCapture
-from dark_capture import DarkCapture
-from flat_capture import FlatCapture
-from master_frame_creator import MasterFrameCreator
+from capture.controller import VideoCapture
+from calibration.dark_capture import DarkCapture
+from calibration.flat_capture import FlatCapture
+from calibration.master_frame_builder import MasterFrameCreator
 
 def setup_logging():
     """Setup logging for the test."""

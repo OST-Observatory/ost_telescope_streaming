@@ -232,8 +232,8 @@ This will show:
 The flat capture system can be integrated with the main overlay runner:
 
 ```python
-from flat_capture import FlatCapture
-from video_capture import VideoCapture
+from code.calibration.flat_capture import FlatCapture
+from capture.controller import VideoCapture
 
 # Initialize components
 video_capture = VideoCapture(config=config)

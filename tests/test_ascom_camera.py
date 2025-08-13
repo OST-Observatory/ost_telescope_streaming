@@ -21,7 +21,7 @@ from test_utils import (
     print_test_result
 )
 
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 
 def test_ascom_camera_basic(config) -> bool:
     """Test basic ASCOM camera functionality."""

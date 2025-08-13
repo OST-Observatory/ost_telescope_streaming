@@ -15,7 +15,7 @@ from pathlib import Path
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 from config_manager import config
 
 def main():

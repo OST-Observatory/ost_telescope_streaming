@@ -580,7 +580,7 @@ def __init__(self, config, logger=None):
     
     # Add Alpyca support
     if self.camera_type == 'alpaca':
-        from alpaca_camera import AlpycaCameraWrapper
+        from drivers.alpaca.camera import AlpycaCameraWrapper
         self.alpaca_camera = AlpycaCameraWrapper(
             host=video_config['alpaca']['host'],
             port=video_config['alpaca']['port'],
@@ -604,7 +604,7 @@ class CameraFactory:
         camera_type = video_config.get('camera_type', 'opencv')
         
         if camera_type == 'alpaca':
-            from alpaca_camera import AlpycaCameraWrapper
+            from drivers.alpaca.camera import AlpycaCameraWrapper
             return AlpycaCameraWrapper(
                 host=video_config['alpaca']['host'],
                 port=video_config['alpaca']['port'],
@@ -613,7 +613,7 @@ class CameraFactory:
                 logger=logger
             )
         elif camera_type == 'ascom':
-            from ascom_camera import ASCOMCamera
+            from drivers.ascom.camera import ASCOMCamera
             return ASCOMCamera(
                 driver_id=video_config['ascom']['ascom_driver'],
                 config=config,
@@ -674,7 +674,7 @@ from pathlib import Path
 # Add the parent code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-from alpaca_camera import AlpycaCameraWrapper
+from drivers.alpaca.camera import AlpycaCameraWrapper
 from config_manager import ConfigManager
 
 def test_alpaca_camera():
@@ -794,7 +794,7 @@ video:
 ### Basic Camera Control
 
 ```python
-from alpaca_camera import AlpycaCameraWrapper
+from drivers.alpaca.camera import AlpycaCameraWrapper
 
 # Create camera
 camera = AlpycaCameraWrapper("localhost", 11111, 0)

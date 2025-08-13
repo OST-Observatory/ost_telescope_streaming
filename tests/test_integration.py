@@ -218,7 +218,7 @@ def test_overlay_runner() -> bool:
     print("\nTesting overlay runner...")
     
     try:
-        from overlay_runner import OverlayRunner
+        from overlay.runner import OverlayRunner
         
         runner = OverlayRunner()
         

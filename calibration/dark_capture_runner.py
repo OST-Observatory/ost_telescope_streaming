@@ -23,9 +23,9 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
-from dark_capture import DarkCapture
-from video_capture import VideoCapture
-from cooling_manager import create_cooling_manager
+from calibration.dark_capture import DarkCapture
+from capture.controller import VideoCapture
+from services.cooling.backend import create_cooling_manager
 
 
 def setup_logging(level=logging.INFO):

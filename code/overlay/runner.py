@@ -18,22 +18,18 @@ except ImportError as e:
     MOUNT_AVAILABLE = False
 
 try:
-    from video_processor import VideoProcessor
+    from processing.processor import VideoProcessor
     VIDEO_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Video processor not available: {e}")
     VIDEO_AVAILABLE = False
 
 try:
-    from overlay.generator import OverlayGenerator  # new location
+    from overlay.generator import OverlayGenerator
     OVERLAY_AVAILABLE = True
-except Exception:
-    try:
-        from generate_overlay import OverlayGenerator  # fallback for dev
-        OVERLAY_AVAILABLE = True
-    except ImportError as e:
-        print(f"Warning: Overlay generator not available: {e}")
-        OVERLAY_AVAILABLE = False
+except ImportError as e:
+    print(f"Warning: Overlay generator not available: {e}")
+    OVERLAY_AVAILABLE = False
 
 from exceptions import MountError, OverlayError, VideoProcessingError
 from status import MountStatus, OverlayStatus, success_status, error_status, warning_status, Status

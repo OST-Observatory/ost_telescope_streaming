@@ -173,7 +173,7 @@ camera.update_cooling_cache({
 
 ### Complete Example:
 ```python
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 from config_manager import ConfigManager
 
 # Setup

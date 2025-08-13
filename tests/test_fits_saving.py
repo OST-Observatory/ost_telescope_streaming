@@ -69,7 +69,7 @@ def test_video_capture_fits():
         # Add the code directory to the path
         sys.path.insert(0, str(Path(__file__).parent / "code"))
         
-        from video_capture import VideoCapture
+        from code.capture.controller import VideoCapture
         from config_manager import ConfigManager
         
         # Create a minimal config for testing

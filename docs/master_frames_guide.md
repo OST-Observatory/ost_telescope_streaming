@@ -402,7 +402,7 @@ This will show:
 The master frame creator can be integrated with the main system:
 
 ```python
-from master_frame_creator import MasterFrameCreator
+from calibration.master_frame_builder import MasterFrameCreator
 
 # Initialize master frame creator
 master_creator = MasterFrameCreator(config=config)

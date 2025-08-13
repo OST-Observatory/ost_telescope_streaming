@@ -11,7 +11,7 @@ from test_utils import (
     check_cache_file,
     get_cache_file_path
 )
-from ascom_camera import ASCOMCamera
+from drivers.ascom.camera import ASCOMCamera
 import json
 
 def test_cache_debug():
