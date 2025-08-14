@@ -160,7 +160,7 @@ class PlateSolve2(PlateSolver):
                 ra_deg = None
                 dec_deg = None
                 try:
-                    from ascom_mount import ASCOMMount
+                    from drivers.ascom.mount import ASCOMMount
 
                     mount = ASCOMMount(config=self.config, logger=self.logger)
                     mount_status = mount.get_coordinates()
