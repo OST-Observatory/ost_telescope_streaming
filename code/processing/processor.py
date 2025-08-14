@@ -483,6 +483,21 @@ class VideoProcessor:
                     "Failed to start video capture", details={"frame_enabled": self.frame_enabled}
                 )
 
+            # Initialize and (optionally) wait for camera cooling if enabled in config
+            try:
+                cooling_cfg = self.config.get_camera_config().get("cooling", {})
+                if cooling_cfg.get("enable_cooling", False) and hasattr(self, "cooling_service"):
+                    target_temp = float(cooling_cfg.get("target_temperature", -10.0))
+                    wait_for = bool(cooling_cfg.get("wait_for_cooling", True))
+                    timeout_s = float(cooling_cfg.get("cooling_timeout", 300))
+                    init_cool = self.cooling_service.initialize_and_stabilize(
+                        target_temp, wait_for, timeout_s
+                    )
+                    if not init_cool.is_success:
+                        self.logger.warning(f"Cooling initialization: {init_cool.message}")
+            except Exception as e:
+                self.logger.debug(f"Cooling initialization skipped: {e}")
+
             self.logger.info("Observation session initialized successfully")
             return success_status(
                 "Observation session initialized successfully",
