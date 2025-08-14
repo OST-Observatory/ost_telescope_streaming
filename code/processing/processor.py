@@ -198,10 +198,6 @@ class VideoProcessor:
                     self.cooling_service = CoolingService(self.config, logger=self.logger)
                     if self.video_capture and self.video_capture.camera:
                         self.cooling_service.initialize(self.video_capture.camera)
-                    cooling_cfg = self.config.get_camera_config().get("cooling", {})
-                    if cooling_cfg.get("enable_cooling", False):
-                        interval = cooling_cfg.get("status_interval", 30)
-                        self.cooling_service.start_status_monitor(interval)
                 except Exception as e:
                     self.logger.debug(f"CoolingService not started: {e}")
                 # Make overlay generator aware of processor for cooling info

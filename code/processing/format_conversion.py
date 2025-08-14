@@ -39,29 +39,54 @@ def convert_camera_data_to_opencv(
                 logger.error("Image array is empty")
             return None
 
-        # Determine color
+        # Determine color / Bayer pattern from camera and config
         is_color_camera = False
         bayer_pattern = None
-        if hasattr(camera, "sensor_type"):
-            sensor_type = camera.sensor_type
-            if sensor_type in ["RGGB", "GRBG", "GBRG", "BGGR"]:
-                is_color_camera = True
-                bayer_pattern = sensor_type
-                if logger:
-                    logger.debug(f"Detected color camera with Bayer pattern: {bayer_pattern}")
 
+        # Helper to normalize various property names from drivers
+        def _get_any(obj: Any, names: list[str]) -> Any:
+            for name in names:
+                try:
+                    return getattr(obj, name)
+                except Exception:
+                    continue
+            return None
+
+        # Probe camera attributes (handles Alpaca/ASCOM naming variants)
+        sensor_type_attr = _get_any(
+            camera, ["sensor_type", "SensorType", "cfa_pattern", "BayerPattern"]
+        )
+        if isinstance(sensor_type_attr, str):
+            upper = sensor_type_attr.upper()
+            if upper in ["RGGB", "GRBG", "GBRG", "BGGR"]:
+                is_color_camera = True
+                bayer_pattern = upper
+        # Generic color hints
         if not is_color_camera:
+            color_hint = _get_any(camera, ["is_color", "IsColor", "colour", "Color"])
             try:
-                camera_config = config.get_camera_config()
-                if camera_config.get("auto_debayer", False):
-                    debayer_method = camera_config.get("debayer_method", "RGGB")
-                    if debayer_method in ["RGGB", "GRBG", "GBRG", "BGGR"]:
-                        is_color_camera = True
-                        bayer_pattern = debayer_method
-                        if logger:
-                            logger.debug(f"Color camera via config, Bayer: {bayer_pattern}")
+                is_color_camera = bool(color_hint)
             except Exception:
                 pass
+
+        # Probe config for color type and debayer method (correct section: frame_processing)
+        try:
+            camera_cfg = config.get_camera_config()
+            frame_cfg = config.get_frame_processing_config()
+            if not is_color_camera and str(camera_cfg.get("type", "")).lower() == "color":
+                is_color_camera = True
+            # If no pattern found, take method from frame config
+            if bayer_pattern is None:
+                debayer_method = frame_cfg.get("debayer_method", "RGGB")
+                if isinstance(debayer_method, str) and debayer_method in [
+                    "RGGB",
+                    "GRBG",
+                    "GBRG",
+                    "BGGR",
+                ]:
+                    bayer_pattern = debayer_method
+        except Exception:
+            pass
 
         # Convert to uint16 for processing consistency
         if image_array.dtype != np.uint16:
@@ -104,8 +129,15 @@ def convert_camera_data_to_opencv(
             elif len(image_array.shape) == 3:
                 if image_array.shape[2] == 4:
                     result_image = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGR)
-                else:
+                elif image_array.shape[2] == 3:
                     result_image = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+                else:
+                    # Unknown channel layout; convert each channel to uint8 and stack
+                    ch = [
+                        normalize_to_uint8(image_array[:, :, i], config, logger)
+                        for i in range(image_array.shape[2])
+                    ]
+                    result_image = np.dstack(ch)
             else:
                 result_image = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
 
