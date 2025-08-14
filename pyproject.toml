@@ -1,9 +1,11 @@
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 ignore = ["E203"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["code"]
 force-sort-within-sections = true
 

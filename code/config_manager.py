@@ -30,7 +30,7 @@ import logging
 import os
 from typing import Any, Dict, Optional, cast
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 
 class ConfigManager:

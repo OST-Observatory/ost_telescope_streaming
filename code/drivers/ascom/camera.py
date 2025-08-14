@@ -4,19 +4,9 @@ ASCOM Camera integration for QHY, ZWO and other ASCOM-compatible cameras.
 Provides methods to connect, configure, expose, and download images.
 """
 
-# mypy: ignore-errors
+# mypy: disable-error-code="attr-defined"
 
-from typing import Any, Optional
-
-# Optional runtime dependencies
-try:  # pragma: no cover - optional dependency in some environments
-    import cv2  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    cv2 = None  # type: ignore[assignment]
-try:  # pragma: no cover - optional dependency in some environments
-    import numpy as np  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    np = None  # type: ignore[assignment]
+from typing import Any, Dict, Optional
 
 from status import CameraStatus, error_status, success_status, warning_status
 
@@ -55,7 +45,7 @@ class ASCOMCamera:
         self.camera = None
 
         # Store last known cooling values to bypass ASCOM driver cache issues
-        self.last_cooling_info = {
+        self.last_cooling_info: Dict[str, Any] = {
             "temperature": None,
             "cooler_power": None,
             "cooler_on": None,
@@ -470,7 +460,7 @@ class ASCOMCamera:
             )
 
             # Check if cooling is working
-            if new_cooler_on and new_power is not None and new_power > 0:
+            if bool(new_cooler_on) and (new_power is not None and new_power > 0):
                 self.logger.info(
                     "Cooling set successfully: target=%s°C, current=%s°C, power=%s%%",
                     target_temp,
@@ -478,7 +468,7 @@ class ASCOMCamera:
                     new_power,
                 )
                 return success_status(f"Cooling set to {target_temp}°C", details=details)
-            elif new_cooler_on:
+            elif bool(new_cooler_on):
                 self.logger.info(
                     f"Cooling set: target={target_temp}°C, current={new_temp}°C, cooler on"
                 )
@@ -762,11 +752,10 @@ class ASCOMCamera:
                 if has_valid_cache:
                     self.logger.info("QHY camera detected - using cached cooling info")
                     return self.get_cached_cooling_info()
-                else:
-                    self.logger.info(
-                        "QHY camera detected - no valid cache, using fresh cooling info method"
-                    )
-                    return self.get_fresh_cooling_info()
+                self.logger.info(
+                    "QHY camera detected - no valid cache, using fresh cooling info method"
+                )
+                return self.get_fresh_cooling_info()
             else:
                 # For other cameras, try normal method first, then fresh if needed
                 self.logger.info("Non-QHY camera - trying normal cooling info method")
@@ -821,11 +810,10 @@ class ASCOMCamera:
 
     def _is_qhy_filter_wheel(self, device_type: str) -> bool:
         """Check if this is a QHY filter wheel."""
-        return (
-            device_type == "separate"
-            and self.filter_wheel_driver_id
-            and ("QHY" in self.filter_wheel_driver_id or "QHYCFW" in self.filter_wheel_driver_id)
-        )
+        if device_type != "separate" or not self.filter_wheel_driver_id:
+            return False
+        driver_id = self.filter_wheel_driver_id
+        return ("QHY" in driver_id) or ("QHYCFW" in driver_id)
 
     def get_filter_names(self) -> CameraStatus:
         if not self.has_filter_wheel():
@@ -1034,31 +1022,36 @@ class ASCOMCamera:
         """
         try:
             # Ensure optional deps are available
-            if cv2 is None or np is None:
+            try:
+                import cv2 as _cv2
+                import numpy as _np
+            except Exception:
                 return error_status("OpenCV and numpy are required for debayering")
 
             # Use provided pattern or auto-detect from sensor_type
             if pattern is None:
-                pattern = self.sensor_type
+                detected = self.sensor_type
+                if detected is None:
+                    return error_status("No Bayer pattern available and none provided")
+                pattern = detected
 
-            if pattern is None:
-                return error_status("No Bayer pattern available and none provided")
+            # pattern is guaranteed non-None here
 
             # Apply debayering based on detected pattern
             if pattern == "RGGB":
-                bayer_pattern = cv2.COLOR_BayerRG2BGR
+                bayer_pattern = _cv2.COLOR_BayerRG2BGR
             elif pattern == "GRBG":
-                bayer_pattern = cv2.COLOR_BayerGR2BGR
+                bayer_pattern = _cv2.COLOR_BayerGR2BGR
             elif pattern == "GBRG":
-                bayer_pattern = cv2.COLOR_BayerGB2BGR
+                bayer_pattern = _cv2.COLOR_BayerGB2BGR
             elif pattern == "BGGR":
-                bayer_pattern = cv2.COLOR_BayerBG2BGR
+                bayer_pattern = _cv2.COLOR_BayerBG2BGR
             else:
                 return error_status(f"Unsupported Bayer pattern: {pattern}")
 
             # Convert to numpy array and apply debayering
-            image_array = np.array(img_array)
-            debayered_image = cv2.cvtColor(image_array, bayer_pattern)
+            image_array = _np.array(img_array)
+            debayered_image = _cv2.cvtColor(image_array, bayer_pattern)
 
             return success_status(f"Image debayered with {pattern} pattern", data=debayered_image)
 
@@ -1095,7 +1088,7 @@ class ASCOMCamera:
                     return "BGGR"
 
             # Fallback: check if camera is color
-            if hasattr(self.camera, "IsColor") and self.camera.IsColor:
+            if hasattr(self.camera, "IsColor") and bool(self.camera.IsColor):
                 return "RGGB"  # Default assumption for color cameras
 
             return None  # Assume monochrome
@@ -1251,7 +1244,7 @@ class ASCOMCamera:
             self.logger.info(f"Waiting for cooling stabilization (timeout: {timeout}s)...")
 
             start_time = time.time()
-            last_power = None
+            last_power: Optional[float] = None
             stable_count = 0
 
             while time.time() - start_time < timeout:
@@ -1270,13 +1263,16 @@ class ASCOMCamera:
                 )
 
                 # Check if power is changing
-                if current_power is not None:
-                    if last_power is not None and abs(current_power - last_power) < 1.0:
-                        stable_count += 1
-                    else:
-                        stable_count = 0
-
-                    last_power = current_power
+                current_power_val: Optional[float] = (
+                    float(current_power) if isinstance(current_power, (int, float)) else None
+                )
+                if current_power_val is not None:
+                    if last_power is not None:
+                        if abs(current_power_val - last_power) < 1.0:
+                            stable_count += 1
+                        else:
+                            stable_count = 0
+                    last_power = current_power_val
 
                     # If power is stable for 3 consecutive readings, consider it stabilized
                     if stable_count >= 3:

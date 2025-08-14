@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# mypy: disable-error-code=unreachable
 """
 Dark Capture Module for Telescope Streaming System
 
@@ -518,21 +517,8 @@ class DarkCapture:
                     # Create a Status object with both data and details for FITS saving
                     from status import success_status
 
-                    # Ensure frame_data is not None and is a numpy array before creating status
-                    if frame_data is None:
-                        self.logger.warning(
-                            "Failed to capture dark %d: frame_data is None before creating status",
-                            i + 1,
-                        )
-                        continue
-
-                    if not isinstance(frame_data, np.ndarray):
-                        self.logger.error(
-                            "Failed to capture dark %d: not a numpy array before status: %s",
-                            i + 1,
-                            type(frame_data),
-                        )
-                        continue
+                    # Ensure frame_data is a numpy array before creating status
+                    # The previous validations already checked for None and type
 
                     frame_with_details = success_status(
                         "Frame captured", data=frame_data, details=frame_details
@@ -552,14 +538,6 @@ class DarkCapture:
                     self.logger.debug("Frame data type: %s", type(frame_data))
                     self.logger.debug("Frame data shape: %s", getattr(frame_data, "shape", "N/A"))
                     self.logger.debug("Frame data dtype: %s", getattr(frame_data, "dtype", "N/A"))
-
-                    # Ensure frame_data is a numpy array before saving
-                    if not isinstance(frame_data, np.ndarray):
-                        self.logger.error(
-                            "Frame data is not a numpy array before saving: %s",
-                            type(frame_data),
-                        )
-                        continue
 
                     save_status = self.video_capture.save_frame(frame_with_details, filepath)
 
@@ -594,7 +572,7 @@ class DarkCapture:
                             "Failed to save dark %d: %s", i + 1, save_status.message
                         )
 
-                        # Small delay between captures
+                    # Small delay between captures
                     time.sleep(0.1)
 
                     # Debug: Print progress every 10 frames
@@ -612,13 +590,7 @@ class DarkCapture:
                 self.num_darks,
             )
 
-            # Ensure captured_files is a list
-            if not isinstance(captured_files, list):
-                self.logger.warning(
-                    "captured_files is not a list: %s, converting to empty list",
-                    type(captured_files),
-                )
-                captured_files = []
+            # captured_files is a list of file paths
 
             return success_status(
                 f"Dark series for {exposure_time:.3f}s captured: {len(captured_files)} frames",

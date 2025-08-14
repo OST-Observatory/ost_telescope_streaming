@@ -6,15 +6,10 @@ Handles video capture, frame processing, calibration metadata, and cooling lifec
 
 from __future__ import annotations
 
-import time
-
-try:
-    import cv2  # optional at import time; used only for OpenCV camera
-except Exception:  # pragma: no cover
-    cv2 = None
 import logging
 from pathlib import Path
 import threading
+import time
 from typing import Any, Dict, Optional
 
 from calibration_applier import CalibrationApplier
@@ -80,7 +75,9 @@ class VideoCapture:
 
         # Setup
         self._ensure_directories()
-        self._initialize_camera()
+        init_status = self._initialize_camera()
+        if not init_status.is_success:
+            self.logger.warning(f"Camera initialization: {init_status.message}")
         # Reusable writer instance
         try:
             from services.frame_writer import FrameWriter
@@ -95,10 +92,9 @@ class VideoCapture:
                 from services.cooling.service import CoolingService
 
                 self.cooling_service = CoolingService(self.config, logger=self.logger)
-                if self.camera:
-                    self.cooling_service.initialize(self.camera)
-                else:
-                    self.logger.warning("Cooling enabled but no camera available yet")
+                camera_obj: Optional[Any] = self.camera
+                if camera_obj is not None:
+                    self.cooling_service.initialize(camera_obj)
             except Exception as e:
                 self.logger.warning(f"Cooling service unavailable: {e}")
 
@@ -115,24 +111,26 @@ class VideoCapture:
 
     def _initialize_camera(self) -> CameraStatus:
         if self.camera_type == "opencv":
-            if cv2 is None:
+            try:
+                import cv2 as _cv2  # local import to avoid hard dependency at import time
+            except Exception:
                 return error_status("OpenCV (cv2) not available")
-            self.cap = cv2.VideoCapture(self.camera_index)
+            self.cap = _cv2.VideoCapture(self.camera_index)
             if self.cap is None or not self.cap.isOpened():
                 return error_status(
                     f"Failed to open camera {self.camera_index}",
                     details={"camera_index": self.camera_index},
                 )
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-            self.cap.set(cv2.CAP_PROP_FPS, self.frame_rate)
+            self.cap.set(_cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+            self.cap.set(_cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+            self.cap.set(_cv2.CAP_PROP_FPS, self.frame_rate)
             if not self.enable_cooling:
-                self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
+                self.cap.set(_cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
                 exposure_cv = int(self.exposure_time * 1_000_000)
-                self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_cv)
-            if hasattr(cv2, "CAP_PROP_GAIN"):
+                self.cap.set(_cv2.CAP_PROP_EXPOSURE, exposure_cv)
+            if hasattr(_cv2, "CAP_PROP_GAIN"):
                 try:
-                    self.cap.set(cv2.CAP_PROP_GAIN, float(self.gain))
+                    self.cap.set(_cv2.CAP_PROP_GAIN, float(self.gain))
                 except Exception:
                     pass
             # Wrap in unified adapter for OpenCV
