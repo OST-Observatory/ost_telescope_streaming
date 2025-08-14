@@ -12,9 +12,11 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
 from drivers.ascom.mount import ASCOMMount
+import pytest
 from test_utils import get_test_config, setup_logging
 
 
+@pytest.mark.integration
 def test_slewing_detection():
     """Test slewing detection with ASCOM mount."""
 
@@ -31,7 +33,7 @@ def test_slewing_detection():
         logger.info("Mount connected successfully")
     except Exception as e:
         logger.error(f"Failed to connect to mount: {e}")
-        return False
+        pytest.skip(f"ASCOM mount connection unavailable: {e}")
 
     # Test 1: Check current slewing status
     logger.info("=" * 50)
@@ -45,7 +47,7 @@ def test_slewing_detection():
         logger.info(f"Status details: {slewing_status.details}")
     else:
         logger.error(f"Failed to get slewing status: {slewing_status.message}")
-        return False
+        raise AssertionError("Failed to get slewing status")
 
     # Test 2: Get full mount status
     logger.info("=" * 50)
@@ -67,7 +69,7 @@ def test_slewing_detection():
                 logger.info(f"{key}: {value}")
     else:
         logger.error(f"Failed to get mount status: {mount_status.message}")
-        return False
+        raise AssertionError("Failed to get mount status")
 
     # Test 3: Continuous slewing monitoring (if currently slewing)
     if is_slewing:
@@ -175,7 +177,7 @@ def test_slewing_detection():
     logger.info("✅ All tests completed successfully!")
     logger.info("The slewing detection is working correctly.")
 
-    return True
+    assert True
 
 
 def main():

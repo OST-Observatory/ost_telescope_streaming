@@ -1,6 +1,6 @@
 import logging as _global_logging
 import os
-from pathlib import Path
+from pathlib import Path as _Path
 
 from config_manager import ConfigManager
 import pytest
@@ -19,9 +19,9 @@ HAS_ALPACA = _has_module("alpaca")
 CAMERA_CONNECTED = os.environ.get("OST_CAMERA_CONNECTED", "0") in ("1", "true", "yes")
 
 
-def pytest_ignore_collect(path, config):
-    """Skip certain tests when optional deps are missing."""
-    p = Path(str(path))
+def pytest_ignore_collect(collection_path: _Path, path, config):
+    """Skip certain tests when optional deps are missing. Uses pathlib Paths."""
+    p = collection_path
     name = p.name
 
     # Skip Alpaca-specific tests when alpaca lib is missing

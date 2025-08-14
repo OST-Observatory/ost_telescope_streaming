@@ -5,9 +5,11 @@ Tests both integrated and separate filter wheel drivers.
 """
 
 from drivers.ascom.camera import ASCOMCamera
+import pytest
 from test_utils import print_test_header, print_test_result, setup_test_environment
 
 
+@pytest.mark.integration
 def test_filter_wheel_functionality():
     """Test filter wheel functionality."""
     # Setup test environment
@@ -25,7 +27,7 @@ def test_filter_wheel_functionality():
         connect_status = camera.connect()
         if not connect_status.is_success:
             print_test_result(False, f"Connection failed: {connect_status.message}")
-            return
+            pytest.skip("ASCOM camera not connected")
 
         print_test_result(True, "Camera connected successfully")
 
@@ -128,10 +130,10 @@ def test_filter_wheel_functionality():
                         print_test_result(
                             False, f"Failed to restore position: {restore_status.message}"
                         )
-                else:
-                    print("   Skipping restore (original position was -1)")
             else:
-                print("\n5. Skipping filter position change test (only one filter available)")
+                print("   Skipping restore (original position was -1)")
+        else:
+            print("\n5. Skipping filter position change test (only one filter available)")
 
         # Disconnect
         camera.disconnect()
@@ -142,6 +144,7 @@ def test_filter_wheel_functionality():
     except Exception as e:
         print_test_result(False, f"Test failed with exception: {e}")
         logger.exception("Test failed")
+        pytest.skip(f"Filter wheel test skipped: {e}")
 
 
 if __name__ == "__main__":

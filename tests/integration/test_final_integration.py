@@ -11,9 +11,11 @@ import sys
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
+import pytest
 from test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
+@pytest.mark.integration
 def test_automated_platesolve2_integration() -> bool:
     """Tests the automated PlateSolve 2 integration.
     Returns:
@@ -73,6 +75,7 @@ def test_automated_platesolve2_integration() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_video_processor_integration():
     """Test integration with video processor."""
     print("\n--- Testing video processor integration ---")
@@ -109,6 +112,7 @@ def test_video_processor_integration():
         return False
 
 
+@pytest.mark.integration
 def test_overlay_runner_integration():
     """Test integration with overlay runner."""
     print("\n--- Testing overlay runner integration ---")
@@ -132,6 +136,7 @@ def test_overlay_runner_integration():
         return False
 
 
+@pytest.mark.integration
 def test_configuration(config) -> bool:
     """Tests the configuration for automated plate solving.
     Returns:
@@ -177,6 +182,7 @@ def test_configuration(config) -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_command_line_format():
     """Test the correct command line format."""
     print("\n--- Testing command line format ---")
@@ -242,6 +248,7 @@ def test_command_line_format():
         return False
 
 
+@pytest.mark.integration
 def test_complete_workflow() -> bool:
     """Tests the complete workflow from image to overlay.
     Returns:

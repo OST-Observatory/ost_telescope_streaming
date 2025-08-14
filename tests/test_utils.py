@@ -79,8 +79,9 @@ def get_ascom_driver_from_config(config):
     Returns:
         ASCOM driver ID string
     """
-    video_config = config.get_video_config()
-    return video_config["ascom"]["ascom_driver"]
+    camera_cfg = config.get_camera_config()
+    ascom_cfg = camera_cfg.get("ascom", {})
+    return ascom_cfg.get("ascom_driver", "")
 
 
 def parse_test_args(description="Test script"):

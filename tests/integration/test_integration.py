@@ -11,9 +11,11 @@ import sys
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
+import pytest
 from test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
+@pytest.mark.integration
 def test_plate_solver() -> bool:
     """Tests the plate solver module.
     Returns:
@@ -53,6 +55,7 @@ def test_plate_solver() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_video_processor() -> bool:
     """Tests the VideoProcessor.
     Returns:
@@ -83,6 +86,7 @@ def test_video_processor() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_config_integration(config) -> bool:
     """Tests the configuration integration.
     Returns:
@@ -114,6 +118,7 @@ def test_config_integration(config) -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_overlay_generator() -> bool:
     """Tests the OverlayGenerator class.
     Returns:
@@ -168,6 +173,7 @@ def test_overlay_generator() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_overlay_generation() -> bool:
     """Tests overlay generation.
     Returns:
@@ -207,6 +213,7 @@ def test_overlay_generation() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_overlay_runner() -> bool:
     """Tests the OverlayRunner.
     Returns:
@@ -237,6 +244,7 @@ def test_overlay_runner() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_modular_architecture() -> bool:
     """Tests the modular architecture.
     Returns:
@@ -271,6 +279,7 @@ def test_modular_architecture() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_automated_platesolve2_integration() -> bool:
     """Tests the automated PlateSolve2 integration.
     Returns:

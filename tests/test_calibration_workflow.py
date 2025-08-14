@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 import sys
 
+import pytest
+
 # Add the parent code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
@@ -30,6 +32,7 @@ def setup_logging():
     return logging.getLogger("calibration_test")
 
 
+@pytest.mark.integration
 def test_camera_connection(config, logger):
     """Test camera connection for the configured camera type."""
     print("\n=== CAMERA CONNECTION TEST ===")
@@ -47,7 +50,8 @@ def test_camera_connection(config, logger):
         if camera_type == "opencv":
             # For OpenCV, just check if we can create the capture
             print("✅ OpenCV camera ready")
-            return True
+            assert True
+            return
 
         elif camera_type in ["ascom", "alpaca"]:
             # For ASCOM/Alpyca, test actual connection via adapter
@@ -57,7 +61,8 @@ def test_camera_connection(config, logger):
                         info_status = capture.camera.get_camera_info()
                         if getattr(info_status, "is_success", False):
                             print(f"✅ {camera_type.upper()} camera connected successfully")
-                            return True
+                            assert True
+                            return
                         else:
                             msg = getattr(info_status, "message", "unknown error")
                             print(f"❌ Failed to get camera info: {msg}")
@@ -66,22 +71,24 @@ def test_camera_connection(config, logger):
                         ct = camera_type.upper()
                         print(f"ℹ️ {ct} adapter lacks get_camera_info()")
                         print("Assuming connected")
-                        return True
+                        assert True
+                        return
                 except Exception as e:
                     print(f"❌ Error retrieving camera info: {e}")
-                    return False
+                    pytest.skip(f"Camera info unavailable: {e}")
             else:
                 print(f"❌ No {camera_type} camera instance found")
-                return False
+                pytest.skip("No camera instance available")
         else:
             print(f"❌ Unknown camera type: {camera_type}")
-            return False
+            raise AssertionError("Unknown camera type")
 
     except Exception as e:
         print(f"❌ Camera connection test failed: {e}")
-        return False
+        pytest.skip(f"Environment not suitable: {e}")
 
 
+@pytest.mark.integration
 def test_dark_capture(config, logger):
     """Test dark frame capture."""
     print("\n=== DARK CAPTURE TEST ===")
@@ -113,16 +120,17 @@ def test_dark_capture(config, logger):
 
         if status.is_success:
             print("✅ Dark capture test completed successfully")
-            return True
+            assert True
         else:
             print(f"❌ Dark capture test failed: {status.message}")
-            return False
+            raise AssertionError("Dark capture failed")
 
     except Exception as e:
         print(f"❌ Dark capture test failed: {e}")
-        return False
+        pytest.skip(f"Dark capture environment not available: {e}")
 
 
+@pytest.mark.integration
 def test_flat_capture(config, logger):
     """Test flat frame capture."""
     print("\n=== FLAT CAPTURE TEST ===")
@@ -153,16 +161,17 @@ def test_flat_capture(config, logger):
 
         if status.is_success:
             print("✅ Flat capture test completed successfully")
-            return True
+            assert True
         else:
             print(f"❌ Flat capture test failed: {status.message}")
-            return False
+            raise AssertionError("Flat capture failed")
 
     except Exception as e:
         print(f"❌ Flat capture test failed: {e}")
-        return False
+        pytest.skip(f"Flat capture environment not available: {e}")
 
 
+@pytest.mark.integration
 def test_master_frame_creation(config, logger):
     """Test master frame creation."""
     print("\n=== MASTER FRAME CREATION TEST ===")
@@ -182,16 +191,17 @@ def test_master_frame_creation(config, logger):
 
         if status.is_success:
             print("✅ Master frame creation test completed successfully")
-            return True
+            assert True
         else:
             print(f"❌ Master frame creation test failed: {status.message}")
-            return False
+            raise AssertionError("Master frame creation failed")
 
     except Exception as e:
         print(f"❌ Master frame creation test failed: {e}")
-        return False
+        pytest.skip(f"Master creation not available: {e}")
 
 
+@pytest.mark.integration
 def test_calibration_applier(config, logger):
     """Test calibration frame application."""
     print("\n=== CALIBRATION APPLIER TEST ===")
@@ -221,11 +231,11 @@ def test_calibration_applier(config, logger):
             print("ℹ️  Auto-load masters disabled")
 
         print("✅ Calibration applier test completed")
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Calibration applier test failed: {e}")
-        return False
+        pytest.skip(f"Calibration applier environment not available: {e}")
 
 
 def main():

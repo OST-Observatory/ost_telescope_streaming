@@ -10,6 +10,7 @@ import sys
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import numpy as np
+import pytest
 
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
@@ -17,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 from test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
-def test_configuration(config) -> bool:
+def test_configuration(config) -> None:
     """Tests the configuration system.
     Returns:
         bool: True on success, False otherwise.
@@ -55,18 +56,23 @@ def test_configuration(config) -> bool:
         print(f"Plate solving enabled: {plate_solve_config.get('auto_solve', False)}")
         print(f"PlateSolve 2 path: {plate_solve_config.get('platesolve2_path', 'Not set')}")
 
-        print("✓ Configuration test completed successfully!")
-        return True
+        # Assertions instead of returning booleans
+        assert config.config is not None
+        assert isinstance(telescope_config, dict)
+        assert isinstance(camera_config, dict)
+        assert isinstance(video_config, dict)
+        assert isinstance(plate_solve_config, dict)
 
     except Exception as e:
         print(f"✗ Error during configuration test: {e}")
         import traceback
 
         traceback.print_exc()
-        return False
+        raise AssertionError("Configuration test failed") from e
 
 
-def test_simbad() -> bool:
+@pytest.mark.integration
+def test_simbad() -> None:
     """Tests SIMBAD queries.
     Returns:
         bool: True on success, False otherwise.
@@ -109,18 +115,17 @@ def test_simbad() -> bool:
                     print(f"  {col}: {row[col]}")
                 print()
 
-        print("✓ SIMBAD test completed!")
-        return True
+        assert True
 
     except Exception as e:
         print(f"✗ Error during SIMBAD test: {e}")
         import traceback
 
         traceback.print_exc()
-        return False
+        pytest.skip(f"SIMBAD test skipped due to error: {e}")
 
 
-def test_coordinates() -> bool:
+def test_coordinates() -> None:
     """Tests coordinate conversion.
     Returns:
         bool: True on success, False otherwise.
@@ -179,15 +184,17 @@ def test_coordinates() -> bool:
             except Exception as e:
                 print(f"{name}: Error - {e}")
 
-        print("✓ Coordinate conversion test completed!")
-        return True
+        # Basic sanity assertions
+        cx, cy = skycoord_to_pixel(center_coord, center_coord, image_size, fov_deg)
+        assert cx == image_size[0] // 2
+        assert cy == image_size[1] // 2
 
     except Exception as e:
         print(f"✗ Error during coordinate test: {e}")
         import traceback
 
         traceback.print_exc()
-        return False
+        raise AssertionError("Coordinate conversion test failed") from e
 
 
 def main() -> None:

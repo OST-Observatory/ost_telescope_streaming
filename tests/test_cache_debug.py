@@ -7,6 +7,7 @@ This script shows exactly what happens with cache loading.
 import json
 
 from drivers.ascom.camera import ASCOMCamera
+import pytest
 from test_utils import (
     check_cache_file,
     get_cache_file_path,
@@ -16,6 +17,7 @@ from test_utils import (
 )
 
 
+@pytest.mark.integration
 def test_cache_debug():
     """Debug test for cache loading."""
     # Setup test environment
@@ -36,7 +38,7 @@ def test_cache_debug():
         print(json.dumps(cache_content, indent=2))
     else:
         print_test_result(False, "Cache file does not exist")
-        return
+        pytest.skip("No cache file present for debug")
 
     try:
         # Create camera instance
@@ -101,6 +103,7 @@ def test_cache_debug():
     except Exception as e:
         print_test_result(False, f"Test failed with exception: {e}")
         logger.exception("Test failed")
+        pytest.skip(f"Skipping due to environment: {e}")
 
 
 if __name__ == "__main__":

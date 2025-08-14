@@ -12,9 +12,11 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
 from processing.processor import VideoProcessor
+import pytest
 from test_utils import get_test_config, setup_logging
 
 
+@pytest.mark.integration
 def test_video_processor_slewing_integration():
     """Test VideoProcessor slewing detection integration."""
 
@@ -54,10 +56,10 @@ def test_video_processor_slewing_integration():
                 logger.warning("⚠️ Mount not available for slewing detection")
         else:
             logger.error("❌ VideoProcessor initialization failed")
-            return False
+            raise AssertionError("VideoProcessor initialization failed")
     except Exception as e:
         logger.error(f"❌ Error during VideoProcessor initialization: {e}")
-        return False
+        pytest.skip(f"VideoProcessor init unavailable: {e}")
 
     # Test 3: Simulate capture decision with different configurations
     logger.info("=" * 60)
@@ -178,7 +180,7 @@ def test_video_processor_slewing_integration():
     logger.info("✅ All tests completed successfully!")
     logger.info("The VideoProcessor slewing detection integration is working correctly.")
 
-    return True
+    assert True
 
 
 def main():

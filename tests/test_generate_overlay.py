@@ -1,81 +1,59 @@
-import logging
-from pathlib import Path
-import sys
+import types
+from typing import Any, Dict
 
-# Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent / "code"))
+import pytest
 
-from config_manager import ConfigManager
 
-try:
+class _StubConfig:
+    def get_overlay_config(self) -> Dict[str, Any]:
+        return {
+            "field_of_view": 1.5,
+            "magnitude_limit": 10.0,
+            "include_no_magnitude": True,
+            "image_size": [80, 60],
+            "max_name_length": 10,
+            "default_filename": "overlay.png",
+            "info_panel": {"enabled": False},
+            "title": {"enabled": False},
+            "secondary_fov": {"enabled": False},
+            "coordinates": {"ra_increases_left": True},
+        }
+
+    def get_display_config(self) -> Dict[str, Any]:
+        return {
+            "object_color": [255, 0, 0],
+            "text_color": [255, 255, 255],
+            "marker_size": 3,
+            "text_offset": [8, -8],
+        }
+
+    def get_advanced_config(self) -> Dict[str, Any]:
+        return {"save_empty_overlays": True, "debug_simbad": False}
+
+    def get_platform_config(self) -> Dict[str, Any]:
+        return {"fonts": {"linux": []}}
+
+    def get_telescope_config(self) -> Dict[str, Any]:
+        return {"focal_length": 1000, "aperture": 200, "focal_ratio": 5.0, "type": "Newtonian"}
+
+    def get_camera_config(self) -> Dict[str, Any]:
+        return {
+            "camera_type": "opencv",
+            "sensor_width": 23.5,
+            "sensor_height": 15.6,
+            "pixel_size": 3.76,
+            "bit_depth": 16,
+        }
+
+
+def test_generate_overlay_smoke(monkeypatch: pytest.MonkeyPatch, tmp_path):
     from overlay.generator import OverlayGenerator
-except Exception:
-    from generate_overlay import OverlayGenerator
-import argparse
 
+    monkeypatch.setitem(__import__("sys").modules, "astroquery", types.SimpleNamespace())
+    out = tmp_path / "ovl.png"
+    gen = OverlayGenerator(config=_StubConfig())
+    path_str = gen.generate_overlay(ra_deg=10.0, dec_deg=20.0, output_file=str(out))
 
-def main():
-    parser = argparse.ArgumentParser(description="Generates an overlay based on RA/Dec.")
-    parser.add_argument("--config", type=str, help="Path to configuration file")
+    import os
 
-    # Parse config argument first to load the right configuration
-    args, remaining = parser.parse_known_args()
-
-    # Load configuration
-    if args.config:
-        config = ConfigManager(config_path=args.config)
-    else:
-        config = ConfigManager()
-
-    # Recreate parser with the loaded configuration defaults
-    parser = argparse.ArgumentParser(description="Generates an overlay based on RA/Dec.")
-    parser.add_argument("--config", type=str, help="Path to configuration file")
-    parser.add_argument("--ra", type=float, required=True, help="Right Ascension in degrees")
-    parser.add_argument("--dec", type=float, required=True, help="Declination in degrees")
-    parser.add_argument("--output", type=str, help="Output file (default: from config)")
-    parser.add_argument(
-        "--fov-width", type=float, help="Field of view width in degrees (from plate-solving)"
-    )
-    parser.add_argument(
-        "--fov-height", type=float, help="Field of view height in degrees (from plate-solving)"
-    )
-    parser.add_argument(
-        "--position-angle", type=float, help="Position angle in degrees (from plate-solving)"
-    )
-    parser.add_argument("--image-width", type=int, help="Image width in pixels (from camera)")
-    parser.add_argument("--image-height", type=int, help="Image height in pixels (from camera)")
-    args = parser.parse_args()
-
-    # Prepare image_size tuple if both width and height are provided
-    image_size = None
-    if args.image_width is not None and args.image_height is not None:
-        image_size = (args.image_width, args.image_height)
-    elif args.image_width is not None or args.image_height is not None:
-        print("Warning: Provide both --image-width and --image-height for image_size")
-
-    try:
-        logger = logging.getLogger("overlay_cli")
-        generator = OverlayGenerator(config=config, logger=logger)
-        status = generator.generate_overlay(
-            args.ra,
-            args.dec,
-            args.output,
-            args.fov_width,
-            args.fov_height,
-            args.position_angle,
-            image_size,
-        )
-        print(f"Status: {status.level.value.upper()} - {status.message}")
-        if status.details:
-            print(f"Details: {status.details}")
-        if status.is_success:
-            print(f"Overlay file: {status.data}")
-        else:
-            sys.exit(1)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    assert os.path.exists(path_str)

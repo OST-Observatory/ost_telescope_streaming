@@ -11,6 +11,8 @@ from pathlib import Path
 import sys
 import time
 
+import pytest
+
 # Add the parent code directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
@@ -27,6 +29,7 @@ def setup_logging():
     return logging.getLogger("overlay_runner_test")
 
 
+@pytest.mark.integration
 def test_alpaca_connection(config, logger):
     """Test Alpyca camera connection."""
     print("\n=== ALPYCA CONNECTION TEST ===")
@@ -73,6 +76,7 @@ def test_alpaca_connection(config, logger):
         return False
 
 
+@pytest.mark.integration
 def test_single_capture(config, logger):
     """Test single frame capture with overlay."""
     print("\n=== SINGLE CAPTURE TEST ===")
@@ -103,6 +107,7 @@ def test_single_capture(config, logger):
         return False
 
 
+@pytest.mark.integration
 def test_continuous_capture(config, logger, duration=30):
     """Test continuous capture for a short duration."""
     print(f"\n=== CONTINUOUS CAPTURE TEST ({duration}s) ===")
@@ -143,6 +148,7 @@ def test_continuous_capture(config, logger, duration=30):
         return False
 
 
+@pytest.mark.integration
 def test_plate_solving(config, logger):
     """Test plate solving functionality."""
     print("\n=== PLATE SOLVING TEST ===")
@@ -175,6 +181,7 @@ def test_plate_solving(config, logger):
         return False
 
 
+@pytest.mark.integration
 def test_overlay_generation(config, logger):
     """Test overlay generation."""
     print("\n=== OVERLAY GENERATION TEST ===")

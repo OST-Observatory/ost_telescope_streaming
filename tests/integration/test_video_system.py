@@ -9,6 +9,7 @@ import sys
 import time
 
 import cv2
+import pytest
 
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
@@ -53,6 +54,7 @@ def list_cameras() -> list[int]:
     return available_cameras
 
 
+@pytest.mark.integration
 def test_camera_access(camera_index: int) -> bool:
     """Test if camera is accessible (not blocked by other applications).
     Args:
@@ -82,6 +84,7 @@ def test_camera_access(camera_index: int) -> bool:
     return True
 
 
+@pytest.mark.integration
 def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> bool:
     """Captures a single frame from the specified camera.
     Args:
@@ -126,6 +129,7 @@ def capture_frame(camera_index: int, output_path: str = "test_frame.jpg") -> boo
     return bool(success)
 
 
+@pytest.mark.integration
 def test_config_manager(config) -> bool:
     """Tests the ConfigManager with video settings.
     Returns:
@@ -165,6 +169,7 @@ def test_config_manager(config) -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_video_capture_module() -> bool:
     """Tests the VideoCapture module.
     Returns:
@@ -207,6 +212,7 @@ def test_video_capture_module() -> bool:
         return False
 
 
+@pytest.mark.integration
 def test_video_processor():
     """Test video processor module."""
     print("\nTesting video processor module...")
@@ -234,6 +240,7 @@ def test_video_processor():
         return False
 
 
+@pytest.mark.integration
 def test_overlay_runner_integration():
     """Test overlay runner integration."""
     print("\nTesting overlay runner integration...")
@@ -254,6 +261,7 @@ def test_overlay_runner_integration():
         return False
 
 
+@pytest.mark.integration
 def test_actual_camera_connection() -> bool:
     """Tests the actual camera connection (optional).
     Returns:

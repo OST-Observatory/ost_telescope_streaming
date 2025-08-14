@@ -17,7 +17,7 @@ from test_utils import parse_test_args, print_test_header, setup_test_environmen
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
 
-def test_exception_hierarchy() -> bool:
+def test_exception_hierarchy() -> None:
     """Tests the exception hierarchy."""
     print("Testing exception hierarchy...")
 
@@ -54,14 +54,14 @@ def test_exception_hierarchy() -> bool:
         assert isinstance(camera_error, TelescopeStreamingError)
 
         print("✓ Exception hierarchy test completed")
-        return True
+        assert True
 
     except Exception as e:
         print(f"✗ Exception hierarchy test failed: {e}")
-        return False
+        raise AssertionError("Exception hierarchy test failed") from e
 
 
-def test_status_objects() -> bool:
+def test_status_objects() -> None:
     """Tests the status objects."""
     print("\nTesting status objects...")
 
@@ -128,14 +128,14 @@ def test_status_objects() -> bool:
         print(f"✓ Stars: {plate_status.stars_detected}")
 
         print("✓ Status objects test completed")
-        return True
+        assert True
 
     except Exception as e:
         print(f"✗ Status objects test failed: {e}")
-        return False
+        raise AssertionError("Status objects test failed") from e
 
 
-def test_mount_integration() -> bool:
+def test_mount_integration() -> None:
     """Tests the integration with the mount module."""
     print("\nTesting mount integration...")
 
@@ -157,10 +157,10 @@ def test_mount_integration() -> bool:
         print(f"✓ Is success: {mount_status.is_success}")
 
         # Test error mount status
-        error_status = error_status("Mount not connected", details={"is_connected": False})
+        err_status = error_status("Mount not connected", details={"is_connected": False})
 
-        print(f"✓ Error status: {error_status}")
-        print(f"✓ Is error: {error_status.is_error}")
+        print(f"✓ Error status: {err_status}")
+        print(f"✓ Is error: {err_status.is_error}")
 
         # Test coordinate extraction
         if mount_status.is_success and mount_status.data:
@@ -168,14 +168,14 @@ def test_mount_integration() -> bool:
             print(f"✓ Extracted coordinates: RA={ra}°, Dec={dec}°")
 
         print("✓ Mount integration test completed")
-        return True
+        assert True
 
     except Exception as e:
         print(f"✗ Mount integration test failed: {e}")
-        return False
+        raise AssertionError("Mount integration test failed") from e
 
 
-def test_error_handling_patterns() -> bool:
+def test_error_handling_patterns() -> None:
     """Tests various error handling patterns."""
     print("\nTesting error handling patterns...")
 
@@ -229,11 +229,11 @@ def test_error_handling_patterns() -> bool:
         print(f"✓ Processed result: {result_text}")
 
         print("✓ Error handling patterns test completed")
-        return True
+        assert True
 
     except Exception as e:
         print(f"✗ Error handling patterns test failed: {e}")
-        return False
+        raise AssertionError("Error handling patterns test failed") from e
 
 
 def main() -> None:
@@ -259,10 +259,11 @@ def main() -> None:
 
     for test_name, test_func in tests:
         print(f"\n--- {test_name} ---")
-        if test_func():
+        try:
+            test_func()
             print(f"✓ {test_name} completed")
             passed += 1
-        else:
+        except AssertionError:
             print(f"✗ {test_name} failed")
 
     print("\n--- Results ---")

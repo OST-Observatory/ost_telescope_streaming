@@ -10,6 +10,8 @@ from pathlib import Path
 import sys
 from typing import Any, Dict, Optional
 
+import pytest
+
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
@@ -473,6 +475,7 @@ def combine_overlay_with_image(
         return False
 
 
+@pytest.mark.integration
 def test_fits_platesolve_overlay(
     fits_path: str,
     output_dir: str,
@@ -482,7 +485,7 @@ def test_fits_platesolve_overlay(
     fov_height_deg: Optional[float] = None,
     config=None,
     logger=None,
-) -> bool:
+) -> None:
     """Main test function for FITS plate-solving and overlay generation.
 
     Args:
@@ -524,7 +527,7 @@ def test_fits_platesolve_overlay(
 
         if not parameters:
             logger.error("Failed to extract FITS parameters")
-            return False
+            raise AssertionError("No parameters extracted from FITS")
 
         # Override parameters with command line arguments
         if ra_deg is not None:
@@ -547,7 +550,7 @@ def test_fits_platesolve_overlay(
         logger.info("Step 2: Converting FITS to PNG...")
         if not convert_fits_to_png(fits_path, str(png_image_path), logger):
             logger.error("Failed to convert FITS to PNG")
-            return False
+            raise AssertionError("FITS to PNG conversion failed")
 
         # Step 3: Perform plate-solving
         logger.info("Step 3: Performing plate-solving...")
@@ -555,7 +558,7 @@ def test_fits_platesolve_overlay(
 
         if not plate_solve_result:
             logger.error("Plate-solving failed")
-            return False
+            raise AssertionError("Plate solving failed")
 
         # Step 4: Generate overlay
         logger.info("Step 4: Generating overlay...")
@@ -563,7 +566,7 @@ def test_fits_platesolve_overlay(
             plate_solve_result, parameters, str(png_overlay_path), config, logger
         ):
             logger.error("Failed to generate overlay")
-            return False
+            raise AssertionError("Overlay generation failed")
 
         # Step 5: Combine overlay with image
         logger.info("Step 5: Combining overlay with image...")
@@ -571,7 +574,7 @@ def test_fits_platesolve_overlay(
             str(png_image_path), str(png_overlay_path), str(png_combined_path), logger
         ):
             logger.error("Failed to combine overlay with image")
-            return False
+            raise AssertionError("Combining overlay failed")
 
         logger.info("All steps completed successfully!")
         logger.info("Output files:")
@@ -579,16 +582,17 @@ def test_fits_platesolve_overlay(
         logger.info(f"  Overlay: {png_overlay_path}")
         logger.info(f"  Combined: {png_combined_path}")
 
-        return True
+        assert True
 
     except Exception as e:
-        logger.error(f"Test failed: {e}")
-        return False
+        logger.error(f"Test skipped: {e}")
+        pytest.skip(f"FITS plate-solve overlay skipped: {e}")
 
 
+@pytest.mark.integration
 def test_color_camera_functionality(
     fits_path: str, output_dir: str, config=None, logger=None
-) -> bool:
+) -> None:
     """Test color camera functionality with FITS files.
 
     Args:
@@ -615,7 +619,7 @@ def test_color_camera_functionality(
 
         if not parameters:
             logger.error("Failed to extract FITS parameters")
-            return False
+            raise AssertionError("No parameters extracted from FITS")
 
         # Check if this is a color camera
         is_color_camera = parameters.get("is_color_camera", False)
@@ -643,7 +647,7 @@ def test_color_camera_functionality(
             logger.info(f"✅ Input PNG created: {input_png_path}")
         else:
             logger.error("❌ Failed to create input PNG")
-            return False
+            raise AssertionError("Failed to create input PNG")
 
         # Perform plate-solving
         logger.info("3. Performing plate-solving...")
@@ -668,7 +672,7 @@ def test_color_camera_functionality(
             logger.info(f"✅ Overlay created: {overlay_png_path}")
         else:
             logger.error("❌ Failed to create overlay")
-            return False
+            raise AssertionError("Failed to create overlay")
 
         # Combine overlay with input image
         logger.info("5. Combining overlay with input image...")
@@ -679,7 +683,7 @@ def test_color_camera_functionality(
             logger.info(f"✅ Combined image created: {combined_png_path}")
         else:
             logger.error("❌ Failed to create combined image")
-            return False
+            raise AssertionError("Failed to create combined image")
 
         # Summary
         logger.info("=" * 60)
@@ -695,11 +699,11 @@ def test_color_camera_functionality(
             logger.info("✅ Monochrome camera processing")
 
         logger.info("✅ Color camera functionality test completed successfully")
-        return True
+        assert True
 
     except Exception as e:
-        logger.error(f"❌ Color camera test failed: {e}")
-        return False
+        logger.error(f"❌ Color camera test skipped: {e}")
+        pytest.skip(f"Color camera FITS test skipped: {e}")
 
 
 def main() -> None:

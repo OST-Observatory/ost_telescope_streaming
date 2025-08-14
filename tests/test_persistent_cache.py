@@ -17,6 +17,7 @@ import logging
 
 from config_manager import ConfigManager
 from drivers.ascom.camera import ASCOMCamera
+import pytest
 
 
 def setup_logging():
@@ -27,14 +28,17 @@ def setup_logging():
     return logging.getLogger("persistent_cache_test")
 
 
+@pytest.mark.integration
 def test_persistent_cache():
     """Test that cache persists between different camera instances."""
     logger = setup_logging()
     config = ConfigManager()
 
     # Get ASCOM driver from config
-    video_config = config.get_video_config()
-    driver_id = video_config["ascom"]["ascom_driver"]
+    try:
+        driver_id = config.get_camera_config()["ascom"]["ascom_driver"]
+    except Exception as e:
+        pytest.skip(f"ASCOM driver not configured: {e}")
 
     print("Persistent Cache Test")
     print("=" * 50)
@@ -93,7 +97,7 @@ def test_persistent_cache():
             camera1.disconnect()
         else:
             print(f"   ❌ Connection failed: {connect_status.message}")
-            return
+            pytest.skip("ASCOM camera connection unavailable")
 
         # Test 2: Create second camera instance and check if cache is loaded
         print("\n2. Creating second camera instance...")
