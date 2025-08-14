@@ -40,11 +40,35 @@ class CoolingManager:
     def set_target_temperature(self, target_temp: float) -> Status:
         try:
             self.logger.info(f"Setting cooling target temperature to {target_temp}°C")
-            if not self.camera.can_set_ccd_temperature:
+            # Capability detection: support various camera APIs (snake_case, CamelCase)
+            can_set = bool(
+                getattr(self.camera, "can_set_ccd_temperature", False)
+                or getattr(self.camera, "CanSetCCDTemperature", False)
+            )
+            if not can_set:
                 return error_status("Camera does not support cooling")
-            current_temp = self.camera.ccd_temperature
-            self.camera.set_ccd_temperature = target_temp
-            self.camera.cooler_on = True
+            # Read current temperature safely
+            current_temp = self._get_temperature()
+            # Set target temperature (property or method)
+            if hasattr(self.camera, "set_ccd_temperature"):
+                try:
+                    self.camera.set_ccd_temperature = target_temp
+                except Exception:
+                    pass
+            if hasattr(self.camera, "SetCCDTemperature"):
+                try:
+                    # Some drivers expose a setter method
+                    self.camera.SetCCDTemperature(target_temp)
+                except Exception:
+                    pass
+            # Switch cooler on if supported
+            try:
+                if hasattr(self.camera, "cooler_on"):
+                    self.camera.cooler_on = True
+                elif hasattr(self.camera, "CoolerOn"):
+                    self.camera.CoolerOn = True
+            except Exception:
+                pass
             self.target_temp = target_temp
             self.is_cooling = True
             self.cooling_start_time = datetime.now()
@@ -71,12 +95,16 @@ class CoolingManager:
             )
             start = datetime.now()
             while (datetime.now() - start).total_seconds() < timeout:
-                current_temp = self.camera.ccd_temperature
-                diff = abs(current_temp - self.camera.set_ccd_temperature)
+                current_temp = self._get_temperature()
+                # Compare against the manager's target (robust across drivers)
+                if current_temp is not None:
+                    diff = abs(float(current_temp) - float(self.target_temp))
+                else:
+                    diff = float("inf")
                 self.logger.info(
                     "Temp: %.1f°C, Target: %.1f°C, Diff: %+0.1f°C",
-                    current_temp,
-                    self.camera.set_ccd_temperature,
+                    current_temp if current_temp is not None else float("nan"),
+                    float(self.target_temp),
                     diff,
                 )
                 if diff <= tolerance:
@@ -161,7 +189,8 @@ class CoolingManager:
             last_temp = None
             while (time.time() - start) < float(timeout):
                 try:
-                    current_temp = float(self.camera.ccd_temperature)
+                    t = self._get_temperature()
+                    current_temp = float(t) if t is not None else None
                 except Exception:
                     current_temp = None
 
@@ -199,17 +228,40 @@ class CoolingManager:
     def get_cooling_status(self) -> Dict[str, Any]:
         try:
             return {
-                "temperature": self.camera.ccd_temperature,
+                "temperature": self._get_temperature(),
                 "target_temperature": self.target_temp,
-                "cooler_power": getattr(self.camera, "cooler_power", None),
-                "cooler_on": getattr(self.camera, "cooler_on", None),
+                "cooler_power": self._get_any(self.camera, ["cooler_power", "CoolerPower"], None),
+                "cooler_on": bool(self._get_any(self.camera, ["cooler_on", "CoolerOn"], False)),
                 "is_cooling": self.is_cooling,
                 "is_warming_up": self.is_warming_up,
-                "can_set_temperature": getattr(self.camera, "can_set_ccd_temperature", False),
-                "can_get_power": getattr(self.camera, "can_get_cooler_power", False),
+                "can_set_temperature": bool(
+                    self._get_any(
+                        self.camera, ["can_set_ccd_temperature", "CanSetCCDTemperature"], False
+                    )
+                ),
+                "can_get_power": bool(
+                    self._get_any(self.camera, ["can_get_cooler_power", "CanGetCoolerPower"], False)
+                ),
             }
         except Exception as e:
             return {"error": str(e)}
+
+    # --- helpers ---
+    def _get_any(self, obj: Any, names: list[str], default: Any) -> Any:
+        for name in names:
+            try:
+                val = getattr(obj, name)
+                return val
+            except Exception:
+                continue
+        return default
+
+    def _get_temperature(self) -> Optional[float]:
+        try:
+            val = self._get_any(self.camera, ["ccd_temperature", "CCDTemperature"], None)
+            return float(val) if val is not None else None
+        except Exception:
+            return None
 
 
 def create_cooling_manager(camera, config, logger=None) -> CoolingManager:
