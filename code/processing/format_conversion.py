@@ -11,6 +11,8 @@ try:
 except Exception:  # pragma: no cover
     cv2 = None
 
+from processing.normalization import normalize_to_uint8
+
 
 def convert_camera_data_to_opencv(
     image_data: Any, camera: Any, config: Any, logger: Any = None
@@ -76,8 +78,6 @@ def convert_camera_data_to_opencv(
         # Debayer or grayscale to BGR
         if cv2 is None:
             # Without cv2 we cannot do color conversion; return a safe uint8 grayscale image
-            from processing.normalization import normalize_to_uint8
-
             return normalize_to_uint8(image_array, config, logger)
 
         if is_color_camera and len(image_array.shape) == 2:

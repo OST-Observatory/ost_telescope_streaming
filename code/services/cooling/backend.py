@@ -11,6 +11,8 @@ Provides comprehensive cooling management including:
 
 from datetime import datetime
 import logging
+import threading
+import time
 from typing import Any, Dict, Optional
 
 from status import Status, error_status, success_status, warning_status
@@ -32,6 +34,8 @@ class CoolingManager:
         self.is_warming_up = False
         self.cooling_start_time = None
         self.warmup_start_time = None
+        self._monitor_thread: Optional[threading.Thread] = None
+        self._monitor_stop: Optional[threading.Event] = None
 
     def set_target_temperature(self, target_temp: float) -> Status:
         try:
@@ -97,10 +101,100 @@ class CoolingManager:
             return error_status(f"Failed to start warmup: {e}")
 
     def stop_status_monitor(self):
-        return success_status("Cooling status monitor stopped")
+        try:
+            if self._monitor_stop is not None:
+                self._monitor_stop.set()
+            if self._monitor_thread is not None and self._monitor_thread.is_alive():
+                self._monitor_thread.join(timeout=2.0)
+            self._monitor_thread = None
+            self._monitor_stop = None
+            return success_status("Cooling status monitor stopped")
+        except Exception as e:
+            return warning_status(f"Failed to stop cooling status monitor: {e}")
 
     def start_status_monitor(self, interval: float):
-        return success_status("Cooling status monitor started")
+        try:
+            # If already running, don't start another
+            if self._monitor_thread is not None and self._monitor_thread.is_alive():
+                return warning_status("Cooling status monitor already running")
+
+            self._monitor_stop = threading.Event()
+
+            def _loop() -> None:
+                assert self._monitor_stop is not None
+                while not self._monitor_stop.is_set():
+                    try:
+                        status = self.get_cooling_status()
+                        temp = status.get("temperature")
+                        tgt = status.get("target_temperature")
+                        pwr = status.get("cooler_power")
+                        cooling = status.get("is_cooling")
+                        warming = status.get("is_warming_up")
+                        self.logger.info(
+                            "🌡️  Cooling status: T=%s°C target=%s°C power=%s cooling=%s warming=%s",
+                            str(temp),
+                            str(tgt),
+                            str(pwr),
+                            str(cooling),
+                            str(warming),
+                        )
+                    except Exception as exc:
+                        self.logger.debug(f"Cooling status monitor error: {exc}")
+                    time.sleep(max(1.0, float(interval)))
+
+            self._monitor_thread = threading.Thread(
+                target=_loop, name="CoolingStatusMonitor", daemon=True
+            )
+            self._monitor_thread.start()
+            return success_status("Cooling status monitor started")
+        except Exception as e:
+            return warning_status(f"Failed to start cooling status monitor: {e}")
+
+    def wait_for_warmup_completion(self, timeout: int) -> Status:
+        """Block until warmup completes or timeout.
+
+        Warmup is considered complete when the sensor temperature rises to or above
+        the configured warmup_final_temp (or when the cooler is off and temp stops rising).
+        """
+        try:
+            start = time.time()
+            last_temp = None
+            while (time.time() - start) < float(timeout):
+                try:
+                    current_temp = float(self.camera.ccd_temperature)
+                except Exception:
+                    current_temp = None
+
+                # Consider warmup done if we reached or exceeded target warmup temp
+                if current_temp is not None:
+                    if current_temp >= float(self.warmup_final_temp):
+                        self.is_warming_up = False
+                        return success_status(
+                            f"Warmup completed at {current_temp:.1f}°C",
+                            details={"final_temp": current_temp},
+                        )
+                    # If temperature stagnates and cooler is off, assume done
+                    if last_temp is not None:
+                        temp_delta = abs(current_temp - last_temp)  # type: ignore[unreachable]
+                        cooler_on_attr = getattr(self.camera, "cooler_on", False)
+                        cooler_on_flag = bool(cooler_on_attr)
+                        if (temp_delta < 0.1) and (not cooler_on_flag):
+                            self.is_warming_up = False
+                            return success_status(
+                                f"Warmup completed (stabilized at {current_temp:.1f}°C)",
+                                details={"final_temp": current_temp},
+                            )
+
+                last_temp = current_temp
+                time.sleep(1.0)
+
+            # Timeout
+            return warning_status(
+                "Warmup timeout",
+                details={"timeout": timeout, "final_temp": last_temp},
+            )
+        except Exception as e:
+            return error_status(f"Error waiting for warmup completion: {e}")
 
     def get_cooling_status(self) -> Dict[str, Any]:
         try:
