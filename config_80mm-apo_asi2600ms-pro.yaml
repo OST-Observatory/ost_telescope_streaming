@@ -180,14 +180,14 @@ overlay:
 
   # Coordinates settings
   coordinates:
-    force_flip_x: true
-    force_flip_y: true
+    force_flip_x: false
+    force_flip_y: false
 
   # Information panel settings
   info_panel:
     enabled: true
     position: "top_right"  # "top_left", "top_right", "bottom_left", "bottom_right"
-    width: 1000
+    width: 1300
     background_color: [0, 0, 0, 180]  # RGBA with transparency
     border_color: [255, 255, 255, 255]
     border_width: 2

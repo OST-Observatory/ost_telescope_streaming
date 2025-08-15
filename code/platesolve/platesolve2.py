@@ -273,6 +273,13 @@ class PlateSolve2Automated:
             code_2 = int(parts2[5])
             code_3 = float(parts2[6] + "." + parts2[7])
             n_stars = int(parts2[8])
+            if self.verbose:
+                self.logger.info(f"Parsed Pixel Scale: {pixel_scale} arcsec/pixel")
+                self.logger.info(f"Parsed Position Angle: {position_angle}°")
+                self.logger.info(f"Parsed Flipped: {if_flipped}")
+                self.logger.info(f"Parsed Code_2: {code_2}")
+                self.logger.info(f"Parsed Code_3: {code_3}")
+                self.logger.info(f"Parsed Number of Stars: {n_stars}")
 
             if if_flipped >= 1:
                 position_angle = (position_angle + 180.0) % 360.0
