@@ -115,6 +115,43 @@ class AlpacaCameraAdapter(CameraInterface):
     def name(self) -> Optional[str]:
         return getattr(self._cam, "name", None)
 
+    # --- Cooling passthrough (needed by CoolingManager) ---
+    @property
+    def can_set_ccd_temperature(self) -> bool:
+        return bool(getattr(self._cam, "can_set_ccd_temperature", False))
+
+    @property
+    def can_get_cooler_power(self) -> bool:
+        return bool(getattr(self._cam, "can_get_cooler_power", False))
+
+    @property
+    def ccd_temperature(self) -> Optional[float]:
+        return getattr(self._cam, "ccd_temperature", None)
+
+    @property
+    def set_ccd_temperature(self) -> Optional[float]:
+        return getattr(self._cam, "set_ccd_temperature", None)
+
+    @set_ccd_temperature.setter
+    def set_ccd_temperature(self, value: float) -> None:
+        self._cam.set_ccd_temperature = value
+
+    @property
+    def cooler_on(self) -> Optional[bool]:
+        return getattr(self._cam, "cooler_on", None)
+
+    @cooler_on.setter
+    def cooler_on(self, value: bool) -> None:
+        self._cam.cooler_on = value
+
+    @property
+    def cooler_power(self) -> Optional[float]:
+        return getattr(self._cam, "cooler_power", None)
+
+    @property
+    def heat_sink_temperature(self) -> Optional[float]:
+        return getattr(self._cam, "heat_sink_temperature", None)
+
 
 class AscomCameraAdapter(CameraInterface):
     def __init__(self, camera) -> None:

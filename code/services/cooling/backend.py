@@ -50,15 +50,20 @@ class CoolingManager:
             # Read current temperature safely
             current_temp = self._get_temperature()
             # Set target temperature (property or method)
-            if hasattr(self.camera, "set_ccd_temperature"):
-                try:
+            try:
+                if hasattr(self.camera, "set_ccd_temperature"):
                     self.camera.set_ccd_temperature = target_temp
-                except Exception:
-                    pass
-            if hasattr(self.camera, "SetCCDTemperature"):
-                try:
+                elif hasattr(self.camera, "SetCCDTemperature"):
                     # Some drivers expose a setter method
                     self.camera.SetCCDTemperature(target_temp)
+            except Exception:
+                self.logger.debug("Cooling: failed to set target via primary API, trying alt names")
+                # Try common alternates some drivers use
+                try:
+                    if hasattr(self.camera, "temperature_setpoint"):
+                        self.camera.temperature_setpoint = target_temp
+                    elif hasattr(self.camera, "TargetTemperature"):
+                        self.camera.TargetTemperature = target_temp
                 except Exception:
                     pass
             # Switch cooler on if supported
@@ -67,6 +72,8 @@ class CoolingManager:
                     self.camera.cooler_on = True
                 elif hasattr(self.camera, "CoolerOn"):
                     self.camera.CoolerOn = True
+                elif hasattr(self.camera, "set_cooler_on"):
+                    self.camera.set_cooler_on = True
             except Exception:
                 pass
             self.target_temp = target_temp
@@ -114,9 +121,22 @@ class CoolingManager:
                     )
         except Exception as e:
             return error_status(f"Error during temperature stabilization: {e}")
-        return warning_status(
-            "Temperature stabilization timeout", details={"target": self.camera.set_ccd_temperature}
-        )
+        # On timeout, include safe target readout
+        tgt = None
+        try:
+            tgt = self._get_any(
+                self.camera,
+                [
+                    "set_ccd_temperature",
+                    "SetCCDTemperature",
+                    "TargetTemperature",
+                    "temperature_setpoint",
+                ],
+                None,
+            )
+        except Exception:
+            tgt = None
+        return warning_status("Temperature stabilization timeout", details={"target": tgt})
 
     def start_warmup(self) -> Status:
         try:
@@ -231,7 +251,9 @@ class CoolingManager:
                 "temperature": self._get_temperature(),
                 "target_temperature": self.target_temp,
                 "cooler_power": self._get_any(self.camera, ["cooler_power", "CoolerPower"], None),
-                "cooler_on": bool(self._get_any(self.camera, ["cooler_on", "CoolerOn"], False)),
+                "cooler_on": bool(
+                    self._get_any(self.camera, ["cooler_on", "CoolerOn", "set_cooler_on"], False)
+                ),
                 "is_cooling": self.is_cooling,
                 "is_warming_up": self.is_warming_up,
                 "can_set_temperature": bool(
@@ -258,7 +280,9 @@ class CoolingManager:
 
     def _get_temperature(self) -> Optional[float]:
         try:
-            val = self._get_any(self.camera, ["ccd_temperature", "CCDTemperature"], None)
+            val = self._get_any(
+                self.camera, ["ccd_temperature", "CCDTemperature", "Temperature"], None
+            )
             return float(val) if val is not None else None
         except Exception:
             return None
