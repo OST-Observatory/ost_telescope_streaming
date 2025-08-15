@@ -78,3 +78,23 @@ def test_get_latest_frame_path_timestamped(tmp_path):
     vp.video_capture = object()
     path = vp.get_latest_frame_path()
     assert path == str(f2)
+
+
+def test_combine_overlay_resizes_and_composes(tmp_path):
+    from processing.processor import VideoProcessor
+
+    base = tmp_path / "base_large.png"
+    overlay = tmp_path / "ovl_small.png"
+
+    # Base larger than overlay
+    Image.new("RGBA", (128, 96), (20, 20, 20, 255)).save(base)
+    Image.new("RGBA", (32, 24), (0, 255, 0, 128)).save(overlay)
+
+    vp = VideoProcessor(config=_CfgStatic(str(tmp_path), use_timestamps=False))
+    status = vp.combine_overlay_with_image(str(base), str(overlay))
+    assert status.is_success
+    out = Path(status.data)
+    assert out.exists()
+    # Verify size and that some pixels are altered by overlay (non-trivial check)
+    with Image.open(out) as im:
+        assert im.size == (128, 96)

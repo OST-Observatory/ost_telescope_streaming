@@ -20,13 +20,19 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pytest-cov
       - name: Lint and type-check
         run: |
           pip install pre-commit
           pre-commit run --all-files
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         run: |
-          pytest -q -m "not integration"
+          pytest -q -m "not integration" --cov=code --cov-report=xml --cov-report=term --cov-fail-under=60
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
 
   integration:
     if: github.event_name == 'workflow_dispatch'

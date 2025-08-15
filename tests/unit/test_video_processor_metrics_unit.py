@@ -83,3 +83,55 @@ def test_metrics_and_counters(tmp_path, monkeypatch, caplog):
             found = True
             break
     assert found
+
+
+def test_solver_prefers_fits_when_available(tmp_path, monkeypatch):
+    from processing.processor import VideoProcessor
+
+    # Create both PNG and FITS candidates
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir()
+    png = frames_dir / "capture_0001.PNG"
+    fits = frames_dir / "capture_0001.fits"
+    png.write_bytes(b"p")
+    fits.write_bytes(b"f")
+
+    class _Cfg2(_Cfg):
+        def get_frame_processing_config(self) -> Dict[str, Any]:
+            cfg = super().get_frame_processing_config()
+            cfg.update({"plate_solve_dir": str(frames_dir), "save_plate_solve_frames": True})
+            return cfg
+
+    # Fake solver with spy to capture given path
+    called = {"path": None}
+
+    class _FakeSolver:
+        def is_available(self):
+            return True
+
+        def get_name(self):
+            return "fake"
+
+        def solve(self, path: str):
+            called["path"] = path
+
+            class _S:
+                is_success = False
+                message = "failed"
+                details: Dict[str, Any] = {}
+
+            return _S()
+
+    def _fake_create(_solver_type, config=None, logger=None):  # noqa: ARG002
+        return _FakeSolver()
+
+    monkeypatch.setattr(
+        "platesolve.solver.PlateSolverFactory.create_solver", _fake_create, raising=True
+    )
+
+    vp = VideoProcessor(config=_Cfg2(str(tmp_path)))
+    vp.auto_solve = True
+    vp.plate_solver = _FakeSolver()
+    # Simulate that saving produced files and call _maybe_plate_solve directly
+    vp._maybe_plate_solve(fits_filename=fits, frame_filename=png)
+    assert called["path"] == str(fits)

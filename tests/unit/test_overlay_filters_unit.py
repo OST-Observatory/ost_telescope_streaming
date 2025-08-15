@@ -150,3 +150,51 @@ def test_object_type_filter(tmp_path):
     gen.object_types = []
     gen.generate_overlay(ra_deg=0.0, dec_deg=0.0, output_file=str(base))
     assert _count_nontransparent(out) < _count_nontransparent(base)
+
+
+def test_exclude_objects_without_magnitude(tmp_path):
+    # Include one object with magnitude and one without
+    rows = [
+        {"ra": 0.0, "dec": 0.0, "V": 8.0, "otype": "Star", "main_id": "WithMag"},
+        {"ra": 0.04, "dec": 0.03, "V": "--", "otype": "Star", "main_id": "NoMag"},
+    ]
+    _mock_simbad_rows(rows)
+
+    from overlay.generator import OverlayGenerator
+
+    class _Cfg:
+        def get_overlay_config(self):
+            return {
+                "title": {"enabled": False},
+                "info_panel": {"enabled": False},
+                "secondary_fov": {"enabled": False},
+                "include_no_magnitude": True,
+            }
+
+        def get_display_config(self):
+            return {
+                "object_color": [255, 0, 0],
+                "text_color": [255, 255, 255],
+                "marker_size": 5,
+                "text_offset": [8, -8],
+            }
+
+        def get_advanced_config(self):
+            return {"save_empty_overlays": True}
+
+        def get_platform_config(self):
+            return {"fonts": {"linux": []}}
+
+    # Baseline with include_no_magnitude = True
+    gen = OverlayGenerator(config=_Cfg())
+    out_all = tmp_path / "all.png"
+    gen.generate_overlay(ra_deg=0.0, dec_deg=0.0, output_file=str(out_all), image_size=(200, 150))
+
+    # Now exclude objects without magnitude
+    gen.include_no_magnitude = False
+    out_filtered = tmp_path / "filtered.png"
+    gen.generate_overlay(
+        ra_deg=0.0, dec_deg=0.0, output_file=str(out_filtered), image_size=(200, 150)
+    )
+
+    assert _count_nontransparent(out_filtered) < _count_nontransparent(out_all)
