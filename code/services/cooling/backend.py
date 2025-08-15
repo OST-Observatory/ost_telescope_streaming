@@ -30,6 +30,11 @@ class CoolingManager:
         self.stabilization_tolerance = cooling_config.get("stabilization_tolerance", 1.0)
         self.warmup_rate = cooling_config.get("warmup_rate", 2.0)
         self.warmup_final_temp = cooling_config.get("warmup_final_temp", 15.0)
+        # Status/logging interval used by monitor and stabilization loop
+        try:
+            self.status_interval = float(cooling_config.get("status_interval", 30))
+        except Exception:
+            self.status_interval = 30.0
         self.is_cooling = False
         self.is_warming_up = False
         self.cooling_start_time = None
@@ -108,17 +113,26 @@ class CoolingManager:
                     diff = abs(float(current_temp) - float(self.target_temp))
                 else:
                     diff = float("inf")
+                # Add power and cooler-on status to log
+                cooler_power = self._get_any(self.camera, ["cooler_power", "CoolerPower"], None)
+                cooler_on = bool(
+                    self._get_any(self.camera, ["cooler_on", "CoolerOn", "set_cooler_on"], False)
+                )
                 self.logger.info(
-                    "Temp: %.1f°C, Target: %.1f°C, Diff: %+0.1f°C",
+                    "Temp: %.1f°C, Target: %.1f°C, Diff: %+0.1f°C, Power: %s, Cooler: %s",
                     current_temp if current_temp is not None else float("nan"),
                     float(self.target_temp),
                     diff,
+                    str(cooler_power),
+                    str(cooler_on),
                 )
                 if diff <= tolerance:
                     return success_status(
                         f"Temperature stabilized at {current_temp:.1f}°C",
                         details={"final_temp": current_temp},
                     )
+                # Sleep between updates to avoid log spam
+                time.sleep(max(1.0, float(self.status_interval)))
         except Exception as e:
             return error_status(f"Error during temperature stabilization: {e}")
         # On timeout, include safe target readout
