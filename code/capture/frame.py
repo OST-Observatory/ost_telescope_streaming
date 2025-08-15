@@ -16,3 +16,4 @@ class Frame:
     data: np.ndarray
     metadata: Dict[str, Any] = field(default_factory=dict)
     source: Optional[str] = None  # e.g., 'alpaca', 'ascom', 'opencv'
+    green_channel: Optional[np.ndarray] = None  # debayered green channel for solving/stacking

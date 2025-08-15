@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Tuple
 
 import numpy as np
 
@@ -12,6 +12,122 @@ except Exception:  # pragma: no cover
     cv2 = None
 
 from processing.normalization import normalize_to_uint8
+
+
+def _detect_color_and_pattern(camera: Any, config: Any) -> Tuple[bool, str | None]:
+    """Detect if camera is color and return Bayer pattern if available.
+
+    Returns (is_color, bayer_pattern|None)
+    """
+    is_color_camera = False
+    bayer_pattern: str | None = None
+
+    def _get_any(obj: Any, names: list[str]) -> Any:
+        for name in names:
+            try:
+                return getattr(obj, name)
+            except Exception:
+                continue
+        return None
+
+    sensor_type_attr = _get_any(
+        camera, ["sensor_type", "SensorType", "cfa_pattern", "BayerPattern"]
+    )
+    if isinstance(sensor_type_attr, str):
+        upper = sensor_type_attr.upper()
+        if upper in ["RGGB", "GRBG", "GBRG", "BGGR"]:
+            is_color_camera = True
+            bayer_pattern = upper
+
+    if not is_color_camera:
+        color_hint = _get_any(camera, ["is_color", "IsColor", "colour", "Color"])
+        try:
+            is_color_camera = bool(color_hint)
+        except Exception:
+            pass
+
+    try:
+        camera_cfg = config.get_camera_config()
+        frame_cfg = config.get_frame_processing_config()
+        if not is_color_camera and str(camera_cfg.get("type", "")).lower() == "color":
+            is_color_camera = True
+        if bayer_pattern is None:
+            debayer_method = frame_cfg.get("debayer_method", "RGGB")
+            if isinstance(debayer_method, str) and debayer_method in [
+                "RGGB",
+                "GRBG",
+                "GBRG",
+                "BGGR",
+            ]:
+                bayer_pattern = debayer_method
+    except Exception:
+        pass
+
+    return is_color_camera, bayer_pattern
+
+
+def debayer_to_color_and_green(
+    image_data: Any, camera: Any, config: Any, logger: Any = None
+) -> Tuple[np.ndarray | None, np.ndarray | None, str | None]:
+    """Debayer once and return (color16 BGR, green16, bayer_pattern).
+
+    If conversion is not possible, returns (grayscale, same grayscale, None).
+    """
+    try:
+        image_array = np.array(image_data)
+        if image_array.ndim == 0 or image_array.size == 0:
+            return None, None, None
+
+        # Promote to uint16 for consistent demosaic
+        if image_array.dtype != np.uint16:
+            if image_array.dtype in (np.float32, np.float64):
+                vmin, vmax = float(np.min(image_array)), float(np.max(image_array))
+                if vmax > vmin:
+                    image_array = ((image_array - vmin) / (vmax - vmin) * 65535).astype(np.uint16)
+                else:
+                    image_array = image_array.astype(np.uint16)
+            else:
+                image_array = image_array.astype(np.uint16)
+
+        is_color, pattern = _detect_color_and_pattern(camera, config)
+
+        if cv2 is None:
+            # No OpenCV: cannot demosaic properly; return grayscale for both
+            gray8 = normalize_to_uint8(image_array, config, logger)
+            gray16 = gray8.astype(np.uint16) * 257
+            return gray16, gray16, None
+
+        if is_color and image_array.ndim == 2:
+            if pattern == "RGGB":
+                code = cv2.COLOR_BayerRG2BGR
+            elif pattern == "GRBG":
+                code = cv2.COLOR_BayerGR2BGR
+            elif pattern == "GBRG":
+                code = cv2.COLOR_BayerGB2BGR
+            elif pattern == "BGGR":
+                code = cv2.COLOR_BayerBG2BGR
+            else:
+                code = cv2.COLOR_BayerRG2BGR
+            try:
+                color16 = cv2.cvtColor(image_array, code)
+            except Exception as e:
+                if logger:
+                    logger.warning(f"Debayer failed: {e}; using grayscale")
+                color16 = cv2.cvtColor(image_array, cv2.COLOR_GRAY2BGR)
+            green16 = color16[:, :, 1].copy()
+            return color16, green16, pattern
+
+        # Already 3-channel or mono
+        if image_array.ndim == 3 and image_array.shape[2] >= 3:
+            color16 = image_array[:, :, :3].astype(np.uint16, copy=False)
+            green16 = color16[:, :, 1].copy()
+            return color16, green16, pattern
+        else:
+            gray = image_array.astype(np.uint16, copy=False)
+            color16 = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR) if cv2 is not None else gray
+            return color16, gray.copy(), pattern
+    except Exception:
+        return None, None, None
 
 
 def convert_camera_data_to_opencv(

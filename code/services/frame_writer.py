@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from capture.frame import Frame
 import numpy as np
 from processing.format_conversion import convert_camera_data_to_opencv
 from processing.orientation import enforce_long_side_horizontal
@@ -52,6 +53,10 @@ class FrameWriter:
                 frame_data = frame.data
             else:
                 frame_data = frame
+
+            # If data is a Frame object, use its color image for display
+            if isinstance(frame_data, Frame):
+                frame_data = frame_data.data
 
             if self.camera_type in ["alpaca", "ascom"]:
                 frame_np = convert_camera_data_to_opencv(
@@ -106,6 +111,15 @@ class FrameWriter:
                 return error_status(f"Astropy not available for FITS saving: {e}")
 
             image_data, frame_details = unwrap_status(frame)
+            frame_obj: Optional[Frame] = None
+            if isinstance(image_data, Frame):
+                frame_obj = image_data
+                # Prefer green channel for FITS if available
+                image_data = (
+                    frame_obj.green_channel
+                    if frame_obj.green_channel is not None
+                    else frame_obj.data
+                )
             if metadata:
                 # Merge/override provided metadata
                 try:

@@ -530,15 +530,29 @@ class VideoCapture:
                 frame_details.update(calibration_status.details)
                 frame_details["capture_started_at"] = capture_started_at
                 frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-                if self.return_frame_objects:
-                    return success_status(
-                        "Frame captured",
-                        data=Frame(data=calibrated_frame, metadata=frame_details),
-                        details=frame_details,
+
+                # Centralized debayer: produce color and green once for the frame
+                try:
+                    from processing.format_conversion import debayer_to_color_and_green
+
+                    color16, green16, pattern = debayer_to_color_and_green(
+                        calibrated_frame, self.camera, self.config, self.logger
                     )
-                return success_status(
-                    "Frame captured", data=calibrated_frame, details=frame_details
-                )
+                    if pattern:
+                        frame_details["bayer_pattern"] = pattern
+                    if color16 is not None and green16 is not None:
+                        frame_details["debayered"] = True
+                        frame_obj = Frame(
+                            data=color16, metadata=frame_details, green_channel=green16
+                        )
+                    else:
+                        frame_obj = Frame(data=calibrated_frame, metadata=frame_details)
+                except Exception:
+                    frame_obj = Frame(data=calibrated_frame, metadata=frame_details)
+
+                if self.return_frame_objects:
+                    return success_status("Frame captured", data=frame_obj, details=frame_details)
+                return success_status("Frame captured", data=frame_obj.data, details=frame_details)
             else:
                 frame_details["capture_started_at"] = capture_started_at
                 frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
