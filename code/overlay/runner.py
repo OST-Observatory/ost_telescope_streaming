@@ -72,6 +72,11 @@ class OverlayRunner:
             "timestamp_format", "%Y%m%d_%H%M%S"
         )
 
+        # Coordinate/flip configuration
+        coords_cfg = self.config.get_overlay_config().get("coordinates", {})
+        self.force_flip_x = bool(coords_cfg.get("force_flip_x", False))
+        self.force_flip_y = bool(coords_cfg.get("force_flip_y", False))
+
         # Initialize components
         self._initialize_components()
 
@@ -259,6 +264,7 @@ class OverlayRunner:
         image_size: Optional[Tuple[int, int]] = None,
         mag_limit: Optional[float] = None,
         is_flipped: Optional[bool] = None,
+        flip_y: Optional[bool] = None,
     ) -> Status:
         """Generate astronomical overlay with given coordinates."""
         if not OVERLAY_AVAILABLE:
@@ -278,6 +284,7 @@ class OverlayRunner:
                 image_size=image_size,
                 mag_limit=mag_limit,
                 is_flipped=is_flipped,
+                flip_y=flip_y,
             )
 
             self.logger.info("Overlay generated successfully: %s", overlay_path)
@@ -432,8 +439,11 @@ class OverlayRunner:
                         position_angle_deg = self.last_solve_result.position_angle
                         image_size = self.last_solve_result.image_size
 
-                        # Get flip information from plate-solving result
+                        # Get flip information from plate-solving result and overrides
                         is_flipped = getattr(self.last_solve_result, "is_flipped", False)
+                        # Allow config to force flips (useful for camera mirror settings)
+                        if self.force_flip_x:
+                            is_flipped = True
                         if is_flipped:
                             self.logger.info(
                                 "Plate-solving detected flipped image; applying flip correction"
@@ -457,7 +467,7 @@ class OverlayRunner:
                         fov_height_deg = None
                         position_angle_deg = None
                         image_size = None
-                        is_flipped = False
+                        is_flipped = self.force_flip_x
 
                         # Try to get actual image size from captured frame
                         if self.video_processor:
@@ -533,6 +543,7 @@ class OverlayRunner:
                         image_size,
                         None,
                         is_flipped,
+                        self.force_flip_y,
                     )
 
                     if overlay_status.is_success:

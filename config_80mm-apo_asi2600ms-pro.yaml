@@ -19,7 +19,7 @@ camera:
   cooling:
     enable_cooling: true           # Enable camera cooling
     target_temperature: -5.0      # Target temperature in Celsius
-    wait_for_cooling: true         # Wait for target temperature before capture
+    wait_for_cooling: false         # Wait for target temperature before capture
     cooling_timeout: 300           # Cooling timeout in seconds
     stabilization_tolerance: 1.0   # Temperature tolerance in Celsius
     warmup_rate: 2.0              # Warmup rate in °C per minute
@@ -178,17 +178,22 @@ overlay:
     marker_size: 20
     text_offset: [30, -30]
 
+  # Coordinates settings
+  coordinates:
+    force_flip_x: true
+    force_flip_y: true
+
   # Information panel settings
   info_panel:
     enabled: true
     position: "top_right"  # "top_left", "top_right", "bottom_left", "bottom_right"
-    width: 800
+    width: 1000
     background_color: [0, 0, 0, 180]  # RGBA with transparency
     border_color: [255, 255, 255, 255]
     border_width: 2
     padding: 10
     line_spacing: 10
-    font_size: 30
+    font_size: 50
     text_color: [255, 255, 255, 255]
     title_color: [255, 255, 0, 255]  # Yellow for title
     show_timestamp: true
@@ -203,7 +208,7 @@ overlay:
     enabled: true
     text: "OST Telescope Streaming - 80mm APO + ASI2600MC Pro"
     position: "top_center"  # "top_center", "top_left", "top_right"
-    font_size: 45
+    font_size: 65
     font_color: [255, 255, 0, 255]  # Yellow
     background_color: [0, 0, 0, 180]  # Semi-transparent black
     padding: 10

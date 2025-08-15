@@ -15,6 +15,7 @@ def skycoord_to_pixel_with_rotation(
     fov_height_deg: float,
     position_angle_deg: float = 0.0,
     is_flipped: bool = False,
+    flip_y: bool = False,
     ra_increases_left: bool = True,
 ) -> Tuple[int, int]:
     """Project sky coordinates to pixel coordinates with rotation and flip.
@@ -56,6 +57,8 @@ def skycoord_to_pixel_with_rotation(
 
     if is_flipped:
         x = size_px[0] - x
+    if flip_y:
+        y = size_px[1] - y
 
     # Use rounding to make flip symmetry exact in tests
     return int(round(x)), int(round(y))
