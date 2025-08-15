@@ -138,6 +138,21 @@ class FrameWriter:
 
             image_data, rotated = enforce_long_side_horizontal(image_data)
 
+            # Ensure FITS is 2D: if color data slipped through, take green channel
+            try:
+                if image_data.ndim == 3 and image_data.shape[2] >= 3:
+                    if self.logger:
+                        self.logger.info(
+                            "FITS input is color with shape %s; using green channel",
+                            str(image_data.shape),
+                        )
+                    image_data = image_data[:, :, 1]
+                elif image_data.ndim == 3 and image_data.shape[2] == 2:
+                    # Two-channel unexpected, pick channel 0
+                    image_data = image_data[:, :, 0]
+            except Exception:
+                pass
+
             # Convert to uint16 for FITS compatibility
             if image_data.dtype != np.uint16:
                 if image_data.dtype in [np.float32, np.float64]:
