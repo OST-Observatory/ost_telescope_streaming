@@ -67,6 +67,11 @@ class OverlayGenerator:
         coords_cfg = self.overlay_config.get("coordinates", {})
         # In astronomical convention with north up, RA increases to the left; default True
         self.ra_increases_left = coords_cfg.get("ra_increases_left", True)
+        # Optional fixed rotation offset to apply to overlays (degrees)
+        try:
+            self.rotation_offset_deg = float(coords_cfg.get("rotation_offset_deg", 0.0))
+        except Exception:
+            self.rotation_offset_deg = 0.0
 
     def get_font(self):
         """Loads an available font for the current system."""
@@ -329,7 +334,9 @@ class OverlayGenerator:
             # Use provided values or defaults
             fov_w = fov_width_deg if fov_width_deg is not None else self.fov_deg
             fov_h = fov_height_deg if fov_height_deg is not None else self.fov_deg
-            pa_deg = position_angle_deg if position_angle_deg is not None else 0.0
+            pa_deg_in = position_angle_deg if position_angle_deg is not None else 0.0
+            # Apply user-configured rotation offset
+            pa_deg = pa_deg_in + float(self.rotation_offset_deg)
             img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
             # Default: do not flip X; solver PA already accounts for flips
