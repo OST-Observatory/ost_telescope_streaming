@@ -181,7 +181,7 @@ overlay:
   # Coordinates settings
   coordinates:
     force_flip_x: false
-    force_flip_y: false
+    force_flip_y: true
 
   # Information panel settings
   info_panel:
