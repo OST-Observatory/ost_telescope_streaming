@@ -439,11 +439,9 @@ class OverlayRunner:
                         position_angle_deg = self.last_solve_result.position_angle
                         image_size = self.last_solve_result.image_size
 
-                        # Get flip information from plate-solving result and overrides
-                        is_flipped = getattr(self.last_solve_result, "is_flipped", False)
-                        # Allow config to force flips (useful for camera mirror settings)
-                        if self.force_flip_x:
-                            is_flipped = True
+                        # Use PA from solver; ignore solver flip parity by default.
+                        # Allow config to force X flip if user's image chain mirrors.
+                        is_flipped = self.force_flip_x
                         if is_flipped:
                             self.logger.info(
                                 "Plate-solving detected flipped image; applying flip correction"
@@ -455,11 +453,12 @@ class OverlayRunner:
                             dec_deg,
                         )
                         self.logger.info(
-                            "FOV=%.3f°x%.3f°, PA=%.1f°, Flipped=%s",
+                            "FOV=%.3f°x%.3f°, PA=%.1f°, Flipped(X)=%s, FlipY=%s",
                             fov_width_deg,
                             fov_height_deg,
                             position_angle_deg if position_angle_deg is not None else -1.0,
                             str(is_flipped),
+                            str(self.force_flip_y),
                         )
                     else:
                         # Use mount coordinates and default values

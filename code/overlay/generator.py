@@ -330,6 +330,7 @@ class OverlayGenerator:
             pa_deg = position_angle_deg if position_angle_deg is not None else 0.0
             img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
+            # Default: do not flip X; solver PA already accounts for flips
             is_flipped = is_flipped if is_flipped is not None else False
             flip_y = flip_y if flip_y is not None else False
             output_file = output_file or self.default_filename
