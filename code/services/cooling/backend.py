@@ -30,6 +30,19 @@ class CoolingManager:
         self.stabilization_tolerance = cooling_config.get("stabilization_tolerance", 1.0)
         self.warmup_rate = cooling_config.get("warmup_rate", 2.0)
         self.warmup_final_temp = cooling_config.get("warmup_final_temp", 15.0)
+        # Warmup policy
+        try:
+            self.warmup_min_duration_s = float(cooling_config.get("warmup_min_duration_s", 60.0))
+        except Exception:
+            self.warmup_min_duration_s = 60.0
+        try:
+            self.warmup_consecutive_above = int(cooling_config.get("warmup_consecutive_above", 3))
+        except Exception:
+            self.warmup_consecutive_above = 3
+        try:
+            self.warmup_check_interval_s = float(cooling_config.get("warmup_check_interval_s", 5.0))
+        except Exception:
+            self.warmup_check_interval_s = 5.0
         # Status/logging interval used by monitor and stabilization loop
         try:
             self.status_interval = float(cooling_config.get("status_interval", 30))
@@ -154,10 +167,24 @@ class CoolingManager:
 
     def start_warmup(self) -> Status:
         try:
-            self.camera.cooler_on = False
+            # Turn cooler off via robust attributes
+            try:
+                if hasattr(self.camera, "cooler_on"):
+                    self.camera.cooler_on = False
+                elif hasattr(self.camera, "CoolerOn"):
+                    self.camera.CoolerOn = False
+                elif hasattr(self.camera, "set_cooler_on"):
+                    self.camera.set_cooler_on = False
+            except Exception:
+                pass
             self.is_cooling = False
             self.is_warming_up = True
             self.warmup_start_time = datetime.now()
+            # Record start temperature for diagnostics
+            try:
+                self._warmup_start_temp = self._get_temperature()
+            except Exception:
+                self._warmup_start_temp = None
             return success_status("Warmup started")
         except Exception as e:
             return error_status(f"Failed to start warmup: {e}")
@@ -216,11 +243,16 @@ class CoolingManager:
         """Block until warmup completes or timeout.
 
         Warmup is considered complete when the sensor temperature rises to or above
-        the configured warmup_final_temp (or when the cooler is off and temp stops rising).
+        the configured warmup_final_temp for several consecutive checks, with a
+        minimum warmup duration enforced.
         """
         try:
             start = time.time()
-            last_temp = None
+            last_temp: Optional[float] = None
+            above_count: int = 0
+            min_duration = float(self.warmup_min_duration_s)
+            check_interval = max(1.0, float(self.warmup_check_interval_s))
+
             while (time.time() - start) < float(timeout):
                 try:
                     t = self._get_temperature()
@@ -228,33 +260,36 @@ class CoolingManager:
                 except Exception:
                     current_temp = None
 
-                # Consider warmup done if we reached or exceeded target warmup temp
+                cooler_on_flag = bool(
+                    self._get_any(self.camera, ["cooler_on", "CoolerOn", "set_cooler_on"], False)
+                )
+
                 if current_temp is not None:
-                    if current_temp >= float(self.warmup_final_temp):
+                    # Count consecutive readings above final temp when cooler is off
+                    if (not cooler_on_flag) and current_temp >= float(self.warmup_final_temp):
+                        above_count += 1
+                    else:
+                        above_count = 0
+
+                    elapsed = time.time() - start
+                    if (elapsed >= min_duration) and (above_count >= self.warmup_consecutive_above):
                         self.is_warming_up = False
                         return success_status(
                             f"Warmup completed at {current_temp:.1f}°C",
-                            details={"final_temp": current_temp},
+                            details={
+                                "final_temp": current_temp,
+                                "elapsed_s": elapsed,
+                                "checks_above": above_count,
+                                "start_temp": getattr(self, "_warmup_start_temp", None),
+                            },
                         )
-                    # If temperature stagnates and cooler is off, assume done
-                    if last_temp is not None:
-                        temp_delta = abs(current_temp - last_temp)  # type: ignore[unreachable]
-                        cooler_on_attr = getattr(self.camera, "cooler_on", False)
-                        cooler_on_flag = bool(cooler_on_attr)
-                        if (temp_delta < 0.1) and (not cooler_on_flag):
-                            self.is_warming_up = False
-                            return success_status(
-                                f"Warmup completed (stabilized at {current_temp:.1f}°C)",
-                                details={"final_temp": current_temp},
-                            )
 
                 last_temp = current_temp
-                time.sleep(1.0)
+                time.sleep(check_interval)
 
             # Timeout
             return warning_status(
-                "Warmup timeout",
-                details={"timeout": timeout, "final_temp": last_temp},
+                "Warmup timeout", details={"timeout": timeout, "final_temp": last_temp}
             )
         except Exception as e:
             return error_status(f"Error waiting for warmup completion: {e}")
