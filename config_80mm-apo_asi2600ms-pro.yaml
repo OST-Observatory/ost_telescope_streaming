@@ -155,7 +155,7 @@ overlay:
   # Image size for overlay generation
   image_size: [6248, 4176]  # Full sensor resolution
   # Font size for text
-  font_size: 25
+  font_size: 35
   # Output format for overlays
   output_format: "png"
   # Default filename for overlays
@@ -176,7 +176,7 @@ overlay:
     object_color: [255, 0, 0]
     text_color: [255, 255, 255]
     marker_size: 20
-    text_offset: [30, -30]
+    text_offset: [35, -35]
 
   # Coordinates settings
   coordinates:
@@ -246,7 +246,7 @@ overlay:
       opacity: 180         # Transparency (0-255)
       show_label: true     # Show FOV label
       label_color: [0, 255, 255, 255]  # Label color
-      label_font_size: 15
+      label_font_size: 30
       label_offset: [5, 5]  # Label offset from FOV border
 
     # Position offset (if secondary telescope is not perfectly aligned)

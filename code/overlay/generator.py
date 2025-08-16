@@ -498,7 +498,6 @@ class OverlayGenerator:
                 fov_w,
                 fov_h,
                 pa_deg,
-                is_flipped,
                 self.secondary_fov_config,
                 self.ra_increases_left,
             )

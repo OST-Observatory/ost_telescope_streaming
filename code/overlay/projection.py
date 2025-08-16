@@ -14,9 +14,10 @@ def skycoord_to_pixel_with_rotation(
     fov_width_deg: float,
     fov_height_deg: float,
     position_angle_deg: float = 0.0,
-    is_flipped: bool = False,
+    flip_x: bool = False,
     flip_y: bool = False,
     ra_increases_left: bool = True,
+    **_legacy_kwargs,
 ) -> Tuple[int, int]:
     """Project sky coordinates to pixel coordinates with rotation and flip.
 
@@ -55,7 +56,14 @@ def skycoord_to_pixel_with_rotation(
     x = size_px[0] / 2.0 + (delta_ra_rot / scale_x)
     y = size_px[1] / 2.0 - (delta_dec_rot / scale_y)
 
-    if is_flipped:
+    # Backward compatibility: allow legacy 'is_flipped' kwarg
+    if not flip_x and "is_flipped" in _legacy_kwargs:
+        try:
+            flip_x = bool(_legacy_kwargs.get("is_flipped", False))
+        except Exception:
+            flip_x = False
+
+    if flip_x:
         x = size_px[0] - x
     if flip_y:
         y = size_px[1] - y

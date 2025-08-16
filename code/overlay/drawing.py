@@ -108,7 +108,7 @@ def draw_ellipse_for_object(
     fov_width_deg: float,
     fov_height_deg: float,
     position_angle_deg: float,
-    is_flipped: bool,
+    flip_x: bool,
     color: Tuple[int, int, int, int],
     line_width: int,
 ) -> bool:
@@ -118,7 +118,7 @@ def draw_ellipse_for_object(
     minor_px = dim_min_arcmin / scale_y
     if major_px < 3 or minor_px < 3:
         return False
-    total_rot = (-pa_deg if is_flipped else pa_deg) + position_angle_deg
+    total_rot = (-pa_deg if flip_x else pa_deg) + position_angle_deg
     rot = np.deg2rad(total_rot)
     cos_r = np.cos(rot)
     sin_r = np.sin(rot)
@@ -152,7 +152,6 @@ def draw_secondary_fov(
     fov_width_deg: float,
     fov_height_deg: float,
     position_angle_deg: float,
-    is_flipped: bool,
     secondary_fov_config: dict,
     ra_increases_left: bool,
 ) -> None:
@@ -214,7 +213,6 @@ def draw_secondary_fov(
         fov_width_deg,
         fov_height_deg,
         position_angle_deg,
-        is_flipped,
         ra_increases_left,
     )
 

@@ -283,7 +283,7 @@ class OverlayRunner:
                 position_angle_deg=position_angle_deg,
                 image_size=image_size,
                 mag_limit=mag_limit,
-                is_flipped=is_flipped,
+                flip_x=is_flipped,
                 flip_y=flip_y,
             )
 
@@ -441,8 +441,8 @@ class OverlayRunner:
 
                         # Use PA from solver; ignore solver flip parity by default.
                         # Allow config to force X flip if user's image chain mirrors.
-                        is_flipped = self.force_flip_x
-                        if is_flipped:
+                        flip_x = self.force_flip_x
+                        if flip_x:
                             self.logger.info(
                                 "Plate-solving detected flipped image; applying flip correction"
                             )
@@ -457,7 +457,7 @@ class OverlayRunner:
                             fov_width_deg,
                             fov_height_deg,
                             position_angle_deg if position_angle_deg is not None else -1.0,
-                            str(is_flipped),
+                            str(flip_x),
                             str(self.force_flip_y),
                         )
                     else:
@@ -466,7 +466,7 @@ class OverlayRunner:
                         fov_height_deg = None
                         position_angle_deg = None
                         image_size = None
-                        is_flipped = self.force_flip_x
+                        flip_x = self.force_flip_x
 
                         # Try to get actual image size from captured frame
                         if self.video_processor:
@@ -541,7 +541,7 @@ class OverlayRunner:
                         position_angle_deg,
                         image_size,
                         None,
-                        is_flipped,
+                        flip_x,
                         self.force_flip_y,
                     )
 
