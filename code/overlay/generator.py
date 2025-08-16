@@ -294,8 +294,10 @@ class OverlayGenerator:
         position_angle_deg: Optional[float] = None,
         image_size: Optional[Tuple[int, int]] = None,
         mag_limit: Optional[float] = None,
-        is_flipped: Optional[bool] = None,
+        flip_x: Optional[bool] = None,
         flip_y: Optional[bool] = None,
+        # Legacy alias for backward compatibility
+        is_flipped: Optional[bool] = None,
     ) -> str:
         """Generate an overlay image for the given coordinates.
 
@@ -331,7 +333,8 @@ class OverlayGenerator:
             img_size = image_size if image_size is not None else self.image_size
             mag_limit = mag_limit if mag_limit is not None else self.mag_limit
             # Default: do not flip X; solver PA already accounts for flips
-            is_flipped = is_flipped if is_flipped is not None else False
+            if flip_x is None:
+                flip_x = bool(is_flipped) if is_flipped is not None else False
             flip_y = flip_y if flip_y is not None else False
             output_file = output_file or self.default_filename
 
@@ -549,7 +552,7 @@ class OverlayGenerator:
                     # Use found column names
                     obj_coord = SkyCoord(ra=row[ra_col], dec=row[dec_col], unit="deg")
                     x, y = self.skycoord_to_pixel_with_rotation(
-                        obj_coord, center, img_size, fov_w, fov_h, pa_deg, is_flipped, flip_y
+                        obj_coord, center, img_size, fov_w, fov_h, pa_deg, flip_x, flip_y
                     )
 
                     # Check if object is within image bounds
@@ -649,7 +652,7 @@ class OverlayGenerator:
                                 fov_w,
                                 fov_h,
                                 pa_deg,
-                                is_flipped,
+                                flip_x,
                                 tuple(self.object_color),
                                 2,
                             )
