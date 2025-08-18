@@ -181,8 +181,9 @@ overlay:
   # Coordinates settings
   coordinates:
     force_flip_x: false
-    force_flip_y: true
-    rotation_offset_deg: 180.0
+    force_flip_y: false
+    rotation_offset_deg: 201.2
+    use_wcs_projection: true
 
   # Information panel settings
   info_panel:

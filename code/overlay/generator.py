@@ -72,6 +72,8 @@ class OverlayGenerator:
             self.rotation_offset_deg = float(coords_cfg.get("rotation_offset_deg", 0.0))
         except Exception:
             self.rotation_offset_deg = 0.0
+        # Optional: use WCS-based projection instead of math-based
+        self.use_wcs_projection = bool(coords_cfg.get("use_wcs_projection", False))
 
     def get_font(self):
         """Loads an available font for the current system."""
@@ -105,22 +107,53 @@ class OverlayGenerator:
         fov_width_deg,
         fov_height_deg,
         position_angle_deg=0.0,
-        is_flipped=False,
+        flip_x: bool = False,
         flip_y: bool = False,
     ):
-        """Thin wrapper that delegates projection to overlay.projection."""
-        return project_skycoord(
-            obj_coord.ra.degree,
-            obj_coord.dec.degree,
-            center_coord.ra.degree,
-            center_coord.dec.degree,
+        """Wrapper that delegates to math or WCS projection based on config."""
+        obj_ra = obj_coord.ra.degree
+        obj_dec = obj_coord.dec.degree
+        cen_ra = center_coord.ra.degree
+        cen_dec = center_coord.dec.degree
+
+        if not self.use_wcs_projection:
+            return project_skycoord(
+                obj_ra,
+                obj_dec,
+                cen_ra,
+                cen_dec,
+                size_px,
+                fov_width_deg,
+                fov_height_deg,
+                position_angle_deg,
+                flip_x,
+                flip_y,
+                self.ra_increases_left,
+            )
+
+        # WCS branch: derive pixel scale (arcsec/pixel) from FOV and image size
+        width_px, height_px = size_px
+        try:
+            scale_x_arcsec = float(fov_width_deg) * 3600.0 / float(width_px)
+            scale_y_arcsec = float(fov_height_deg) * 3600.0 / float(height_px)
+            pixel_scale_arcsec = (scale_x_arcsec + scale_y_arcsec) * 0.5
+        except Exception:
+            # Fallback to symmetric estimate
+            pixel_scale_arcsec = float(fov_width_deg) * 3600.0 / max(1.0, float(width_px))
+
+        from overlay.projection import skycoord_to_pixel_wcs as project_skycoord_wcs
+
+        return project_skycoord_wcs(
+            obj_ra,
+            obj_dec,
+            cen_ra,
+            cen_dec,
             size_px,
-            fov_width_deg,
-            fov_height_deg,
-            position_angle_deg,
-            is_flipped,
-            flip_y,
-            self.ra_increases_left,
+            pixel_scale_arcsec=pixel_scale_arcsec,
+            position_angle_deg=position_angle_deg,
+            flip_x=flip_x,
+            flip_y=flip_y,
+            ra_increases_left=self.ra_increases_left,
         )
 
     def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
