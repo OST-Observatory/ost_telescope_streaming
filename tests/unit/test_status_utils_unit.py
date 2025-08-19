@@ -42,3 +42,12 @@ def test_unwrap_status_honors_max_depth():
     data, _ = unwrap_status(level1, max_depth=1)
     # With max_depth=1, data should be the level2 status, not the raw 3
     assert hasattr(data, "is_success")
+
+
+def test_unwrap_status_nonstatus_value():
+    from utils.status_utils import unwrap_status
+
+    val = {"x": 1}
+    data, details = unwrap_status(val)
+    assert data == val
+    assert isinstance(details, dict)

@@ -66,3 +66,12 @@ def test_status_to_result_handles_bad_types():
     assert res.ra_center == 0.0
     assert res.fov_width == 1.0
     assert res.solving_time == 0.0
+
+
+def test_status_to_result_image_size_and_pa_defaults():
+    vp = _vp()
+    st = _S(True, data={"image_size": (320, 240)}, details={})
+    res = vp._status_to_result(st)
+    assert res is not None
+    assert res.image_size == (320, 240)
+    assert res.position_angle is None

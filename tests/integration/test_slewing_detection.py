@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
 from drivers.ascom.mount import ASCOMMount
 import pytest
-from test_utils import get_test_config, setup_logging
+
+from tests.test_utils import get_test_config, setup_logging
 
 
 @pytest.mark.integration

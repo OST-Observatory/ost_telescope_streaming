@@ -15,7 +15,10 @@ import pytest
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-from test_utils import get_test_config, print_test_header, setup_logging
+try:
+    from tests.test_utils import get_test_config, print_test_header, setup_logging
+except Exception:
+    from test_utils import get_test_config, print_test_header, setup_logging
 
 
 def extract_fits_parameters(fits_path: str, logger) -> Dict[str, Any]:

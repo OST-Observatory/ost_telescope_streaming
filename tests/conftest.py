@@ -1,9 +1,19 @@
 import logging as _global_logging
 import os
 from pathlib import Path as _Path
+import sys as _sys
+import sysconfig as _sysconfig
 from typing import Any
 
 from config_manager import ConfigManager
+
+# Ensure stdlib takes precedence for modules like 'code' (avoid shadowing by local 'code/' pkg)
+try:
+    _stdlib = _sysconfig.get_paths().get("stdlib")
+    if _stdlib and _stdlib not in _sys.path:
+        _sys.path.insert(0, _stdlib)
+except Exception:
+    pass
 import pytest
 
 
@@ -24,6 +34,16 @@ def pytest_ignore_collect(collection_path: _Path, config):
     """Skip certain tests when optional deps are missing. Uses pathlib Paths."""
     p = collection_path
     name = p.name
+    # Skip integration and legacy directories unless explicitly requested via -m integration
+    try:
+        marker_expr = config.getoption("-m") or ""
+    except Exception:
+        marker_expr = ""
+    parts = set(p.parts)
+    if "integration" in parts and "integration" not in marker_expr:
+        return True
+    if "legacy" in parts:
+        return True
 
     # Skip Alpaca-specific tests when alpaca lib is missing
     if not HAS_ALPACA and (
@@ -224,3 +244,29 @@ def fake_simbad(monkeypatch):
     monkeypatch.setitem(_sys.modules, "astroquery", astro_mod)
     monkeypatch.setitem(_sys.modules, "astroquery.simbad", simbad_mod)
     return _FakeSimbad
+
+
+@pytest.fixture
+def data_assets(tmp_path):
+    """Create tiny sample assets (PNG, and FITS if astropy available)."""
+    from PIL import Image as _Image
+
+    assets: dict[str, str] = {}
+
+    # Tiny PNG
+    png = tmp_path / "sample.png"
+    _Image.new("RGBA", (10, 8), (0, 0, 255, 128)).save(png)
+    assets["png"] = str(png)
+
+    # Optional FITS
+    try:
+        import astropy.io.fits as _fits
+        import numpy as _np
+
+        fits_path = tmp_path / "sample.fits"
+        _fits.PrimaryHDU(_np.zeros((8, 6), dtype=_np.uint16)).writeto(fits_path)
+        assets["fits"] = str(fits_path)
+    except Exception:
+        pass
+
+    return assets

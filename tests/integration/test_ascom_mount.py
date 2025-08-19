@@ -2,14 +2,18 @@ import logging
 from pathlib import Path
 import sys
 
+import pytest
+
 # Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent / "code"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 import argparse
 import time
 
 from config_manager import ConfigManager
 from drivers.ascom.mount import ASCOMMount
+
+pytestmark = pytest.mark.integration
 
 
 def main():
@@ -43,7 +47,3 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

@@ -5,9 +5,14 @@ This script shows exactly what happens with cache loading.
 """
 
 import json
+from pathlib import Path
+import sys
 
 from drivers.ascom.camera import ASCOMCamera
 import pytest
+
+# Ensure tests utilities are importable
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_utils import (
     check_cache_file,
     get_cache_file_path,
@@ -106,5 +111,4 @@ def test_cache_debug():
         pytest.skip(f"Skipping due to environment: {e}")
 
 
-if __name__ == "__main__":
-    test_cache_debug()
+# __main__ runner removed; use pytest

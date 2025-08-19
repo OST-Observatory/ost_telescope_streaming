@@ -20,14 +20,16 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          # Ensure pytest-regressions is available for image snapshot tests when enabled
+          pip install pytest-regressions
           pip install pytest-cov
       - name: Lint and type-check
         run: |
           pip install pre-commit
           pre-commit run --all-files
-      - name: Run unit tests with coverage
+      - name: Run unit tests with coverage (exclude legacy)
         run: |
-          pytest -q -m "not integration" --cov=code --cov-report=xml --cov-report=term --cov-fail-under=60
+          pytest -q -m "not integration" --cov=code --cov-report=xml --cov-report=term --cov-fail-under=70
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:

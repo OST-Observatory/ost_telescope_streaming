@@ -30,3 +30,4 @@ def test_discover_simbad_dimension_fields_empty_list():
 
     maj, min_, ang, dims, pa_supported = discover_simbad_dimension_fields(_Simbad)
     assert maj is None and min_ is None and (ang is None or isinstance(ang, (str, type(None))))
+    assert dims is None or isinstance(dims, (str, type(None)))

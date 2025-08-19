@@ -7,11 +7,14 @@ Tests cooling, filter wheel, and debayering functionality.
 from pathlib import Path
 import sys
 
+import pytest
+
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 from drivers.ascom.camera import ASCOMCamera
-from test_utils import parse_test_args, print_test_header, setup_test_environment
+
+pytestmark = pytest.mark.integration
 
 
 def test_ascom_camera_basic(config) -> bool:
@@ -174,48 +177,3 @@ def test_cli_integration() -> bool:
     except Exception as e:
         print(f"✗ Error testing CLI integration: {e}")
         return False
-
-
-def main() -> None:
-    """Main function for the ASCOM Camera Test."""
-    # Parse command line arguments
-    args = parse_test_args("ASCOM Camera Test")
-
-    # Setup test environment
-    config, logger, driver_id = setup_test_environment(args)
-
-    # Print test header
-    print_test_header("ASCOM Camera Test", driver_id, args.config)
-
-    tests = [
-        ("Basic ASCOM Camera", lambda: test_ascom_camera_basic(config)),
-        ("Method Signatures", lambda: test_ascom_camera_methods(config)),
-        ("Status Objects", lambda: test_status_objects(config)),
-        ("Configuration Integration", lambda: test_config_integration(config)),
-        ("CLI Integration", test_cli_integration),
-    ]
-
-    passed = 0
-    total = len(tests)
-
-    for test_name, test_func in tests:
-        print(f"\n--- {test_name} ---")
-        if test_func():
-            print(f"✓ {test_name} completed")
-            passed += 1
-        else:
-            print(f"✗ {test_name} failed")
-
-    print("\n--- Results ---")
-    print(f"Completed: {passed}/{total}")
-
-    if passed == total:
-        print("\n🎉 All ASCOM camera tests passed!")
-        print("\n✅ ASCOM camera integration is working correctly!")
-    else:
-        print(f"\n❌ {total - passed} test(s) failed.")
-        print("Please check the failed tests and fix any issues.")
-
-
-if __name__ == "__main__":
-    main()
