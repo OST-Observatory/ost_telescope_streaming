@@ -280,6 +280,12 @@ class LocalAstrometryNetSolver(PlateSolver):
         self.downsample: int = int(a_cfg.get("downsample", 2))
         # Pixel scale padding around estimate (arcsec/pix)
         self.scale_pad: float = float(a_cfg.get("scale_pad_arcsec", 0.1))
+        # On Windows, 'solve-field' commonly runs via a bash-compatible shell (WSL/Git Bash)
+        # Configure a wrapper to invoke through bash if desired.
+        self.use_bash_wrapper: bool = bool(a_cfg.get("use_bash", os.name == "nt"))
+        self.bash_path: str = a_cfg.get("bash_path", "bash")
+        # Default to login + command; PowerShell example: bash -lc "solve-field ..."
+        self.bash_args: list[str] = a_cfg.get("bash_args", ["-lc"])
 
     def get_name(self) -> str:
         return "Astrometry.net (local)"
@@ -457,13 +463,27 @@ class LocalAstrometryNetSolver(PlateSolver):
 
             import subprocess
 
-            self.logger.info("Running solve-field: %s", " ".join(cmd))
-            proc = subprocess.run(
-                cmd,
-                text=True,
-                capture_output=True,
-                timeout=self.timeout_s,
-            )
+            # On Windows or when configured, wrap command via bash (e.g., WSL/Git Bash)
+            if self.use_bash_wrapper:
+                import shlex as _shlex
+
+                cmd_str = _shlex.join(cmd)
+                full_cmd = [self.bash_path] + list(self.bash_args) + [cmd_str]
+                self.logger.info("Running (bash-wrapped) solve-field: %s", " ".join(full_cmd))
+                proc = subprocess.run(
+                    full_cmd,
+                    text=True,
+                    capture_output=True,
+                    timeout=self.timeout_s,
+                )
+            else:
+                self.logger.info("Running solve-field: %s", " ".join(cmd))
+                proc = subprocess.run(
+                    cmd,
+                    text=True,
+                    capture_output=True,
+                    timeout=self.timeout_s,
+                )
             if proc.returncode != 0:
                 msg = proc.stderr or proc.stdout or "solve-field failed"
                 return error_status(f"Astrometry.net solve-field error: {msg}")

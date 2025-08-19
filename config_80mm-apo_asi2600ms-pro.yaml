@@ -122,7 +122,7 @@ plate_solve:
   min_solve_interval: 30
   save_plate_solve_frames: true
   plate_solve_dir: "plate_solve_frames"
-  default_solver: "platesolve2"
+  default_solver: "astrometry_local"
 
   # Settings for PlateSolve2
   platesolve2:
@@ -134,6 +134,18 @@ plate_solve:
     number_of_regions: 150
     min_stars: 20
     max_stars: 200
+
+  # Settings Astrometry.net local
+  astrometry_local:
+    solve_field_path: "solve-field"
+    working_directory: "astrometry_output"
+    timeout: 240
+    search_radius_deg: 3.5
+    downsample: 2
+    scale_pad_arcsec: 0.3
+    use_bash: true
+    bash_path: "bash"        # oder voller Pfad zu bash.exe
+    bash_args: ["-lc"]
 
   # Settings for Astrometry.net
   astrometry:
