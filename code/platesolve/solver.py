@@ -30,8 +30,9 @@ import logging
 import math
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Type
 
+import numpy as np
 from status import PlateSolveStatus, error_status, success_status
 
 
@@ -50,6 +51,7 @@ class PlateSolveResult:
         position_angle: Optional[float] = None,
         image_size: Optional[Tuple[int, int]] = None,
         is_flipped: Optional[bool] = None,
+        wcs_path: Optional[str] = None,
     ):
         self.ra_center = ra_center
         self.dec_center = dec_center
@@ -61,6 +63,7 @@ class PlateSolveResult:
         self.position_angle = position_angle
         self.image_size = image_size
         self.is_flipped = is_flipped
+        self.wcs_path = wcs_path
 
     def __str__(self) -> str:
         try:
@@ -262,6 +265,227 @@ class AstrometryNetSolver(PlateSolver):
         return error_status("Astrometry.net solver not yet implemented")
 
 
+class LocalAstrometryNetSolver(PlateSolver):
+    """Local astrometry.net solver using the 'solve-field' CLI."""
+
+    def __init__(self, config=None, logger=None):
+        super().__init__(config=config, logger=logger)
+        a_cfg = self.config.get_plate_solve_config().get("astrometry_local", {})
+        self.solve_field_path: str = a_cfg.get("solve_field_path", "solve-field")
+        self.working_directory: str = a_cfg.get("working_directory", "astrometry_output")
+        self.timeout_s: float = float(a_cfg.get("timeout", 120))
+        # Search radius (deg) when RA/Dec hints are provided
+        self.search_radius_deg: float = float(a_cfg.get("search_radius_deg", 1.0))
+        # Downsample factor (e.g., 2)
+        self.downsample: int = int(a_cfg.get("downsample", 2))
+        # Pixel scale padding around estimate (arcsec/pix)
+        self.scale_pad: float = float(a_cfg.get("scale_pad_arcsec", 0.1))
+
+    def get_name(self) -> str:
+        return "Astrometry.net (local)"
+
+    def is_available(self) -> bool:
+        # Consider available if the command is configured or in PATH
+        return bool(self.solve_field_path)
+
+    def _estimate_pixel_scale_arcsec(self) -> float:
+        try:
+            # Estimate scale from config: pixel_size (µm) and focal_length (mm)
+            camera_cfg = self.config.get_camera_config()
+            telescope_cfg = self.config.get_telescope_config()
+            pixel_size_um = float(camera_cfg.get("pixel_size", 3.75))
+            focal_length_mm = float(telescope_cfg.get("focal_length", 1000.0))
+            # Apply binning if configured
+            bin_x = 1.0
+            try:
+                # ASCOM-style
+                ascom_cfg = camera_cfg.get("ascom", {})
+                if "binning" in ascom_cfg:
+                    bin_x = float(ascom_cfg.get("binning", 1))
+                # Alpaca-style list [bx, by]
+                alpaca_cfg = camera_cfg.get("alpaca", {})
+                if "binning" in alpaca_cfg:
+                    b = alpaca_cfg.get("binning", [1, 1])
+                    if isinstance(b, (list, tuple)) and len(b) > 0:
+                        bin_x = float(b[0] or 1)
+            except Exception:
+                pass
+            pixel_size_mm = pixel_size_um / 1000.0
+            effective_pixel_mm = pixel_size_mm * bin_x
+            # 206265 arcsec per radian
+            return (effective_pixel_mm / focal_length_mm) * 206265.0
+        except Exception:
+            # Fallback to a typical small-sensor scale
+            return 1.5
+
+    def _build_command(
+        self,
+        image_path: str,
+        ra_deg: Optional[float],
+        dec_deg: Optional[float],
+        pixel_scale_arcsec: float,
+    ) -> tuple[list[str], str]:
+        from pathlib import Path as _Path
+
+        # Prepare working directory and output path hints
+        out_dir = _Path(self.working_directory)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        img_path = _Path(image_path)
+        base = img_path.stem
+        new_fits = str(out_dir / f"{base}.new")
+
+        # scale-low/high window around estimate
+        low = max(0.01, pixel_scale_arcsec - self.scale_pad)
+        high = pixel_scale_arcsec + self.scale_pad
+
+        cmd = [
+            self.solve_field_path,
+            "--overwrite",
+            "--no-plots",
+            "--fits-image",
+            "--scale-units",
+            "arcsecperpix",
+            "--scale-low",
+            f"{low}",
+            "--scale-high",
+            f"{high}",
+            "--dir",
+            str(out_dir),
+            "--downsample",
+            str(self.downsample),
+        ]
+        if ra_deg is not None and dec_deg is not None:
+            cmd.extend(
+                [
+                    "--ra",
+                    f"{ra_deg}",
+                    "--dec",
+                    f"{dec_deg}",
+                    "--radius",
+                    f"{self.search_radius_deg}",
+                ]
+            )
+        # Input image path last; ensure safe quoting via shlex.split on composed
+        cmd.append(str(img_path))
+        return cmd, new_fits
+
+    def _parse_wcs_result(self, new_fits_path: str, image_path: str) -> Dict[str, object]:
+        try:
+            import astropy.io.fits as fits
+            from astropy.wcs import WCS
+            from astropy.wcs.utils import proj_plane_pixel_scales
+        except Exception as e:
+            raise RuntimeError(f"Astropy required to parse WCS: {e}") from e
+
+        with fits.open(new_fits_path) as hdul:
+            hdr = hdul[0].header
+            data = hdul[0].data
+            w = WCS(hdr)
+            if data is not None and hasattr(data, "shape"):
+                if data.ndim == 2:
+                    height, width = data.shape
+                elif data.ndim == 3:
+                    height, width = data.shape[-2], data.shape[-1]
+                else:
+                    height = int(hdr.get("NAXIS2", 0))
+                    width = int(hdr.get("NAXIS1", 0))
+            else:
+                height = int(hdr.get("NAXIS2", 0))
+                width = int(hdr.get("NAXIS1", 0))
+
+        # Center from WCS
+        ra_center = float(w.wcs.crval[0])
+        dec_center = float(w.wcs.crval[1])
+        # Pixel scales
+        scales_deg = proj_plane_pixel_scales(w)
+        scale_x_deg = float(scales_deg[0])
+        scale_y_deg = float(scales_deg[1])
+        fov_width_deg = scale_x_deg * float(width)
+        fov_height_deg = scale_y_deg * float(height)
+        # Position angle approximation from CD matrix
+        if getattr(w.wcs, "cd", None) is not None:
+            cd = np.array(w.wcs.cd, dtype=float)
+        else:
+            pc = np.array(getattr(w.wcs, "pc", np.eye(2)), dtype=float)
+            cdelt = np.array(getattr(w.wcs, "cdelt", [scale_x_deg, scale_y_deg]), dtype=float)
+            cd = pc @ np.diag(cdelt)
+        pa_rad = math.atan2(cd[0, 1], cd[0, 0])
+        position_angle = math.degrees(pa_rad)
+
+        return {
+            "ra_center": ra_center,
+            "dec_center": dec_center,
+            "fov_width": fov_width_deg,
+            "fov_height": fov_height_deg,
+            "position_angle": position_angle,
+            "image_size": (int(width), int(height)),
+            "pixel_scale": (scale_x_deg + scale_y_deg) * 0.5 * 3600.0,
+            "method": self.get_name(),
+            "wcs_path": new_fits_path,
+        }
+
+    def solve(self, image_path: str) -> PlateSolveStatus:
+        if not self.is_available():
+            return error_status("Astrometry.net (local) not available")
+        if not os.path.exists(image_path):
+            return error_status(f"Image file not found: {image_path}")
+        start_time = time.time()
+        try:
+            # RA/Dec hints from mount, if available
+            ra_hint = None
+            dec_hint = None
+            try:
+                from drivers.ascom.mount import ASCOMMount
+
+                mount = ASCOMMount(config=self.config, logger=self.logger)
+                mstat = mount.get_coordinates()
+                if mstat.is_success:
+                    ra_hint, dec_hint = mstat.data
+                    self.logger.info(
+                        "Using mount coordinates: RA=%.4f°, Dec=%.4f°",
+                        ra_hint,
+                        dec_hint,
+                    )
+            except Exception as e:
+                self.logger.debug(f"Mount RA/Dec hint unavailable: {e}")
+
+            scale_arcsec = self._estimate_pixel_scale_arcsec()
+            cmd, new_fits = self._build_command(image_path, ra_hint, dec_hint, scale_arcsec)
+
+            import subprocess
+
+            self.logger.info("Running solve-field: %s", " ".join(cmd))
+            proc = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                timeout=self.timeout_s,
+            )
+            if proc.returncode != 0:
+                msg = proc.stderr or proc.stdout or "solve-field failed"
+                return error_status(f"Astrometry.net solve-field error: {msg}")
+
+            if not os.path.exists(new_fits):
+                return error_status("Astrometry.net did not produce a .new FITS file")
+
+            data = self._parse_wcs_result(new_fits, image_path)
+            solving_time = time.time() - start_time
+            return success_status(
+                "Astrometry.net local solving successful",
+                data=data,
+                details={"solving_time": solving_time, "method": self.get_name()},
+            )
+        except subprocess.TimeoutExpired:
+            return error_status(f"Astrometry.net solve-field timed out after {self.timeout_s}s")
+        except Exception as e:
+            solving_time = time.time() - start_time
+            self.logger.error(f"Astrometry.net local exception after {solving_time:.2f}s: {e}")
+            return error_status(f"Astrometry.net local error: {e}")
+
+
 class PlateSolverFactory:
     """Factory for plate solver instances."""
 
@@ -280,12 +504,13 @@ class PlateSolverFactory:
                     "default_solver", "platesolve2"
                 )
 
-        solvers = {
+        solvers: Dict[str, Type[PlateSolver]] = {
             "platesolve2": PlateSolve2,
             "astrometry": AstrometryNetSolver,
+            "astrometry_local": LocalAstrometryNetSolver,
         }
 
-        solver_class = solvers.get(solver_type.lower())
+        solver_class: Optional[Type[PlateSolver]] = solvers.get(solver_type.lower())
         if solver_class:
             return solver_class(config=config, logger=logger)
         else:
@@ -297,8 +522,9 @@ class PlateSolverFactory:
 
     @staticmethod
     def get_available_solvers(config=None, logger=None) -> Dict[str, bool]:
-        solvers = {
+        solvers: Dict[str, PlateSolver] = {
             "platesolve2": PlateSolve2(config=config, logger=logger),
             "astrometry": AstrometryNetSolver(config=config, logger=logger),
+            "astrometry_local": LocalAstrometryNetSolver(config=config, logger=logger),
         }
         return {name: solver.is_available() for name, solver in solvers.items()}
