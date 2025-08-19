@@ -76,6 +76,12 @@ class OverlayRunner:
         coords_cfg = self.config.get_overlay_config().get("coordinates", {})
         self.force_flip_x = bool(coords_cfg.get("force_flip_x", False))
         self.force_flip_y = bool(coords_cfg.get("force_flip_y", False))
+        # Slew/track gating configuration
+        overlay_cfg = self.config.get_overlay_config()
+        gate_cfg = overlay_cfg.get("capture_gating", {})
+        self.block_during_slew: bool = bool(gate_cfg.get("block_during_slew", True))
+        self.require_tracking: bool = bool(gate_cfg.get("require_tracking", False))
+        self.alert_on_slew: bool = bool(gate_cfg.get("alert_on_slew", True))
 
         # Initialize components
         self._initialize_components()
@@ -265,6 +271,7 @@ class OverlayRunner:
         mag_limit: Optional[float] = None,
         is_flipped: Optional[bool] = None,
         flip_y: Optional[bool] = None,
+        status_messages: Optional[list[str]] = None,
     ) -> Status:
         """Generate astronomical overlay with given coordinates."""
         if not OVERLAY_AVAILABLE:
@@ -285,6 +292,7 @@ class OverlayRunner:
                 mag_limit=mag_limit,
                 flip_x=is_flipped,
                 flip_y=flip_y,
+                status_messages=status_messages,
             )
 
             self.logger.info("Overlay generated successfully: %s", overlay_path)
@@ -531,6 +539,47 @@ class OverlayRunner:
                         time.sleep(self.retry_delay)
                         continue
 
+                    # Determine status messages for overlay (slewing/parking)
+                    status_messages = []
+                    try:
+                        if self.mount is not None and self.alert_on_slew:
+                            # Show message if mount is slewing or not tracking
+                            is_slewing = False
+                            try:
+                                st = self.mount.is_slewing()
+                                is_slewing = (
+                                    bool(getattr(st, "data", False)) if st.is_success else False
+                                )
+                            except Exception:
+                                is_slewing = False
+                            if is_slewing:
+                                status_messages.append("Mount is slewing to new target…")
+                            # Tracking state if available
+                            try:
+                                trk = getattr(self.mount, "is_tracking", None)
+                                if callable(trk):
+                                    tr = trk()
+                                    tracking_on = (
+                                        bool(getattr(tr, "data", False))
+                                        if hasattr(tr, "is_success")
+                                        else bool(tr)
+                                    )
+                                else:
+                                    tracking_on = bool(trk) if trk is not None else True
+                                if not tracking_on:
+                                    status_messages.append("Tracking is OFF")
+                            except Exception:
+                                pass
+                            # Parking state if available
+                            try:
+                                is_parked = bool(getattr(self.mount, "is_parked", lambda: False)())
+                                if is_parked:
+                                    status_messages.append("Mount is parked")
+                            except Exception:
+                                pass
+                    except Exception:
+                        status_messages = []
+
                     # Create overlay with all available parameters
                     overlay_status = self.generate_overlay_with_coords(
                         ra_deg,
@@ -543,6 +592,7 @@ class OverlayRunner:
                         None,
                         flip_x,
                         self.force_flip_y,
+                        status_messages=status_messages if status_messages else None,
                     )
 
                     if overlay_status.is_success:

@@ -116,6 +116,12 @@ class VideoProcessor:
         self.use_capture_count: bool = self.frame_config.get("use_capture_count", True)
         self.file_format: str = self.frame_config.get("file_format", "PNG")
 
+        # Capture gating (slew/tracking) from overlay config
+        overlay_cfg = self.config.get_overlay_config()
+        gating_cfg = overlay_cfg.get("capture_gating", {})
+        self.gating_block_during_slew: bool = bool(gating_cfg.get("block_during_slew", True))
+        self.gating_require_tracking: bool = bool(gating_cfg.get("require_tracking", False))
+
         # Plate-solving settings
         self.solver_type: str = self.plate_solve_config.get("default_solver", "platesolve2")
         self.auto_solve: bool = self.plate_solve_config.get("auto_solve", True)
@@ -355,6 +361,31 @@ class VideoProcessor:
             return self.video_capture.get_current_frame()
         except Exception as e:
             self.logger.warning(f"Failed to obtain frame: {e}")
+            return None
+
+    def _mount_is_slewing(self) -> bool:
+        try:
+            if not hasattr(self, "mount") or self.mount is None:
+                return False
+            st = self.mount.is_slewing()
+            return bool(getattr(st, "data", False)) if getattr(st, "is_success", False) else False
+        except Exception:
+            return False
+
+    def _mount_is_tracking(self) -> Optional[bool]:
+        try:
+            if not hasattr(self, "mount") or self.mount is None:
+                return None
+            trk = getattr(self.mount, "is_tracking", None)
+            if callable(trk):
+                res = trk()
+                if hasattr(res, "is_success"):
+                    return bool(getattr(res, "data", False)) if res.is_success else None
+                return bool(res)
+            if trk is not None:
+                return bool(trk)
+            return None
+        except Exception:
             return None
 
     def _save_outputs(self, frame) -> tuple[Optional[Path], Optional[Path]]:
@@ -614,6 +645,13 @@ class VideoProcessor:
                 elif not slewing_status.is_success:
                     self.logger.warning(f"Could not check slewing status: {slewing_status.message}")
 
+            # Additional gating: require tracking ON if configured
+            if self.gating_require_tracking:
+                tracking = self._mount_is_tracking()
+                if tracking is False:
+                    self.logger.info("Tracking is OFF; skipping capture per configuration")
+                    return
+
             # Obtain frame (one-shot for long exposures, current for OpenCV) and time it
             t_capture_start = time.monotonic()
             frame = self._obtain_frame()
@@ -657,6 +695,53 @@ class VideoProcessor:
                 total_save_ms = (time.monotonic() - t_save_start) * 1000.0
             else:
                 total_save_ms = 0.0
+
+            # Post-capture gating: discard if mount started slewing or lost tracking
+            try:
+                should_discard = False
+                if self.gating_block_during_slew and self._mount_is_slewing():
+                    self.logger.info("Discarding capture due to slewing detected post-capture")
+                    should_discard = True
+                if self.gating_require_tracking:
+                    tracking = self._mount_is_tracking()
+                    if tracking is False:
+                        self.logger.info("Discarding capture due to tracking OFF post-capture")
+                        should_discard = True
+                if should_discard:
+                    try:
+                        if frame_filename and frame_filename.exists():
+                            # Python 3.8+: missing_ok available; otherwise fallback below
+                            try:
+                                frame_filename.unlink(missing_ok=True)
+                            except TypeError:
+                                os.remove(frame_filename)
+                    except TypeError:
+                        # Python <3.8 without missing_ok
+                        try:
+                            if frame_filename and frame_filename.exists():
+                                os.remove(frame_filename)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    try:
+                        if fits_filename and fits_filename.exists():
+                            try:
+                                fits_filename.unlink(missing_ok=True)
+                            except TypeError:
+                                os.remove(fits_filename)
+                    except TypeError:
+                        try:
+                            if fits_filename and fits_filename.exists():
+                                os.remove(fits_filename)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    # Skip plate solving for discarded capture
+                    return
+            except Exception:
+                pass
 
             # Trigger capture callback
             if self.on_capture_frame:

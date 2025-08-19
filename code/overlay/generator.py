@@ -336,6 +336,7 @@ class OverlayGenerator:
         flip_y: Optional[bool] = None,
         # Legacy alias for backward compatibility
         is_flipped: Optional[bool] = None,
+        status_messages: Optional[list[str]] = None,
     ) -> str:
         """Generate an overlay image for the given coordinates.
 
@@ -475,6 +476,14 @@ class OverlayGenerator:
                 text_color = tuple(self.info_panel_config.get("text_color", [255, 255, 255, 255]))
                 lines.append(("INFO PANEL", title_color))
                 lines.append(("", text_color))
+                # Optional status messages (e.g., slewing/parking)
+                if status_messages:
+                    alert_color = tuple(
+                        self.info_panel_config.get("alert_color", [255, 165, 0, 255])
+                    )
+                    for msg in status_messages:
+                        lines.append((msg, alert_color))
+                    lines.append(("", text_color))
                 if self.info_panel_config.get("show_timestamp", True):
                     from datetime import datetime
 
