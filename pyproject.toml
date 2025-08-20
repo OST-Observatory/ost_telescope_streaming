@@ -19,7 +19,7 @@ warn_unreachable = true
 strict_optional = true
 no_implicit_optional = true
 show_error_codes = true
-exclude = ["tests/"]
+exclude = "^tests/"
 disable_error_code = ["import-untyped"]
 
 [tool.black]

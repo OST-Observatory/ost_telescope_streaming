@@ -11,7 +11,15 @@ sys.path.insert(0, str(Path(__file__).parent / "code"))
 
 from config_manager import ConfigManager
 
-from code.overlay.runner import OverlayRunner
+OverlayRunner = None
+try:
+    # Import lazily to allow --help to work even if optional drivers are missing
+    from code.overlay.runner import OverlayRunner as _OverlayRunner
+
+    OverlayRunner = _OverlayRunner
+except Exception:
+    # Optional dependency missing; will be handled in main()
+    OverlayRunner = None
 
 
 def main():
@@ -254,6 +262,9 @@ Telemetry:
             logger.info("Camera cooling enabled")
 
         # Create overlay runner (VideoProcessor wird automatisch initialisiert)
+        if OverlayRunner is None:
+            logger.error("OverlayRunner unavailable due to missing optional dependencies")
+            sys.exit(1)
         runner = OverlayRunner(config=config, logger=logger)
         global_runner = runner  # Store for signal handler
 
