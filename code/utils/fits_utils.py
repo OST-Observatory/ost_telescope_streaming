@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import math
+from typing import Any, Dict, Optional, Tuple
 
 
 def _safe_float(value: Any) -> float | None:
@@ -187,5 +188,101 @@ def enrich_header_from_metadata(
                 header["CAPEND"] = str(frame_details["capture_finished_at"])
             if "save_duration_ms" in frame_details:
                 header["SAVEMS"] = float(frame_details["save_duration_ms"])
+    except Exception:
+        pass
+
+    # Coordinates and pier side
+    try:
+        ra_deg: Optional[float] = None
+        dec_deg: Optional[float] = None
+
+        # Helper to parse from details
+        def _get_coords_from_details(
+            details: Dict[str, Any]
+        ) -> Tuple[Optional[float], Optional[float]]:
+            ra_local: Optional[float] = None
+            dec_local: Optional[float] = None
+            if "coordinates" in details and isinstance(details["coordinates"], (tuple, list)):
+                try:
+                    ra_local = _safe_float(details["coordinates"][0])
+                    dec_local = _safe_float(details["coordinates"][1])
+                except Exception:
+                    ra_local = None
+                    dec_local = None
+            for key in ("ra_deg", "ra"):
+                if key in details and details.get(key) is not None:
+                    try:
+                        ra_local = _safe_float(details.get(key))
+                    except Exception:
+                        pass
+            for key in ("dec_deg", "dec"):
+                if key in details and details.get(key) is not None:
+                    try:
+                        dec_local = _safe_float(details.get(key))
+                    except Exception:
+                        pass
+            # RA could be in hours
+            if ra_local is not None and 0.0 <= ra_local <= 24.0:
+                ra_local = ra_local * 15.0
+            return ra_local, dec_local
+
+        if isinstance(frame_details, dict):
+            ra_deg, dec_deg = _get_coords_from_details(frame_details)
+
+        # Try to query the mount (ASCOM) for coordinates and pier side regardless of camera type
+        # Use results only to fill missing values, and to set PIERSIDE if not present
+        try:
+            from drivers.ascom.mount import ASCOMMount
+
+            mount = ASCOMMount(config=config, logger=logger)
+            status = mount.get_mount_status()
+            if getattr(status, "is_success", False) and isinstance(status.data, dict):
+                data = status.data
+                if ra_deg is None:
+                    ra_val = data.get("ra_deg")
+                    ra_deg = _safe_float(ra_val)
+                if dec_deg is None:
+                    dec_val = data.get("dec_deg")
+                    dec_deg = _safe_float(dec_val)
+                # Pier side
+                if data.get("side_of_pier") is not None and "PIERSIDE" not in header:
+                    header["PIERSIDE"] = str(data.get("side_of_pier"))
+        except Exception:
+            # Silently ignore on non-Windows or when ASCOM not available
+            pass
+
+        # If coordinates available, write both numeric and sexagesimal
+        def _format_ra_sexagesimal(ra_degrees: float) -> str:
+            # Convert degrees to hours:min:sec string
+            ra_hours_total = (ra_degrees % 360.0) / 15.0
+            hours = int(math.floor(ra_hours_total))
+            minutes_total = (ra_hours_total - hours) * 60.0
+            minutes = int(math.floor(minutes_total))
+            seconds = (minutes_total - minutes) * 60.0
+            return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}"
+
+        def _format_dec_sexagesimal(dec_degrees: float) -> str:
+            sign = "+" if dec_degrees >= 0 else "-"
+            dec_abs = abs(dec_degrees)
+            degrees = int(math.floor(dec_abs))
+            minutes_total = (dec_abs - degrees) * 60.0
+            minutes = int(math.floor(minutes_total))
+            seconds = (minutes_total - minutes) * 60.0
+            return f"{sign}{degrees:02d}:{minutes:02d}:{seconds:05.2f}"
+
+        # If user already provided pier side in metadata, keep it / set it
+        if isinstance(frame_details, dict):
+            for k in ("pierside", "pier_side", "side_of_pier"):
+                if k in frame_details and frame_details.get(k) is not None:
+                    header["PIERSIDE"] = str(frame_details.get(k))
+                    break
+
+        if ra_deg is not None and dec_deg is not None:
+            # Numeric degrees
+            header["RA"] = float(ra_deg)
+            header["DEC"] = float(dec_deg)
+            # Sexagesimal strings commonly used
+            header["OBJCTRA"] = _format_ra_sexagesimal(float(ra_deg))
+            header["OBJCTDEC"] = _format_dec_sexagesimal(float(dec_deg))
     except Exception:
         pass

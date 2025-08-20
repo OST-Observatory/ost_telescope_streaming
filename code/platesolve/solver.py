@@ -347,6 +347,10 @@ class LocalAstrometryNetSolver(PlateSolver):
         low = max(0.01, pixel_scale_arcsec - self.scale_pad)
         high = pixel_scale_arcsec + self.scale_pad
 
+        # Use POSIX-style paths when wrapping via bash (Git Bash / WSL)
+        dir_arg = out_dir.as_posix() if self.use_bash_wrapper else str(out_dir)
+        img_arg = img_path.as_posix() if self.use_bash_wrapper else str(img_path)
+
         cmd = [
             self.solve_field_path,
             "--overwrite",
@@ -359,7 +363,7 @@ class LocalAstrometryNetSolver(PlateSolver):
             "--scale-high",
             f"{high}",
             "--dir",
-            str(out_dir),
+            dir_arg,
             "--downsample",
             str(self.downsample),
         ]
@@ -375,8 +379,95 @@ class LocalAstrometryNetSolver(PlateSolver):
                 ]
             )
         # Input image path last; ensure safe quoting via shlex.split on composed
-        cmd.append(str(img_path))
+        cmd.append(img_arg)
         return cmd, new_fits
+
+    def _parse_sexagesimal_to_deg(self, value: str, is_ra: bool) -> Optional[float]:
+        try:
+            text = str(value).strip()
+            if not text:
+                return None
+            # Normalize separators
+            text = text.replace(" ", ":").replace("::", ":")
+            parts_s = text.split(":")
+            parts = []
+            for p in parts_s:
+                if p == "":
+                    continue
+                parts.append(float(p))
+            if not parts:
+                return None
+            if is_ra:
+                # RA given in hours:minutes:seconds -> convert to degrees
+                hours = parts[0]
+                minutes = parts[1] if len(parts) > 1 else 0.0
+                seconds = parts[2] if len(parts) > 2 else 0.0
+                hours_total = abs(hours) + minutes / 60.0 + seconds / 3600.0
+                if hours < 0:
+                    hours_total = -hours_total
+                return hours_total * 15.0
+            else:
+                # Dec in degrees:minutes:seconds
+                sign = -1.0 if str(value).lstrip().startswith("-") else 1.0
+                degrees = abs(parts[0])
+                minutes = parts[1] if len(parts) > 1 else 0.0
+                seconds = parts[2] if len(parts) > 2 else 0.0
+                deg_total = degrees + minutes / 60.0 + seconds / 3600.0
+                return sign * deg_total
+        except Exception:
+            return None
+
+    def _read_ra_dec_hints_from_image(
+        self, image_path: str
+    ) -> tuple[Optional[float], Optional[float]]:
+        try:
+            import astropy.io.fits as fits
+        except Exception:
+            return None, None
+        try:
+            with fits.open(image_path) as hdul:
+                hdr = hdul[0].header
+                # Try common keys with numeric degrees first
+                ra = hdr.get("RA")
+                dec = hdr.get("DEC")
+                ra_deg: Optional[float] = None
+                dec_deg: Optional[float] = None
+                # Numeric RA/DEC
+                if isinstance(ra, (int, float)):
+                    ra_deg = float(ra)
+                    # Heuristic: RA may be in hours if <= 24
+                    if 0.0 <= ra_deg <= 24.0:
+                        ra_deg = ra_deg * 15.0
+                if isinstance(dec, (int, float)):
+                    dec_deg = float(dec)
+                # Sexagesimal strings
+                if ra_deg is None:
+                    ra_str = hdr.get("OBJCTRA") or hdr.get("RA_OBJ") or hdr.get("TELRA")
+                    if isinstance(ra_str, str):
+                        ra_deg = self._parse_sexagesimal_to_deg(ra_str, is_ra=True)
+                if dec_deg is None:
+                    dec_str = hdr.get("OBJCTDEC") or hdr.get("DEC_OBJ") or hdr.get("TELDEC")
+                    if isinstance(dec_str, str):
+                        dec_deg = self._parse_sexagesimal_to_deg(dec_str, is_ra=False)
+                # WCS center (if present) as a last resort
+                if ra_deg is None and "CRVAL1" in hdr:
+                    try:
+                        ra_deg = float(hdr.get("CRVAL1"))
+                    except Exception:
+                        pass
+                if dec_deg is None and "CRVAL2" in hdr:
+                    try:
+                        dec_deg = float(hdr.get("CRVAL2"))
+                    except Exception:
+                        pass
+                # Validate ranges
+                if ra_deg is not None and not (0.0 <= ra_deg < 360.0):
+                    ra_deg = None
+                if dec_deg is not None and not (-90.0 <= dec_deg <= 90.0):
+                    dec_deg = None
+                return ra_deg, dec_deg
+        except Exception:
+            return None, None
 
     def _parse_wcs_result(self, new_fits_path: str, image_path: str) -> Dict[str, object]:
         try:
@@ -440,23 +531,33 @@ class LocalAstrometryNetSolver(PlateSolver):
             return error_status(f"Image file not found: {image_path}")
         start_time = time.time()
         try:
-            # RA/Dec hints from mount, if available
-            ra_hint = None
-            dec_hint = None
-            try:
-                from drivers.ascom.mount import ASCOMMount
+            # Prefer RA/Dec hints from the FITS header if available
+            ra_hint, dec_hint = self._read_ra_dec_hints_from_image(image_path)
+            if ra_hint is not None and dec_hint is not None:
+                self.logger.info(
+                    "Using image header coordinates: RA=%.6f°, Dec=%.6f°",
+                    ra_hint,
+                    dec_hint,
+                )
+            else:
+                # Fallback to mount coordinates
+                try:
+                    from drivers.ascom.mount import ASCOMMount
 
-                mount = ASCOMMount(config=self.config, logger=self.logger)
-                mstat = mount.get_coordinates()
-                if mstat.is_success:
-                    ra_hint, dec_hint = mstat.data
-                    self.logger.info(
-                        "Using mount coordinates: RA=%.4f°, Dec=%.4f°",
-                        ra_hint,
-                        dec_hint,
-                    )
-            except Exception as e:
-                self.logger.debug(f"Mount RA/Dec hint unavailable: {e}")
+                    mount = ASCOMMount(config=self.config, logger=self.logger)
+                    mstat = mount.get_coordinates()
+                    if mstat.is_success:
+                        ra_hint, dec_hint = mstat.data
+                        # Heuristic: if mount returns RA in hours (<=24), convert to degrees
+                        if isinstance(ra_hint, (int, float)) and 0.0 <= float(ra_hint) <= 24.0:
+                            ra_hint = float(ra_hint) * 15.0
+                        self.logger.info(
+                            "Using mount coordinates: RA=%.6f°, Dec=%.6f°",
+                            float(ra_hint) if ra_hint is not None else float("nan"),
+                            float(dec_hint) if dec_hint is not None else float("nan"),
+                        )
+                except Exception as e:
+                    self.logger.debug(f"Mount RA/Dec hint unavailable: {e}")
 
             scale_arcsec = self._estimate_pixel_scale_arcsec()
             cmd, new_fits = self._build_command(image_path, ra_hint, dec_hint, scale_arcsec)
@@ -469,7 +570,16 @@ class LocalAstrometryNetSolver(PlateSolver):
 
                 cmd_str = _shlex.join(cmd)
                 full_cmd = [self.bash_path] + list(self.bash_args) + [cmd_str]
-                self.logger.info("Running (bash-wrapped) solve-field: %s", " ".join(full_cmd))
+                # Log as a PowerShell-friendly string with quotes around the -c payload
+                try:
+                    bash_prefix = " ".join([self.bash_path] + list(self.bash_args))
+                    self.logger.info(
+                        'Running (bash-wrapped) solve-field: %s "%s"',
+                        bash_prefix,
+                        cmd_str,
+                    )
+                except Exception:
+                    self.logger.info("Running (bash-wrapped) solve-field: %s", " ".join(full_cmd))
                 proc = subprocess.run(
                     full_cmd,
                     text=True,
@@ -484,14 +594,45 @@ class LocalAstrometryNetSolver(PlateSolver):
                     capture_output=True,
                     timeout=self.timeout_s,
                 )
+            # Log full stdout/stderr at debug level for diagnostics
+            if proc.stdout:
+                self.logger.debug("solve-field stdout:\n%s", proc.stdout)
+            if proc.stderr:
+                self.logger.debug("solve-field stderr:\n%s", proc.stderr)
+
             if proc.returncode != 0:
                 msg = proc.stderr or proc.stdout or "solve-field failed"
-                return error_status(f"Astrometry.net solve-field error: {msg}")
+                # Try to parse hints even on failure
+                combined_output = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                hints = self._parse_cli_output_for_hints(combined_output)
+                return error_status(
+                    f"Astrometry.net solve-field error: {msg}",
+                    details={"cli_hints": hints},
+                )
 
             if not os.path.exists(new_fits):
                 return error_status("Astrometry.net did not produce a .new FITS file")
 
             data = self._parse_wcs_result(new_fits, image_path)
+            # Enrich data with CLI hints if available
+            try:
+                combined_output = (proc.stdout or "") + "\n" + (proc.stderr or "")
+                cli_hints = self._parse_cli_output_for_hints(combined_output)
+                for k, v in cli_hints.items():
+                    # Do not overwrite core WCS-derived fields unless missing
+                    if k in (
+                        "ra_center",
+                        "dec_center",
+                        "fov_width",
+                        "fov_height",
+                        "position_angle",
+                    ):
+                        if k not in data or data.get(k) in (None, 0, 0.0):
+                            data[k] = v
+                    else:
+                        data[k] = v
+            except Exception:
+                pass
             solving_time = time.time() - start_time
             return success_status(
                 "Astrometry.net local solving successful",
@@ -504,6 +645,85 @@ class LocalAstrometryNetSolver(PlateSolver):
             solving_time = time.time() - start_time
             self.logger.error(f"Astrometry.net local exception after {solving_time:.2f}s: {e}")
             return error_status(f"Astrometry.net local error: {e}")
+
+    @staticmethod
+    def _parse_cli_output_for_hints(text: str) -> Dict[str, object]:
+        """Parse solve-field stdout/stderr for useful hints (best-effort).
+
+        Returns a dict possibly containing keys:
+        - solved (bool)
+        - ra_center (float)
+        - dec_center (float)
+        - pixel_scale (float, arcsec/pix)
+        - fov_width (float, deg)
+        - fov_height (float, deg)
+        - position_angle (float, deg East of North)
+        - is_flipped (bool) from parity (neg => True)
+        """
+        import re as _re
+
+        info: Dict[str, object] = {}
+        try:
+            solved = (
+                "Field 1 solved" in text
+                or ".solved to indicate this" in text
+                or "Field center:" in text
+            )
+            info["solved"] = bool(solved)
+
+            # RA/Dec (Field center)
+            m = _re.search(r"Field center: \(RA,Dec\) = \(([^,]+), ([^)]+)\) deg\.", text)
+            if m:
+                try:
+                    info["ra_center"] = float(m.group(1))
+                    info["dec_center"] = float(m.group(2))
+                except Exception:
+                    pass
+
+            # RA,Dec with scale
+            m = _re.search(
+                r"RA,Dec = \(([^,]+),([^\)]+)\), pixel scale ([0-9.]+) arcsec/pix",
+                text,
+            )
+            if m:
+                try:
+                    info.setdefault("ra_center", float(m.group(1)))
+                    info.setdefault("dec_center", float(m.group(2)))
+                    info["pixel_scale"] = float(m.group(3))
+                except Exception:
+                    pass
+
+            # Field size
+            m = _re.search(
+                r"Field size: ([0-9.]+) x ([0-9.]+) degrees",
+                text,
+            )
+            if m:
+                try:
+                    info["fov_width"] = float(m.group(1))
+                    info["fov_height"] = float(m.group(2))
+                except Exception:
+                    pass
+
+            # Rotation angle
+            m = _re.search(
+                r"Field rotation angle: up is ([^ ]+) degrees E of N",
+                text,
+            )
+            if m:
+                try:
+                    info["position_angle"] = float(m.group(1))
+                except Exception:
+                    pass
+
+            # Parity
+            m = _re.search(r"Field parity: (\w+)", text)
+            if m:
+                parity = m.group(1).strip().lower()
+                info["is_flipped"] = parity == "neg"
+        except Exception:
+            pass
+        return info
 
 
 class PlateSolverFactory:

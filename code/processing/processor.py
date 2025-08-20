@@ -782,9 +782,11 @@ class VideoProcessor:
         if not status or not status.is_success:
             return None
 
-        # Extract data from status
-        data = status.data if hasattr(status, "data") else {}
-        details = status.details if hasattr(status, "details") else {}
+        # Extract data from status with robust defaults
+        raw_data = status.data if hasattr(status, "data") else None
+        data = raw_data if isinstance(raw_data, dict) else {}
+        raw_details = status.details if hasattr(status, "details") else None
+        details = raw_details if isinstance(raw_details, dict) else {}
 
         # Get required parameters with defaults and ensure they are valid numbers
         def safe_float(value, default=0.0):
@@ -801,7 +803,7 @@ class VideoProcessor:
         fov_width = safe_float(data.get("fov_width"), 1.0)
         fov_height = safe_float(data.get("fov_height"), 1.0)
         solving_time = safe_float(details.get("solving_time"), 0.0)
-        method = details.get("method", "unknown")
+        method = details.get("method", "unknown") if isinstance(details, dict) else "unknown"
         confidence = (
             safe_float(data.get("confidence")) if data.get("confidence") is not None else None
         )
@@ -887,7 +889,8 @@ class VideoProcessor:
             else:
                 # Plate-solving failed - this is normal for poor conditions
                 error_msg = status.message if hasattr(status, "message") else "Unknown error"
-                details = status.details if hasattr(status, "details") else {}
+                raw_details = status.details if hasattr(status, "details") else None
+                details = raw_details if isinstance(raw_details, dict) else {}
                 solving_time = details.get("solving_time", 0)
 
                 self.logger.warning(f"Plate-solving failed after {solving_time:.2f}s: {error_msg}")
