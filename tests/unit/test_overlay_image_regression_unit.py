@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PIL import Image
 import pytest
 
+# Skip module if pytest-regressions is not available
+pytest.importorskip("pytest_regressions")
 
-@pytest.mark.skip(reason="Enable once image_regression plugin is active in the test env/CI")
+# Gate snapshot test behind env var until real baseline is available
+if os.environ.get("OST_ENABLE_IMAGE_REGRESSIONS") != "1":
+    pytest.skip(
+        "Image regression tests disabled (set OST_ENABLE_IMAGE_REGRESSIONS=1 to enable)",
+        allow_module_level=True,
+    )
+
+
 def test_overlay_image_regression(cfg_no_ui, fake_simbad, tmp_path, image_regression):
     # Directory for baselines; skip if baseline not present to avoid spurious failures
     baseline_dir = Path(__file__).resolve().parents[1] / "_image_regressions"

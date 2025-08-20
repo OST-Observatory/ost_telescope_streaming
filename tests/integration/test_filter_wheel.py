@@ -12,7 +12,7 @@ import pytest
 
 # Ensure tests utilities are importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "legacy"))
-from test_utils import print_test_header, print_test_result, setup_test_environment
+from common.test_utils import print_test_header, print_test_result, setup_test_environment
 
 pytestmark = pytest.mark.integration
 

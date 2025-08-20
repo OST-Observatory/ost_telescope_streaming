@@ -1,3 +1,29 @@
+Tests Layout
+
+- tests/unit: Fast, isolated unit tests. Default target in CI/local runs.
+- tests/integration: Integration/system tests; require `-m integration`.
+- tests/legacy: Historical/script-style tests, excluded from standard runs.
+
+Markers
+- integration: `pytest -m integration` (or `-m "not integration"` for unit only)
+- hardware: Tests that require real hardware
+
+Commands
+```bash
+# Unit only
+pytest -q -m "not integration"
+
+# Integration (optional; may require hardware/tools)
+pytest -q -m integration
+
+# Image regression (optional)
+OST_ENABLE_IMAGE_REGRESSIONS=1 pytest -q -k overlay_image_regression_unit
+```
+
+Notes
+- Some integration tests use utilities from `tests/common/test_utils.py`.
+- `tests/legacy/**` is not evaluated in CI and may fail without blocking builds.
+
 ## Tests README
 
 This repo uses pytest with clear separation of unit and integration tests and a consistent set of utilities for configuration and logging.
@@ -22,7 +48,7 @@ pytest -q -m integration
 
 ### Configuration and utilities
 
-- Use `tests/test_utils.py` for:
+- Use `tests/common/test_utils.py` for:
   - `setup_logging(level)`: unified logging
   - `get_test_config(path)`: loads `ConfigManager`
   - `setup_test_environment(args)`: common CLI + config bootstrap for legacy/CLI-style tests
@@ -32,7 +58,7 @@ Prefer reading camera settings from `config.get_camera_config()` and processing 
 ### CI
 
 - GitHub Actions runs unit tests (excluding integration) on PRs and pushes.
-- An optional job can run `-m integration` when manually triggered.
+- A separate workflow runs `-m integration`, and an optional hardware job runs `-m "integration and hardware"`.
 
 ### Best practices
 

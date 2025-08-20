@@ -11,8 +11,8 @@ import sys
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
+from common.test_utils import parse_test_args, print_test_header, setup_test_environment
 import pytest
-from test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
 @pytest.mark.integration

@@ -11,14 +11,7 @@ import sys
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-try:
-    from tests.test_utils import parse_test_args, print_test_header, setup_test_environment
-except Exception:  # fallback for legacy path
-    from pathlib import Path
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from test_utils import parse_test_args, print_test_header, setup_test_environment
+from tests.common.test_utils import parse_test_args, print_test_header, setup_test_environment
 
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))

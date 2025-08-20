@@ -1,0 +1,18 @@
+codecov:
+  require_ci_to_pass: yes
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        if_not_found: success
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+ignore:
+  - "tests/legacy/**"
+  - "tests/integration/**"

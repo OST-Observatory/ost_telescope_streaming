@@ -11,10 +11,9 @@ import time
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
+from common.test_utils import get_test_config, setup_logging
 from drivers.ascom.mount import ASCOMMount
 import pytest
-
-from tests.test_utils import get_test_config, setup_logging
 
 
 @pytest.mark.integration

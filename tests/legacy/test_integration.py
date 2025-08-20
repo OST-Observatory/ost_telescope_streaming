@@ -13,11 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 import pytest
 
-try:
-    from tests.test_utils import parse_test_args, print_test_header, setup_test_environment
-except Exception:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from test_utils import parse_test_args, print_test_header, setup_test_environment
+from tests.common.test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
 @pytest.mark.integration
@@ -29,10 +25,7 @@ def test_plate_solver() -> bool:
     print("Testing plate solver module...")
 
     try:
-        try:
-            from platesolve.solver import PlateSolverFactory
-        except Exception:
-            from plate_solver import PlateSolverFactory
+        from platesolve.solver import PlateSolverFactory
 
         # Test factory
         print("Available solvers:")
@@ -69,7 +62,7 @@ def test_video_processor() -> bool:
     print("\nTesting video processor module...")
 
     try:
-        from video_processor import VideoProcessor
+        from processing.processor import VideoProcessor
 
         processor = VideoProcessor()
 
@@ -132,10 +125,7 @@ def test_overlay_generator() -> bool:
     print("\nTesting overlay generator...")
 
     try:
-        try:
-            from overlay.generator import OverlayGenerator
-        except Exception:
-            from generate_overlay import OverlayGenerator
+        from overlay.generator import OverlayGenerator
 
         # Create generator
         generator = OverlayGenerator()
@@ -187,10 +177,7 @@ def test_overlay_generation() -> bool:
     print("\nTesting overlay generation...")
 
     try:
-        try:
-            from overlay.generator import OverlayGenerator
-        except Exception:
-            from generate_overlay import OverlayGenerator
+        from overlay.generator import OverlayGenerator
 
         # Test coordinates
         ra = 47.4166
@@ -293,7 +280,7 @@ def test_automated_platesolve2_integration() -> bool:
     print("\nTesting automated PlateSolve 2 integration...")
 
     try:
-        from plate_solver import PlateSolve2Solver
+        from platesolve.platesolve2 import PlateSolve2Solver
 
         # Create solver
         solver = PlateSolve2Solver()

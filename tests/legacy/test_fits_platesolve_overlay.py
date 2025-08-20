@@ -15,10 +15,7 @@ import pytest
 # Add the code directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
-try:
-    from tests.test_utils import get_test_config, print_test_header, setup_logging
-except Exception:
-    from test_utils import get_test_config, print_test_header, setup_logging
+from tests.common.test_utils import get_test_config, print_test_header, setup_logging
 
 
 def extract_fits_parameters(fits_path: str, logger) -> Dict[str, Any]:
@@ -326,10 +323,7 @@ def perform_plate_solving(
         Plate-solving result or None
     """
     try:
-        try:
-            from platesolve.solver import PlateSolverFactory
-        except Exception:
-            from plate_solver import PlateSolverFactory
+        from platesolve.solver import PlateSolverFactory
 
         # Create plate solver
         solver = PlateSolverFactory.create_solver("platesolve2", config=config, logger=logger)
@@ -381,10 +375,7 @@ def generate_overlay(
         True if successful, False otherwise
     """
     try:
-        try:
-            from overlay.generator import OverlayGenerator
-        except Exception:
-            from generate_overlay import OverlayGenerator
+        from overlay.generator import OverlayGenerator
 
         # Create overlay generator
         overlay_gen = OverlayGenerator(config=config, logger=logger)

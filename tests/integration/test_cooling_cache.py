@@ -7,7 +7,7 @@ This script demonstrates the problem with ASCOM driver caching and tests differe
 import time
 
 from ascom_camera import ASCOMCamera
-from test_utils import print_test_header, print_test_result, setup_test_environment
+from common.test_utils import print_test_header, print_test_result, setup_test_environment
 
 
 def test_cooling_methods(camera, logger):

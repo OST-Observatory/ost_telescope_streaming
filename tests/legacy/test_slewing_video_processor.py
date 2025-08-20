@@ -14,10 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 from processing.processor import VideoProcessor
 import pytest
 
-try:
-    from tests.test_utils import get_test_config, setup_logging
-except Exception:
-    from test_utils import get_test_config, setup_logging
+from tests.common.test_utils import get_test_config, setup_logging
 
 
 @pytest.mark.integration

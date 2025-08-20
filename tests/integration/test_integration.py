@@ -13,11 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 import pytest
 
-try:
-    from tests.test_utils import parse_test_args, print_test_header, setup_test_environment
-except Exception:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from test_utils import parse_test_args, print_test_header, setup_test_environment
+from tests.common.test_utils import parse_test_args, print_test_header, setup_test_environment
 
 
 @pytest.mark.integration

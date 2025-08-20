@@ -34,13 +34,20 @@ def pytest_ignore_collect(collection_path: _Path, config):
     """Skip certain tests when optional deps are missing. Uses pathlib Paths."""
     p = collection_path
     name = p.name
-    # Skip integration and legacy directories unless explicitly requested via -m integration
+    # Skip integration and legacy directories unless explicitly requested via -m "integration"
     try:
-        marker_expr = config.getoption("-m") or ""
+        marker_expr = (config.getoption("-m") or "").strip()
     except Exception:
         marker_expr = ""
     parts = set(p.parts)
-    if "integration" in parts and "integration" not in marker_expr:
+    if "integration" in parts:
+        # If explicitly excluding integration (e.g. -m "not integration"), skip
+        if "not integration" in marker_expr:
+            return True
+        # If explicitly selecting integration (e.g. -m "integration"), don't skip
+        if marker_expr == "integration" or marker_expr.startswith("integration "):
+            return False
+        # Default: skip integration tests
         return True
     if "legacy" in parts:
         return True

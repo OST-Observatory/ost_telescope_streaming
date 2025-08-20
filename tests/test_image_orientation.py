@@ -15,7 +15,7 @@ import pytest
 # Add the code directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "code"))
 
-from test_utils import get_test_config, setup_logging
+from common.test_utils import get_test_config, setup_logging
 from video_capture import VideoCapture
 
 pytestmark = pytest.mark.integration

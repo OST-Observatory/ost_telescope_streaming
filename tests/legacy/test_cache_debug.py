@@ -4,6 +4,8 @@ Debug test for cache loading and smart cooling info.
 This script shows exactly what happens with cache loading.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 import sys
@@ -13,7 +15,7 @@ import pytest
 
 # Ensure tests utilities are importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from test_utils import (
+from common.test_utils import (
     check_cache_file,
     get_cache_file_path,
     print_test_header,

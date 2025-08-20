@@ -1,5 +1,20 @@
 # OST Telescope Streaming System
 
+<p align="left">
+  <a href="https://github.com/OST-Observatory/ost_telescope_streaming/actions/workflows/ci.yml">
+    <img src="https://github.com/OST-Observatory/ost_telescope_streaming/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
+  <a href="https://github.com/OST-Observatory/ost_telescope_streaming/actions/workflows/integration.yml">
+    <img src="https://github.com/OST-Observatory/ost_telescope_streaming/actions/workflows/integration.yml/badge.svg" alt="Integration" />
+  </a>
+  <a href="https://results.pre-commit.ci/latest/github/OST-Observatory/ost_telescope_streaming/main">
+    <img src="https://results.pre-commit.ci/badge/github/OST-Observatory/ost_telescope_streaming/main.svg" alt="pre-commit" />
+  </a>
+  <a href="https://codecov.io/gh/OST-Observatory/ost_telescope_streaming">
+    <img src="https://codecov.io/gh/OST-Observatory/ost_telescope_streaming/branch/main/graph/badge.svg" alt="coverage" />
+  </a>
+</p>
+
 A comprehensive astronomical telescope streaming and overlay system with plate-solving capabilities.
 
 ## Features
@@ -220,6 +235,7 @@ from services.cooling.backend import create_cooling_manager
 - [Overlay Information Panel Guide](docs/overlay_info_panel_guide.md)
 - [Secondary FOV Overlay Guide](docs/secondary_fov_guide.md)
 - [Ellipse Overlay Guide](docs/ellipse_overlay_guide.md)
+- [Integration Test Environment](docs/integration_test_env.md)
 
 ## Requirements
 
@@ -235,8 +251,20 @@ from services.cooling.backend import create_cooling_manager
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q
+# Unit tests by default
+pytest -q -m "not integration"
+
+# Run integration tests explicitly (may require hardware/ASCOM/PlateSolve2)
+pytest -q -m integration
+
+# Enable image regression tests (optional; requires real baseline images)
+OST_ENABLE_IMAGE_REGRESSIONS=1 pytest -q -k overlay_image_regression_unit
 ```
+
+CI:
+- Unit job: Linting/typing + unit tests with coverage
+- Integration job: optional, runs separately with `-m integration`
+- Coverage report: see the Codecov project page (branch `main`)
 
 Notes:
 - `astroquery` is optional. Overlays work without it (empty catalog layer).

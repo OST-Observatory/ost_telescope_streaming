@@ -11,15 +11,12 @@ from pathlib import Path
 import sys
 
 # Add the code directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent / "code"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
+
+import logging
 
 from config_manager import ConfigManager
-
-try:
-    from overlay.generator import OverlayGenerator
-except Exception:
-    from generate_overlay import OverlayGenerator
-import logging
+from overlay.generator import OverlayGenerator
 
 
 def test_ellipse_overlay_features():

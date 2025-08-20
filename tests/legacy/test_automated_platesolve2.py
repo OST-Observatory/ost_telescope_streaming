@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for automated PlateSolve 2 integration.
-Tests the automated plate solving functionality.
+Automated PlateSolve2 integration tests.
 """
 
 import os
@@ -13,14 +12,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "code"))
 
 import pytest
 
-try:
-    from tests.test_utils import parse_test_args, print_test_header, setup_test_environment
-except Exception:
-    from pathlib import Path
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from test_utils import parse_test_args, print_test_header, setup_test_environment
+from tests.common.test_utils import (
+    parse_test_args,
+    print_test_header,
+    setup_test_environment,
+)
 
 # Add code directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "code"))
