@@ -606,6 +606,18 @@ class OverlayRunner:
                             try:
                                 # Get the latest captured frame
                                 latest_frame = self.video_processor.get_latest_frame_path()
+                                # If None, try the latest FITS fallback (for display combine)
+                                if not latest_frame:
+                                    try:
+                                        # Prefer most recent PNG/JPG; simple fixed-name fallback
+                                        plate_dir = self.video_processor.frame_config.get(
+                                            "plate_solve_dir", "plate_solve_frames"
+                                        )
+                                        cand = os.path.join(plate_dir, "capture.png")
+                                        if os.path.exists(cand):
+                                            latest_frame = cand
+                                    except Exception:
+                                        pass
                                 if latest_frame and os.path.exists(latest_frame):
                                     # Generate combined image filename
                                     if self.use_timestamps:

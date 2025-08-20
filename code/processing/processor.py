@@ -1051,49 +1051,55 @@ class VideoProcessor:
             plate_solve_dir = self.frame_config.get("plate_solve_dir", "plate_solve_frames")
 
             # Get the configured image format from frame config
-            image_format = self.frame_config.get("file_format", "PNG").lower()
-            if image_format.startswith("."):  # Remove leading dot if present
+            image_format = str(self.frame_config.get("file_format", "PNG")).lower()
+            if image_format.startswith("."):
                 image_format = image_format[1:]
 
-            # Check if timestamps are used
-            use_timestamps = bool(self.config.get_overlay_config().get("use_timestamps", False))
+            # Determine naming strategy from frame config (not overlay config!)
+            use_ts = bool(self.frame_config.get("use_timestamps", False))
+            use_count = bool(self.frame_config.get("use_capture_count", True))
 
-            if not use_timestamps:
+            if not os.path.exists(plate_solve_dir):
+                self.logger.debug(f"Plate solve directory does not exist: {plate_solve_dir}")
+                return None
+
+            # If neither timestamps nor counters used, expect fixed name 'capture.ext'
+            if not use_ts and not use_count:
                 capture_file = os.path.join(plate_solve_dir, f"capture.{image_format}")
                 if os.path.exists(capture_file):
                     self.logger.debug(f"Found capture file: {capture_file}")
                     return capture_file
-                else:
-                    self.logger.debug(f"Capture file not found: {capture_file}")
-                    return None
-            else:
-                if not os.path.exists(plate_solve_dir):
-                    self.logger.debug(f"Plate solve directory does not exist: {plate_solve_dir}")
-                    return None
+                self.logger.debug(f"Capture file not found: {capture_file}")
+                return None
 
-                latest_file: Optional[str] = None
-                latest_time: float = 0.0
-
+            # Otherwise, pick the newest matching image file in the directory
+            latest_file: Optional[str] = None
+            latest_time: float = 0.0
+            try:
                 for filename in os.listdir(plate_solve_dir):
-                    if filename.lower().endswith(f".{image_format}"):
-                        file_path = os.path.join(plate_solve_dir, filename)
-                        try:
-                            file_time = os.path.getmtime(file_path)
-                            if file_time > latest_time:
-                                latest_time = file_time
-                                latest_file = file_path
-                        except OSError as e:
-                            self.logger.debug(
-                                f"Could not get modification time for {file_path}: {e}"
-                            )
-                            continue
+                    if not filename.lower().endswith(f".{image_format}"):
+                        continue
+                    if not filename.lower().startswith("capture"):
+                        # Only consider capture* files, skip other outputs
+                        continue
+                    file_path = os.path.join(plate_solve_dir, filename)
+                    try:
+                        file_time = os.path.getmtime(file_path)
+                        if file_time > latest_time:
+                            latest_time = file_time
+                            latest_file = file_path
+                    except OSError as e:
+                        self.logger.debug(f"Could not get modification time for {file_path}: {e}")
+                        continue
+            except Exception as e:
+                self.logger.debug(f"Error listing frames in {plate_solve_dir}: {e}")
+                return None
 
-                if latest_file:
-                    self.logger.debug(f"Found latest timestamped frame: {latest_file}")
-                else:
-                    self.logger.debug(f"No {image_format} files found in {plate_solve_dir}")
-
-                return latest_file
+            if latest_file:
+                self.logger.debug(f"Found latest frame: {latest_file}")
+            else:
+                self.logger.debug(f"No capture*.{image_format} files found in {plate_solve_dir}")
+            return latest_file
 
         except Exception as e:
             self.logger.error(f"Error getting latest frame path: {e}")
