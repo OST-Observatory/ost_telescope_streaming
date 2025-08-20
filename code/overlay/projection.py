@@ -46,6 +46,8 @@ def skycoord_to_pixel_with_rotation(
     sin_pa = np.sin(pa_rad)
 
     # Rotate
+    # Apply math rotation by +PA in screen coordinates; astronomical
+    # handedness is handled via ra_increases_left and y-down mapping below.
     delta_ra_rot = delta_ra_arcmin * cos_pa + delta_dec_arcmin * sin_pa
     delta_dec_rot = -delta_ra_arcmin * sin_pa + delta_dec_arcmin * cos_pa
 

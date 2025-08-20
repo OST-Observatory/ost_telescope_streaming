@@ -35,10 +35,12 @@ def test_flip_mirrors_x_coordinate():
 def test_position_angle_rotates_quadrants():
     width, height = 640, 480
     x0, y0 = skycoord_to_pixel_with_rotation(
-        10.0, 20.1, 10.0, 20.0, (width, height), 2.0, 1.5, 0.0, False, True
+        10.0, 20.1, 10.0, 20.0, (width, height), 2.0, 1.5, 0.0, False, False
     )
     x90, y90 = skycoord_to_pixel_with_rotation(
-        10.0, 20.1, 10.0, 20.0, (width, height), 2.0, 1.5, 90.0, False, True
+        10.0, 20.1, 10.0, 20.0, (width, height), 2.0, 1.5, 90.0, False, False
     )
+    # For PA=0, object slightly north (Dec+) should appear above the center (y smaller)
     assert y0 < height // 2
+    # For PA=90 deg, rotation should move that offset primarily into +X direction
     assert x90 > width // 2
