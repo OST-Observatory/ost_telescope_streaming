@@ -280,6 +280,23 @@ class OverlayRunner:
         try:
             overlay_generator = OverlayGenerator(self.config, self.logger)
 
+            # Attach frame timestamp (ISO) if last frame metadata exists
+            try:
+                if hasattr(self, "last_frame_metadata") and isinstance(
+                    self.last_frame_metadata, dict
+                ):
+                    # Try explicit keys first
+                    ts = self.last_frame_metadata.get("date_obs") or self.last_frame_metadata.get(
+                        "DATE-OBS"
+                    )
+                    if not ts:
+                        # Compose from capture_started_at if available
+                        ts = self.last_frame_metadata.get("capture_started_at")
+                    if ts:
+                        overlay_generator.frame_timestamp_iso = str(ts)
+            except Exception:
+                pass
+
             # Generate overlay and wrap result into a Status
             overlay_path = overlay_generator.generate_overlay(
                 ra_deg=ra_deg,

@@ -75,6 +75,9 @@ class OverlayGenerator:
         # Optional: use WCS-based projection instead of math-based
         self.use_wcs_projection = bool(coords_cfg.get("use_wcs_projection", False))
 
+        # Solar system overlay settings
+        self.solar_system_config = self.overlay_config.get("solar_system", {})
+
     def get_font(self):
         """Loads an available font for the current system."""
         font_size = self.overlay_config.get("font_size", 14)
@@ -554,6 +557,23 @@ class OverlayGenerator:
                 self.ra_increases_left,
             )
 
+            # Draw solar system bodies (Moon and planets) if enabled
+            try:
+                if bool(self.solar_system_config.get("enabled", False)):
+                    self._draw_solar_system(
+                        draw,
+                        img_size,
+                        ra_deg,
+                        dec_deg,
+                        fov_w,
+                        fov_h,
+                        pa_deg,
+                        flip_x,
+                    )
+            except Exception as e:
+                # Do not fail overlay on ephemeris errors
+                self.logger.debug(f"Solar system overlay skipped: {e}")
+
             # Process objects
             objects_drawn = 0
             for row in result:
@@ -783,6 +803,169 @@ class OverlayGenerator:
             self.logger.error(f"Error: {e}")
             # Re-raise or return a fallback path; we return the default filename
             return output_file or self.default_filename
+
+    def _draw_solar_system(
+        self,
+        draw: ImageDraw.ImageDraw,
+        img_size: Tuple[int, int],
+        ra_deg: float,
+        dec_deg: float,
+        fov_w: float,
+        fov_h: float,
+        pa_deg: float,
+        flip_x: bool,
+    ) -> None:
+        """Draw Moon and planets if they are within the field of view.
+
+        Uses the frame timestamp if available via FITS 'DATE-OBS' or capture metadata
+        attached to the generator (optional). Falls back to current time if unavailable.
+        """
+        try:
+            from astropy import constants as const
+            from astropy.coordinates import (
+                EarthLocation,
+                SkyCoord,
+                get_body,
+                get_moon,
+                solar_system_ephemeris,
+            )
+            from astropy.time import Time
+            import astropy.units as u
+        except Exception as e:
+            self.logger.debug(f"Astropy not available for solar system overlay: {e}")
+            return
+
+        # Font for labels
+        try:
+            font_local = self.get_font()
+        except Exception:
+            font_local = None
+
+        # Ephemeris selection (optional)
+        try:
+            eph = str(self.solar_system_config.get("ephemeris", "de432s")).lower()
+            solar_system_ephemeris.set(eph)
+        except Exception:
+            pass
+
+        # Site location from config (optional; defaults to geocenter)
+        try:
+            site_cfg = self.config.get("site", {})
+            lat = float(site_cfg.get("latitude"))
+            lon = float(site_cfg.get("longitude"))
+            elev = float(site_cfg.get("elevation_m", 0.0))
+            location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m)
+        except Exception:
+            location = None
+
+        # Observation time: prefer frame timestamp if the generator has it
+        # A caller can set self.frame_timestamp_iso = 'YYYY-MM-DDTHH:MM:SS'
+        try:
+            if hasattr(self, "frame_timestamp_iso") and self.frame_timestamp_iso:
+                obstime = Time(self.frame_timestamp_iso)
+            else:
+                obstime = Time.now()
+        except Exception:
+            obstime = Time.now()
+
+        center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame="icrs")
+        half_diag = (fov_w**2 + fov_h**2) ** 0.5 / 2.0
+
+        # Targets and radii
+        bodies = [
+            ("Moon", const.R_moon),
+            ("Mercury", const.R_mercury),
+            ("Venus", const.R_venus),
+            ("Mars", const.R_mars),
+            ("Jupiter", const.R_jup),
+            ("Saturn", const.R_sat),
+            ("Uranus", const.R_uranus),
+            ("Neptune", const.R_neptune),
+        ]
+
+        color = tuple(self.solar_system_config.get("color", [255, 255, 0, 255]))
+        line_width = int(self.solar_system_config.get("line_width", 2))
+        min_px = int(self.solar_system_config.get("min_diameter_px", 6))
+        show_labels = bool(self.solar_system_config.get("show_labels", True))
+
+        def apparent_diameter_arcmin(radius_m: float, distance_m: float) -> float:
+            import math as _math
+
+            try:
+                return _math.degrees(2.0 * _math.atan(radius_m / max(distance_m, 1.0))) * 60.0
+            except Exception:
+                return 0.0
+
+        # For each body, compute topocentric coordinate and draw if inside FOV
+        for name, R in bodies:
+            try:
+                if name == "Moon":
+                    coord = get_moon(obstime, location=location)
+                else:
+                    coord = get_body(name.lower(), obstime, location=location)
+
+                sep = coord.icrs.separation(center).degree
+                if sep > half_diag:
+                    continue
+
+                # Distance (m). Some frames may lack distance; skip size if unavailable
+                dist_m = None
+                try:
+                    if hasattr(coord, "distance") and coord.distance is not None:
+                        dist_m = coord.distance.to(u.m).value
+                except Exception:
+                    dist_m = None
+
+                # Apparent diameter in arcmin (fallback sizes if distance missing)
+                if dist_m:
+                    dia_arcmin = apparent_diameter_arcmin(R.to(u.m).value, dist_m)
+                else:
+                    dia_arcmin = 30.0 if name == "Moon" else 2.0
+
+                # Project to pixel coordinate
+                x, y = self.skycoord_to_pixel_with_rotation(
+                    coord.icrs,
+                    center,
+                    img_size,
+                    fov_w,
+                    fov_h,
+                    pa_deg,
+                    flip_x,
+                    False,
+                )
+
+                # Draw as ellipse; if too small, draw a small circle
+                drawn = draw_ellipse_for_object(
+                    draw,
+                    int(x),
+                    int(y),
+                    float(dia_arcmin),
+                    float(dia_arcmin),
+                    0.0,
+                    img_size,
+                    fov_w,
+                    fov_h,
+                    pa_deg,
+                    flip_x,
+                    color,
+                    line_width,
+                )
+                if not drawn:
+                    # Minimal marker if ellipse below visual threshold
+                    px = max(min_px, 4)
+                    draw.ellipse((x - px, y - px, x + px, y + px), outline=color, width=line_width)
+
+                if show_labels:
+                    try:
+                        if font_local is not None:
+                            draw.text((x + 6, y + 4), name, fill=color, font=font_local)
+                        else:
+                            draw.text((x + 6, y + 4), name, fill=color)
+                    except Exception:
+                        draw.text((x + 6, y + 4), name, fill=color)
+
+            except Exception:
+                continue
 
 
 # Transitional re-exports removed; use overlay.generator directly

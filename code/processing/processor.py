@@ -992,6 +992,85 @@ class VideoProcessor:
                 composite = base_image.copy()
                 composite = Image.alpha_composite(composite, overlay_image)
                 composite_rgb = composite.convert("RGB")
+
+                # Optional: resize final combined image per overlay config
+                try:
+                    ov_cfg = self.config.get_overlay_config()
+                    combined_cfg = (
+                        ov_cfg.get("combined_output", {}) if isinstance(ov_cfg, dict) else {}
+                    )
+                    if bool(combined_cfg.get("enabled", False)):
+                        target = combined_cfg.get("resolution", [1920, 1080])
+                        if isinstance(target, (list, tuple)) and len(target) == 2:
+                            target_w = int(target[0])
+                            target_h = int(target[1])
+                            mode = str(combined_cfg.get("mode", "letterbox")).lower()
+                            resample_name = str(combined_cfg.get("resample", "lanczos")).lower()
+                            bg = combined_cfg.get("background_color", [0, 0, 0])
+                            try:
+                                bg_tuple = (
+                                    int(bg[0]),
+                                    int(bg[1]),
+                                    int(bg[2]),
+                                )
+                            except Exception:
+                                bg_tuple = (0, 0, 0)
+
+                            # Map resample names
+                            from PIL import Image as _PILImage
+
+                            resample_map = {
+                                "nearest": _PILImage.Resampling.NEAREST,
+                                "bilinear": _PILImage.Resampling.BILINEAR,
+                                "bicubic": _PILImage.Resampling.BICUBIC,
+                                "lanczos": _PILImage.Resampling.LANCZOS,
+                            }
+                            resample_filter = resample_map.get(
+                                resample_name, _PILImage.Resampling.LANCZOS
+                            )
+
+                            src_w, src_h = composite_rgb.size
+                            if (
+                                target_w > 0
+                                and target_h > 0
+                                and (src_w != target_w or src_h != target_h)
+                            ):
+                                if mode == "stretch":
+                                    composite_rgb = composite_rgb.resize(
+                                        (target_w, target_h), resample=resample_filter
+                                    )
+                                elif mode == "crop":
+                                    # Scale to cover, then center-crop to target
+                                    scale = max(target_w / src_w, target_h / src_h)
+                                    new_w = max(1, int(round(src_w * scale)))
+                                    new_h = max(1, int(round(src_h * scale)))
+                                    tmp = composite_rgb.resize(
+                                        (new_w, new_h), resample=resample_filter
+                                    )
+                                    left = max(0, (new_w - target_w) // 2)
+                                    top = max(0, (new_h - target_h) // 2)
+                                    composite_rgb = tmp.crop(
+                                        (left, top, left + target_w, top + target_h)
+                                    )
+                                else:
+                                    # letterbox: fit inside and pad with bg
+                                    scale = min(target_w / src_w, target_h / src_h)
+                                    new_w = max(1, int(round(src_w * scale)))
+                                    new_h = max(1, int(round(src_h * scale)))
+                                    tmp = composite_rgb.resize(
+                                        (new_w, new_h), resample=resample_filter
+                                    )
+                                    canvas = _PILImage.new(
+                                        "RGB", (target_w, target_h), color=bg_tuple
+                                    )
+                                    off_x = (target_w - new_w) // 2
+                                    off_y = (target_h - new_h) // 2
+                                    canvas.paste(tmp, (off_x, off_y))
+                                    composite_rgb = canvas
+                except Exception as _resize_e:
+                    # Keep original size if anything goes wrong
+                    self.logger.debug(f"Combined resize skipped: {_resize_e}")
+
                 composite_rgb.save(output_path, "PNG", quality=95)
                 self.logger.info(f"Combined image saved: {output_path}")
                 return success_status(

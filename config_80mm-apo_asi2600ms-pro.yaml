@@ -83,6 +83,14 @@ frame_processing:
   file_format: "PNG"  # File format for saved frames (fits, jpg, png, tiff, etc.)
 
 # =============================================================================
+# SITE CONFIGURATION
+# =============================================================================
+site:
+  latitude: 52.409184  # 52°24'33.06"N
+  longitude: 12.973185 # 12°58'23.47"E
+  elevation_m: 42 # 42m
+
+# =============================================================================
 # TELESCOPE CONFIGURATION
 # =============================================================================
 telescope:
@@ -178,11 +186,21 @@ overlay:
   use_timestamps: false
   # Timestamp format for overlay filenames
   timestamp_format: "%Y%m%d_%H%M%S"
+
+  # Combined output settings
+  combined_output:
+    enabled: true
+    resolution: [1920, 1080]   # z. B. Full HD (oder [3840, 2160] für 4K)
+    mode: letterbox            # letterbox | crop | stretch
+    resample: lanczos          # nearest | bilinear | bicubic | lanczos
+    background_color: [0, 0, 0]  # nur für letterbox (RGB)
+
   # Update settings
   update:
     update_interval: 30
     max_retries: 3
     retry_delay: 5
+
   # Display settings
   display:
     object_color: [255, 0, 0]
@@ -196,6 +214,15 @@ overlay:
     force_flip_y: false
     rotation_offset_deg: 201.2
     use_wcs_projection: true
+
+  # Solar system settings
+  solar_system:
+    enabled: true
+    color: [255, 255, 0, 255]
+    line_width: 2
+    min_diameter_px: 6
+    show_labels: true
+    ephemeris: de432s
 
   # Information panel settings
   info_panel:
