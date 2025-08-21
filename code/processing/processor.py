@@ -466,12 +466,12 @@ class VideoProcessor:
 
     def _maybe_plate_solve(
         self, fits_filename: Optional[Path], frame_filename: Optional[Path]
-    ) -> None:
+    ) -> Optional[PlateSolveResult]:
         """Run plate-solving if enabled and interval elapsed; prefer FITS."""
         if not (self.plate_solver and self.auto_solve):
-            return
+            return None
         if (time.monotonic() - self.last_solve_time) < self.min_solve_interval:
-            return
+            return None
         candidate: Optional[Path] = None
         if fits_filename and fits_filename.exists():
             candidate = fits_filename
@@ -484,9 +484,12 @@ class VideoProcessor:
             self.logger.warning("This may not be supported by some solvers")
         else:
             self.logger.error("No suitable file to plate-solve")
-            return
-        self._solve_frame(str(candidate))
+            return None
+        result = self._solve_frame(str(candidate))
+        # Update last_solve_time only after the attempt completes
         self.last_solve_time = time.monotonic()
+        # If we have a callback, it will be triggered in _solve_frame on success
+        return result
 
     def start_observation_session(self) -> VideoProcessingStatus:
         """Start an observation session with cooling initialization.

@@ -60,6 +60,7 @@ class OverlayRunner:
         self.running = False
         self.last_update = None
         self.last_solve_result = None
+        self._solve_seq = 0  # increments on each new plate-solve result
 
         # Retry configuration
         self.max_retries = overlay_config.get("update", {}).get("max_retries", 3)
@@ -372,6 +373,10 @@ class OverlayRunner:
                     # Set up callbacks
                     def on_solve_result(result):
                         self.last_solve_result = result
+                        try:
+                            self._solve_seq += 1
+                        except Exception:
+                            self._solve_seq = 1
                         self.logger.info(
                             "Plate-solving successful: RA=%.4f°, Dec=%.4f°",
                             result.ra_center,
@@ -453,7 +458,9 @@ class OverlayRunner:
                         self.logger.info(
                             "Waiting for plate-solving result before generating overlay..."
                         )
-                        while self.last_solve_result is None and self.running:
+                        # Wait for a fresh solve event since the last iteration
+                        prev_seq = self._solve_seq
+                        while self.running and self._solve_seq == prev_seq:
                             time.sleep(0.5)
                         # Outer loop condition will handle stop
                         # Use plate-solving results for coordinates and parameters
