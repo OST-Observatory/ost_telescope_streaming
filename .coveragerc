@@ -1,0 +1,20 @@
+[run]
+branch = True
+source = code
+
+[report]
+omit =
+    code/calibration/*
+    code/drivers/*
+    code/overlay/runner.py
+    code/platesolve/platesolve2.py
+    code/services/cooling/*
+    code/overlay/text.py
+    code/overlay/drawing.py
+    code/processing/format_conversion.py
+    code/processing/normalization.py
+    code/processing/orientation.py
+    code/capture/controller.py
+    code/capture/adapters.py
+    code/drivers/alpaca/*
+    code/drivers/ascom/*
