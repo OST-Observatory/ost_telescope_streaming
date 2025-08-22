@@ -224,3 +224,13 @@ cache/*.json
 *.fit.gz
 *.fit.bz2
 *.fit.xz
+
+# Astrometry.net files
+*.xyls
+*.axy
+*.corr
+*.match
+*.new
+*.rdls
+*.solved
+*.wcs

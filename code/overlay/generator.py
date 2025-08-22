@@ -112,6 +112,7 @@ class OverlayGenerator:
         position_angle_deg=0.0,
         flip_x: bool = False,
         flip_y: bool = False,
+        wcs_path: Optional[str] = None,
     ):
         """Wrapper that delegates to math or WCS projection based on config."""
         obj_ra = obj_coord.ra.degree
@@ -119,7 +120,8 @@ class OverlayGenerator:
         cen_ra = center_coord.ra.degree
         cen_dec = center_coord.dec.degree
 
-        if not self.use_wcs_projection:
+        # Prefer explicit WCS path if provided; otherwise use config flag
+        if not (wcs_path or self.use_wcs_projection):
             return project_skycoord(
                 obj_ra,
                 obj_dec,
@@ -157,6 +159,7 @@ class OverlayGenerator:
             flip_x=flip_x,
             flip_y=flip_y,
             ra_increases_left=self.ra_increases_left,
+            wcs_path=wcs_path,
         )
 
     def skycoord_to_pixel(self, obj_coord, center_coord, size_px, fov_deg):
@@ -340,6 +343,7 @@ class OverlayGenerator:
         # Legacy alias for backward compatibility
         is_flipped: Optional[bool] = None,
         status_messages: Optional[list[str]] = None,
+        wcs_path: Optional[str] = None,
     ) -> str:
         """Generate an overlay image for the given coordinates.
 
@@ -621,7 +625,15 @@ class OverlayGenerator:
                     # Use found column names
                     obj_coord = SkyCoord(ra=row[ra_col], dec=row[dec_col], unit="deg")
                     x, y = self.skycoord_to_pixel_with_rotation(
-                        obj_coord, center, img_size, fov_w, fov_h, pa_deg, flip_x, flip_y
+                        obj_coord,
+                        center,
+                        img_size,
+                        fov_w,
+                        fov_h,
+                        pa_deg,
+                        flip_x,
+                        flip_y,
+                        wcs_path=wcs_path,
                     )
 
                     # Check if object is within image bounds

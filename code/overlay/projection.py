@@ -116,9 +116,13 @@ def skycoord_to_pixel_wcs(
 
     # Construct WCS
     # Build WCS either from an existing WCS FITS or synthetic parameters
+    print("WCS PATH", wcs_path)
     if wcs_path:
         with fits.open(wcs_path) as hdul:
             w = WCS(hdul[0].header)
+            print("IN WCS")
+            print(type(w))
+            print(w)
             if size_px is None:
                 data = hdul[0].data
                 if data is not None and hasattr(data, "shape"):
@@ -165,7 +169,8 @@ def skycoord_to_pixel_wcs(
     # Convert WCS (Y up) to display coordinates (Y down)
     width_px = int(size_px[0]) if size_px is not None else 0
     height_px = int(size_px[1]) if size_px is not None else 0
-    y = float(height_px - y1_f)
+    # y = float(height_px - y1_f)
+    y = float(y1_f)
     if flip_x:
         x = float(width_px) - x
     if flip_y:
