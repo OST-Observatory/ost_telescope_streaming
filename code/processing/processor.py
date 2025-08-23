@@ -850,6 +850,11 @@ class VideoProcessor:
             else None
         )
         image_size = data.get("image_size")  # Keep as tuple, no conversion needed
+        # Optional WCS path for downstream WCS-based projection
+        try:
+            wcs_path = str(data.get("wcs_path")) if data.get("wcs_path") else None
+        except Exception:
+            wcs_path = None
         # Normalize flip information: PlateSolve2 compatibility (only values > 0 mean flipped)
         raw_flip = data.get("flipped", False)
         is_flipped = False
@@ -875,6 +880,7 @@ class VideoProcessor:
             position_angle=position_angle,
             image_size=image_size,
             is_flipped=is_flipped,
+            wcs_path=wcs_path,
         )
 
         return result
