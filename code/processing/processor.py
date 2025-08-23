@@ -220,6 +220,31 @@ class VideoProcessor:
                     self.overlay_generator = OverlayGenerator(self.config, self.logger)
                     # Inject a reference for optional cooling information access
                     self.overlay_generator.video_processor = self
+                    # Provide camera name to overlay (for info panel) if available
+                    try:
+                        camera_name = None
+                        cam = getattr(self.video_capture, "camera", None)
+                        if cam is not None:
+                            get_info = getattr(cam, "get_camera_info", None)
+                            if callable(get_info):
+                                info_status = get_info()
+                                if getattr(info_status, "is_success", False):
+                                    data = getattr(info_status, "data", {}) or {}
+                                    if isinstance(data, dict):
+                                        camera_name = (
+                                            data.get("camera_model")
+                                            or data.get("name")
+                                            or data.get("model")
+                                            or data.get("driver_name")
+                                        )
+                            if not camera_name:
+                                camera_name = getattr(cam, "model", None) or getattr(
+                                    cam, "name", None
+                                )
+                        if camera_name:
+                            self.overlay_generator.camera_name = str(camera_name)
+                    except Exception:
+                        pass
                 except Exception as e:
                     self.logger.debug(f"OverlayGenerator not initialized: {e}")
             except Exception as e:

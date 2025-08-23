@@ -205,8 +205,8 @@ overlay:
   display:
     object_color: [255, 0, 0]
     text_color: [255, 255, 255]
-    marker_size: 20
-    text_offset: [35, -35]
+    marker_size: 30
+    text_offset: [45, -45]
 
   # Coordinates settings
   coordinates:
@@ -230,7 +230,7 @@ overlay:
   info_panel:
     enabled: true
     position: "top_right"  # "top_left", "top_right", "bottom_left", "bottom_right"
-    width: 1300
+    width: 1630
     background_color: [0, 0, 0, 180]  # RGBA with transparency
     border_color: [255, 255, 255, 255]
     border_width: 2
@@ -284,13 +284,14 @@ overlay:
     # Display settings
     display:
       color: [0, 255, 255, 255]  # Cyan color (RGBA)
-      line_width: 2
+      line_width: 3
       style: "dashed"      # "solid", "dashed", "dotted"
       opacity: 180         # Transparency (0-255)
       show_label: true     # Show FOV label
       label_color: [0, 255, 255, 255]  # Label color
       label_font_size: 30
-      label_offset: [5, 5]  # Label offset from FOV border
+      label_offset: [200, 280]   # Label offset from FOV border
+      label: "Field of view of OST"
 
     # Position offset (if secondary telescope is not perfectly aligned)
     position_offset:

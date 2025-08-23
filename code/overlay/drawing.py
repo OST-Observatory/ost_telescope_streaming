@@ -144,6 +144,42 @@ def draw_ellipse_for_object(
     return True
 
 
+def compute_ellipse_label_point(
+    center_x: int,
+    center_y: int,
+    dim_maj_arcmin: float,
+    dim_min_arcmin: float,
+    pa_deg: float,
+    img_size: Tuple[int, int],
+    fov_width_deg: float,
+    fov_height_deg: float,
+    position_angle_deg: float,
+    flip_x: bool,
+    theta_deg: float = 45.0,
+) -> Tuple[int, int]:
+    """Return a point on the ellipse perimeter for labeling.
+
+    The point is computed at param angle theta_deg on the ellipse before
+    rotation, then rotated by the combined rotation and translated to center.
+    """
+    scale_x = (fov_width_deg * 60) / img_size[0]
+    scale_y = (fov_height_deg * 60) / img_size[1]
+    major_px = dim_maj_arcmin / scale_x
+    minor_px = dim_min_arcmin / scale_y
+    if major_px < 1 or minor_px < 1:
+        return center_x, center_y
+    total_rot = (-pa_deg if flip_x else pa_deg) + position_angle_deg
+    rot = np.deg2rad(total_rot)
+    cos_r = np.cos(rot)
+    sin_r = np.sin(rot)
+    theta = np.deg2rad(theta_deg)
+    x = major_px * np.cos(theta)
+    y = minor_px * np.sin(theta)
+    xr = x * cos_r - y * sin_r
+    yr = x * sin_r + y * cos_r
+    return int(center_x + xr), int(center_y + yr)
+
+
 def draw_secondary_fov(
     draw: ImageDraw.ImageDraw,
     img_size: Tuple[int, int],
@@ -154,6 +190,7 @@ def draw_secondary_fov(
     position_angle_deg: float,
     secondary_fov_config: dict,
     ra_increases_left: bool,
+    label_font: ImageFont.ImageFont | None = None,
 ) -> None:
     if not secondary_fov_config.get("enabled", False):
         return
@@ -194,6 +231,7 @@ def draw_secondary_fov(
     label_color = tuple(display.get("label_color", [0, 255, 255, 255]))
     label_font_size = int(display.get("label_font_size", 10))
     label_offset = display.get("label_offset", [5, 5])
+    label_text = display.get("label", "Secondary FOV")
 
     offset_cfg = secondary_fov_config.get("position_offset", {})
     ra_offset_arcmin = float(offset_cfg.get("ra_offset_arcmin", 0.0))
@@ -276,20 +314,20 @@ def draw_secondary_fov(
             draw.ellipse([left, top, right, bottom], outline=color, width=line_width)
 
     if show_label:
-        label_text = secondary_fov_config.get("label", "Secondary FOV")
-        try:
-            from overlay.text import get_info_panel_font
+        font = label_font
+        if font is None:
+            try:
+                from overlay.text import get_info_panel_font
 
-            font = get_info_panel_font({}, label_font_size)
-        except Exception:
-            font = None
+                font = get_info_panel_font({}, label_font_size)
+            except Exception:
+                font = None
         label_x = max(10, min(center_x + label_offset[0], img_size[0] - 200))
         label_y = max(10, min(center_y + label_offset[1], img_size[1] - 20))
-        if font is not None:
-            bbox = font.getbbox(label_text)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-            draw.rectangle(
-                [label_x - 2, label_y - 2, label_x + tw + 2, label_y + th + 2], fill=(0, 0, 0, 180)
-            )
+        # if font is not None:
+        #     bbox = font.getbbox(label_text)
+        #     tw = bbox[2] - bbox[0]
+        #     th = bbox[3] - bbox[1]
+        #     bg_rect = [label_x - 2, label_y - 2, label_x + tw + 2, label_y + th + 2]
+        #     draw.rectangle(bg_rect, fill=(0, 0, 0, 180))
         draw.text((label_x, label_y), label_text, fill=label_color, font=font)

@@ -116,13 +116,9 @@ def skycoord_to_pixel_wcs(
 
     # Construct WCS
     # Build WCS either from an existing WCS FITS or synthetic parameters
-    print("WCS PATH", wcs_path)
     if wcs_path:
         with fits.open(wcs_path) as hdul:
             w = WCS(hdul[0].header)
-            print("IN WCS")
-            print(type(w))
-            print(w)
             if size_px is None:
                 data = hdul[0].data
                 if data is not None and hasattr(data, "shape"):

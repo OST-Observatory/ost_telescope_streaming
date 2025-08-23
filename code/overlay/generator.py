@@ -7,8 +7,14 @@ from typing import Optional, Tuple
 # astroquery is optional; we import Simbad lazily in generate_overlay()
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-from overlay.drawing import draw_ellipse_for_object, draw_info_panel, draw_secondary_fov, draw_title
-from overlay.info import camera_info, cooling_info, format_coordinates, fov_info, telescope_info
+from overlay.drawing import (
+    compute_ellipse_label_point,
+    draw_ellipse_for_object,
+    draw_info_panel,
+    draw_secondary_fov,
+    draw_title,
+)
+from overlay.info import cooling_info, format_coordinates, fov_info, telescope_info
 from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoord
 from overlay.simbad_fields import discover_simbad_dimension_fields
 from PIL import Image, ImageDraw, ImageFont
@@ -247,6 +253,16 @@ class OverlayGenerator:
 
     def _get_camera_info(self) -> str:
         """Get camera information from config."""
+        # Prefer camera name from FITS headers if provided by caller
+        camera_name = None
+        try:
+            if hasattr(self, "camera_name") and self.camera_name:
+                camera_name = str(self.camera_name)
+            elif hasattr(self, "fits_headers") and isinstance(self.fits_headers, dict):
+                camera_name = self.fits_headers.get("CAMNAME") or self.fits_headers.get("INSTRUME")
+        except Exception:
+            camera_name = None
+
         camera_config = self.config.get_camera_config()
         camera_type = camera_config.get("camera_type", "Unknown")
         sensor_width = camera_config.get("sensor_width", "Unknown")
@@ -254,6 +270,11 @@ class OverlayGenerator:
         pixel_size = camera_config.get("pixel_size", "Unknown")
         bit_depth = camera_config.get("bit_depth", "Unknown")
 
+        if camera_name:
+            return (
+                f"Camera: {camera_name} ("
+                f"{sensor_width}×{sensor_height}mm, {pixel_size}μm, {bit_depth}bit)"
+            )
         return (
             f"Camera: {camera_type.upper()} ("
             f"{sensor_width}×{sensor_height}mm, {pixel_size}μm, {bit_depth}bit)"
@@ -505,7 +526,8 @@ class OverlayGenerator:
                     lines.append(("", text_color))
                     lines.append((telescope_info(self.config.get_telescope_config()), text_color))
                 if self.info_panel_config.get("show_camera_info", True):
-                    lines.append((camera_info(self.config.get_camera_config()), text_color))
+                    # Prefer FITS-derived camera name via _get_camera_info()
+                    lines.append((self._get_camera_info(), text_color))
                 if self.info_panel_config.get("show_fov_info", True):
                     lines.append(("", text_color))
                     lines.append((fov_info(fov_w, fov_h), text_color))
@@ -549,6 +571,16 @@ class OverlayGenerator:
                 )
 
             # Draw secondary FOV overlay
+            # Prepare label font honoring display.label_font_size
+            label_font = None
+            try:
+                label_font_size = int(
+                    self.secondary_fov_config.get("display", {}).get("label_font_size", 12)
+                )
+                label_font = self._get_info_panel_font(size=label_font_size)
+            except Exception:
+                label_font = None
+
             draw_secondary_fov(
                 draw,
                 img_size,
@@ -559,6 +591,7 @@ class OverlayGenerator:
                 pa_deg,
                 self.secondary_fov_config,
                 self.ra_increases_left,
+                label_font=label_font,
             )
 
             # Draw solar system bodies (Moon and planets) if enabled
@@ -784,12 +817,34 @@ class OverlayGenerator:
                         if len(name) > self.max_name_length:
                             name = name[: self.max_name_length - 3] + "..."
 
-                        draw.text(
-                            (x + self.text_offset[0], y + self.text_offset[1]),
-                            name,
-                            fill=self.text_color,
-                            font=font,
-                        )
+                        # If we drew an ellipse, place label along ellipse edge;
+                        # otherwise offset near marker
+                        if (
+                            should_draw_ellipse
+                            and has_dimensions
+                            and dim_maj is not None
+                            and dim_min is not None
+                        ):
+                            lx, ly = compute_ellipse_label_point(
+                                int(x),
+                                int(y),
+                                float(dim_maj),
+                                float(dim_min),
+                                float(pa or 0.0),
+                                img_size,
+                                fov_w,
+                                fov_h,
+                                pa_deg,
+                                flip_x,
+                                theta_deg=45.0,
+                            )
+                            lx += 6
+                            ly += 4
+                        else:
+                            lx = x + self.text_offset[0]
+                            ly = y + self.text_offset[1]
+
+                        draw.text((lx, ly), name, fill=self.text_color, font=font)
                         objects_drawn += 1
 
                 except Exception as e:

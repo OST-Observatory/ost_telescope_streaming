@@ -107,6 +107,9 @@ def extract_fits_parameters(fits_path: str, logger: logging.Logger) -> Dict[str,
                 "dec_deg": dec_deg,
                 "is_color_camera": bool(header.get("COLORCAM", False)),
                 "bayer_pattern": header.get("BAYERPAT", None),
+                # Camera headers for downstream overlay info panel
+                "camera_name": header.get("CAMNAME") or header.get("INSTRUME"),
+                "fits_headers": header,
             }
     except Exception as e:
         logger.error(f"Failed to extract FITS parameters: {e}")
@@ -258,6 +261,13 @@ def main() -> None:
     # Generate overlay
     overlay_png = os.path.join(out_dir, f"{Path(fits_path).stem}_overlay.png")
     gen = OverlayGenerator(config=config, logger=logger)
+    # Attach FITS-derived camera metadata for richer info panel
+    try:
+        if params.get("camera_name"):
+            gen.camera_name = params.get("camera_name")
+        gen.fits_headers = params.get("fits_headers")
+    except Exception:
+        pass
     logger.info("Generating overlay image...")
     gen.generate_overlay(
         ra_deg=ra_deg,
