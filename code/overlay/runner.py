@@ -273,6 +273,7 @@ class OverlayRunner:
         is_flipped: Optional[bool] = None,
         flip_y: Optional[bool] = None,
         status_messages: Optional[list[str]] = None,
+        wcs_path: Optional[str] = None,
     ) -> Status:
         """Generate astronomical overlay with given coordinates."""
         if not OVERLAY_AVAILABLE:
@@ -311,6 +312,7 @@ class OverlayRunner:
                 flip_x=is_flipped,
                 flip_y=flip_y,
                 status_messages=status_messages,
+                wcs_path=wcs_path,
             )
 
             self.logger.info("Overlay generated successfully: %s", overlay_path)
@@ -470,6 +472,10 @@ class OverlayRunner:
                         fov_height_deg = self.last_solve_result.fov_height
                         position_angle_deg = self.last_solve_result.position_angle
                         image_size = self.last_solve_result.image_size
+                        try:
+                            wcs_path = getattr(self.last_solve_result, "wcs_path", None)
+                        except Exception:
+                            wcs_path = None
 
                         # Use PA from solver; ignore solver flip parity by default.
                         # Allow config to force X flip if user's image chain mirrors.
@@ -617,6 +623,9 @@ class OverlayRunner:
                         flip_x,
                         self.force_flip_y,
                         status_messages=status_messages if status_messages else None,
+                        wcs_path=(
+                            wcs_path if (self.wait_for_plate_solve or self.mount is None) else None
+                        ),
                     )
 
                     if overlay_status.is_success:

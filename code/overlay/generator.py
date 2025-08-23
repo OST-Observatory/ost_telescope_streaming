@@ -55,6 +55,21 @@ class OverlayGenerator:
         self.text_color = tuple(self.display_config.get("text_color", [255, 255, 255]))
         self.marker_size = self.display_config.get("marker_size", 5)
         self.text_offset = self.display_config.get("text_offset", [8, -8])
+        # Ellipse label display overrides (optional)
+        self.ellipse_label_color = tuple(
+            self.display_config.get(
+                "ellipse_label_color",
+                self.display_config.get("text_color", [255, 255, 255]),
+            )
+        )
+        try:
+            self.ellipse_label_font_size = int(
+                self.display_config.get(
+                    "ellipse_label_font_size", self.overlay_config.get("font_size", 14)
+                )
+            )
+        except Exception:
+            self.ellipse_label_font_size = int(self.overlay_config.get("font_size", 14))
 
         # Info panel settings
         self.info_panel_config = self.overlay_config.get("info_panel", {})
@@ -840,11 +855,17 @@ class OverlayGenerator:
                             )
                             lx += 6
                             ly += 4
+                            # Use ellipse label overrides if available
+                            label_color = self.ellipse_label_color
+                            try:
+                                font = self._get_info_panel_font(size=self.ellipse_label_font_size)
+                            except Exception:
+                                font = self.get_font()
                         else:
                             lx = x + self.text_offset[0]
                             ly = y + self.text_offset[1]
-
-                        draw.text((lx, ly), name, fill=self.text_color, font=font)
+                            label_color = self.text_color
+                        draw.text((lx, ly), name, fill=label_color, font=font)
                         objects_drawn += 1
 
                 except Exception as e:
