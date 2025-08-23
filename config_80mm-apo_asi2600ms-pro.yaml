@@ -207,7 +207,7 @@ overlay:
     text_color: [255, 255, 255]
     marker_size: 30
     text_offset: [45, -45]
-    ellipse_label_color: [255, 200, 0, 255]
+    ellipse_label_color: [255, 0, 0, 255]
     ellipse_label_font_size: 33
 
   # Coordinates settings

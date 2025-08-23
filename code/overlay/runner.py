@@ -280,7 +280,18 @@ class OverlayRunner:
             return error_status("Overlay generator not available")
 
         try:
-            overlay_generator = OverlayGenerator(self.config, self.logger)
+            # Prefer the VideoProcessor's existing generator (carries camera_name, etc.)
+            overlay_generator = None
+            try:
+                if hasattr(self, "video_processor") and self.video_processor:
+                    og = getattr(self.video_processor, "overlay_generator", None)
+                    if og is not None:
+                        overlay_generator = og
+            except Exception:
+                overlay_generator = None
+
+            if overlay_generator is None:
+                overlay_generator = OverlayGenerator(self.config, self.logger)
 
             # Attach frame timestamp (ISO) if last frame metadata exists
             try:
@@ -296,6 +307,31 @@ class OverlayRunner:
                         ts = self.last_frame_metadata.get("capture_started_at")
                     if ts:
                         overlay_generator.frame_timestamp_iso = str(ts)
+            except Exception:
+                pass
+
+            # Provide camera name to generator if available (from VP or last frame metadata)
+            try:
+                # If generator has no explicit camera name but VP has, propagate
+                if (
+                    hasattr(self, "video_processor")
+                    and self.video_processor
+                    and hasattr(self.video_processor, "overlay_generator")
+                ):
+                    vp_og = getattr(self.video_processor, "overlay_generator", None)
+                    cam_name = getattr(vp_og, "camera_name", None) if vp_og else None
+                    if cam_name and not getattr(overlay_generator, "camera_name", None):
+                        overlay_generator.camera_name = str(cam_name)
+                # Last frame metadata fallback (e.g., provided by capture pipeline)
+                if (
+                    not getattr(overlay_generator, "camera_name", None)
+                    and hasattr(self, "last_frame_metadata")
+                    and isinstance(self.last_frame_metadata, dict)
+                ):
+                    md = self.last_frame_metadata
+                    cam_name_md = md.get("camera_name") or md.get("CAMNAME") or md.get("INSTRUME")
+                    if cam_name_md:
+                        overlay_generator.camera_name = str(cam_name_md)
             except Exception:
                 pass
 
