@@ -8,10 +8,11 @@ from typing import Optional, Tuple
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from overlay.drawing import (
-    compute_ellipse_label_point,
+    compute_ellipse_label_pose,
     draw_ellipse_for_object,
     draw_info_panel,
     draw_secondary_fov,
+    draw_text_rotated,
     draw_title,
 )
 from overlay.info import cooling_info, format_coordinates, fov_info, telescope_info
@@ -840,7 +841,7 @@ class OverlayGenerator:
                             and dim_maj is not None
                             and dim_min is not None
                         ):
-                            lx, ly = compute_ellipse_label_point(
+                            lx, ly, tang_deg = compute_ellipse_label_pose(
                                 int(x),
                                 int(y),
                                 float(dim_maj),
@@ -865,7 +866,25 @@ class OverlayGenerator:
                             lx = x + self.text_offset[0]
                             ly = y + self.text_offset[1]
                             label_color = self.text_color
-                        draw.text((lx, ly), name, fill=label_color, font=font)
+                        try:
+                            if (
+                                should_draw_ellipse
+                                and has_dimensions
+                                and dim_maj is not None
+                                and dim_min is not None
+                            ):
+                                draw_text_rotated(
+                                    img,
+                                    name,
+                                    (int(lx), int(ly)),
+                                    float(tang_deg),
+                                    font,
+                                    label_color,
+                                )
+                            else:
+                                draw.text((lx, ly), name, fill=label_color, font=font)
+                        except Exception:
+                            draw.text((lx, ly), name, fill=label_color, font=font)
                         objects_drawn += 1
 
                 except Exception as e:

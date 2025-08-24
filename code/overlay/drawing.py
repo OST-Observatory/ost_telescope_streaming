@@ -180,6 +180,94 @@ def compute_ellipse_label_point(
     return int(center_x + xr), int(center_y + yr)
 
 
+def compute_ellipse_label_pose(
+    center_x: int,
+    center_y: int,
+    dim_maj_arcmin: float,
+    dim_min_arcmin: float,
+    pa_deg: float,
+    img_size: Tuple[int, int],
+    fov_width_deg: float,
+    fov_height_deg: float,
+    position_angle_deg: float,
+    flip_x: bool,
+    theta_deg: float = 45.0,
+) -> Tuple[int, int, float]:
+    """Return a point and tangent angle (deg) on the ellipse perimeter.
+
+    The angle is adjusted to keep text approximately upright (range [-90, 90]).
+    """
+    scale_x = (fov_width_deg * 60) / img_size[0]
+    scale_y = (fov_height_deg * 60) / img_size[1]
+    major_px = dim_maj_arcmin / scale_x
+    minor_px = dim_min_arcmin / scale_y
+    if major_px < 1 or minor_px < 1:
+        return center_x, center_y, 0.0
+    total_rot = (-pa_deg if flip_x else pa_deg) + position_angle_deg
+    rot = np.deg2rad(total_rot)
+    cos_r = np.cos(rot)
+    sin_r = np.sin(rot)
+    theta = np.deg2rad(theta_deg)
+    # Position on ellipse
+    x = major_px * np.cos(theta)
+    y = minor_px * np.sin(theta)
+    xr = x * cos_r - y * sin_r
+    yr = x * sin_r + y * cos_r
+    px = int(center_x + xr)
+    py = int(center_y + yr)
+    # Tangent (derivative) before rotation: (-a sin t, b cos t)
+    tx = -major_px * np.sin(theta)
+    ty = minor_px * np.cos(theta)
+    txr = tx * cos_r - ty * sin_r
+    tyr = tx * sin_r + ty * cos_r
+    ang = float(np.degrees(np.arctan2(tyr, txr)))
+    # Keep angle roughly upright for readability
+    if ang > 90.0:
+        ang -= 180.0
+    elif ang < -90.0:
+        ang += 180.0
+    return px, py, ang
+
+
+def draw_text_rotated(
+    base_img,
+    text: str,
+    position: Tuple[int, int],
+    angle_deg: float,
+    font: ImageFont.ImageFont | None,
+    fill: Tuple[int, int, int, int] | Tuple[int, int, int],
+) -> None:
+    """Draw rotated text onto the RGBA base image at approximate center position."""
+    from PIL import Image
+    from PIL import ImageDraw as _ImageDraw
+    from PIL import ImageFont as _ImageFont
+
+    if font is None:
+        font = _ImageFont.load_default()
+    # Measure text
+    bbox = font.getbbox(text)
+    w = max(1, bbox[2] - bbox[0])
+    h = max(1, bbox[3] - bbox[1])
+    txt = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = _ImageDraw.Draw(txt)
+    d.text((0, 0), text, font=font, fill=fill)
+    rot = txt.rotate(angle=angle_deg, expand=True, resample=Image.BICUBIC)
+    rw, rh = rot.size
+    x, y = int(position[0]) - rw // 2, int(position[1]) - rh // 2
+    # Clamp within image bounds
+    try:
+        W, H = base_img.size
+        x = max(0, min(x, W - rw))
+        y = max(0, min(y, H - rh))
+    except Exception:
+        pass
+    try:
+        base_img.paste(rot, (x, y), rot)
+    except Exception:
+        # Fallback: no alpha paste
+        base_img.paste(rot, (x, y))
+
+
 def draw_secondary_fov(
     draw: ImageDraw.ImageDraw,
     img_size: Tuple[int, int],

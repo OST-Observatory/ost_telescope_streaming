@@ -205,10 +205,10 @@ overlay:
   display:
     object_color: [255, 0, 0]
     text_color: [255, 255, 255]
-    marker_size: 30
+    marker_size: 33
     text_offset: [45, -45]
     ellipse_label_color: [255, 0, 0, 255]
-    ellipse_label_font_size: 33
+    ellipse_label_font_size: 40
 
   # Coordinates settings
   coordinates:
@@ -291,8 +291,8 @@ overlay:
       opacity: 180         # Transparency (0-255)
       show_label: true     # Show FOV label
       label_color: [0, 255, 255, 255]  # Label color
-      label_font_size: 30
-      label_offset: [200, 280]   # Label offset from FOV border
+      label_font_size: 35
+      label_offset: [160, 300]   # Label offset from FOV border
       label: "Field of view of OST"
 
     # Position offset (if secondary telescope is not perfectly aligned)
