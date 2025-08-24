@@ -61,6 +61,17 @@ class OverlayRunner:
         self.last_update = None
         self.last_solve_result = None
         self._solve_seq = 0  # increments on each new plate-solve result
+        # Config hot-reload tracking
+        try:
+            self._config_path = getattr(self.config, "config_path", None)
+            self._config_mtime = (
+                os.path.getmtime(self._config_path)
+                if (self._config_path and os.path.exists(self._config_path))
+                else None
+            )
+        except Exception:
+            self._config_path = None
+            self._config_mtime = None
 
         # Retry configuration
         self.max_retries = overlay_config.get("update", {}).get("max_retries", 3)
@@ -456,6 +467,78 @@ class OverlayRunner:
             consecutive_failures = 0
 
             while self.running:
+                # Config hot-reload (cross-platform, polling mtime)
+                try:
+                    if self._config_path and os.path.exists(self._config_path):
+                        current_mtime = os.path.getmtime(self._config_path)
+                        if self._config_mtime is not None and current_mtime > self._config_mtime:
+                            self.logger.info("Detected configuration change, reloading config...")
+                            try:
+                                # Reload ConfigManager
+                                self.config.reload()
+                            except Exception as e:
+                                self.logger.warning(f"Config reload failed: {e}")
+                            else:
+                                self._config_mtime = current_mtime
+                                # Refresh runner cached settings
+                                try:
+                                    overlay_config = self.config.get_overlay_config()
+                                    self.update_interval = overlay_config.get("update", {}).get(
+                                        "update_interval", self.update_interval
+                                    )
+                                    self.wait_for_plate_solve = overlay_config.get(
+                                        "wait_for_plate_solve", self.wait_for_plate_solve
+                                    )
+                                    coords_cfg = overlay_config.get("coordinates", {})
+                                    self.force_flip_x = bool(
+                                        coords_cfg.get("force_flip_x", self.force_flip_x)
+                                    )
+                                    self.force_flip_y = bool(
+                                        coords_cfg.get("force_flip_y", self.force_flip_y)
+                                    )
+                                    gate_cfg = overlay_config.get("capture_gating", {})
+                                    self.block_during_slew = bool(
+                                        gate_cfg.get("block_during_slew", self.block_during_slew)
+                                    )
+                                    self.require_tracking = bool(
+                                        gate_cfg.get("require_tracking", self.require_tracking)
+                                    )
+                                    self.alert_on_slew = bool(
+                                        gate_cfg.get("alert_on_slew", self.alert_on_slew)
+                                    )
+                                    self.use_timestamps = overlay_config.get(
+                                        "use_timestamps", self.use_timestamps
+                                    )
+                                    self.timestamp_format = overlay_config.get(
+                                        "timestamp_format", self.timestamp_format
+                                    )
+                                except Exception as e:
+                                    self.logger.debug(f"Could not refresh runner settings: {e}")
+
+                                # Recreate overlay generator to pick up new overlay/display settings
+                                try:
+                                    if self.video_processor and getattr(
+                                        self.video_processor, "overlay_generator", None
+                                    ):
+                                        old_og = self.video_processor.overlay_generator
+                                        cam_name = getattr(old_og, "camera_name", None)
+                                        new_og = OverlayGenerator(self.config, self.logger)
+                                        # Preserve useful runtime attributes
+                                        if cam_name:
+                                            new_og.camera_name = cam_name
+                                        # Keep cooling linkage if present
+                                        try:
+                                            new_og.video_processor = self.video_processor
+                                        except Exception:
+                                            pass
+                                        self.video_processor.overlay_generator = new_og
+                                        self.logger.info(
+                                            "Overlay generator reinitialized with updated config"
+                                        )
+                                except Exception as e:
+                                    self.logger.debug(f"Overlay generator refresh failed: {e}")
+                except Exception:
+                    pass
                 try:
                     # Main loop body
                     # Check if we need to wait for warmup
