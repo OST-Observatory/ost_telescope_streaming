@@ -227,6 +227,10 @@ overlay:
     min_diameter_px: 6
     show_labels: true
     ephemeris: de432s
+    # Adaptive exposure for bright bodies (Moon/planets)
+    # If enabled, the processor caps exposure to this value (seconds)
+    # on the next capture after a successful solve. Set to null to disable.
+    bright_exposure_cap_s: 0.01
 
   # Information panel settings
   info_panel:

@@ -157,6 +157,8 @@ class VideoProcessor:
         self.last_frame_metadata: Optional[dict[str, Any]] = None
         # Scheduling condition for efficient sleeps and external wake-ups
         self._condition = threading.Condition()
+        # Adaptive exposure override (seconds) set between captures
+        self.next_exposure_time_override: Optional[float] = None
 
         # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
@@ -386,7 +388,25 @@ class VideoProcessor:
         try:
             cam_type = getattr(self.video_capture, "camera_type", "opencv")
             if cam_type in ["alpaca", "ascom"]:
+                # Pass adaptive exposure override to capture controller (if set)
+                try:
+                    if self.next_exposure_time_override is not None:
+                        self.video_capture.next_exposure_time_override = float(
+                            self.next_exposure_time_override
+                        )
+                    else:
+                        # Clear previous override
+                        if hasattr(self.video_capture, "next_exposure_time_override"):
+                            self.video_capture.next_exposure_time_override = None
+                except Exception:
+                    pass
+
                 status = self.video_capture.capture_single_frame()
+                # One-shot override; clear after use
+                try:
+                    self.next_exposure_time_override = None
+                except Exception:
+                    pass
                 if not status or not getattr(status, "is_success", False):
                     msg = getattr(status, "message", "unknown error")
                     self.logger.warning(f"Single-frame capture failed: {msg}")
@@ -513,6 +533,133 @@ class VideoProcessor:
         result = self._solve_frame(str(candidate))
         # Update last_solve_time only after the attempt completes
         self.last_solve_time = time.monotonic()
+        # Adaptive exposure heuristic for bright solar system targets (Moon/planets)
+        try:
+            if result and isinstance(result, PlateSolveResult):
+                # Use astropy to check whether a bright SS object is in FOV
+                try:
+                    from astropy.coordinates import (
+                        EarthLocation,
+                        SkyCoord,
+                        get_body,
+                        get_moon,
+                        solar_system_ephemeris,
+                    )
+                    from astropy.time import Time
+                    import astropy.units as u
+                except Exception:
+                    solar_present = False
+                else:
+                    # Observation time
+                    try:
+                        ts = None
+                        if isinstance(self.last_frame_metadata, dict):
+                            ts = (
+                                self.last_frame_metadata.get("date_obs")
+                                or self.last_frame_metadata.get("DATE-OBS")
+                                or self.last_frame_metadata.get("capture_started_at")
+                            )
+                        obstime = Time(ts) if ts else Time.now()
+                    except Exception:
+                        obstime = Time.now()
+
+                    # Location (fallback to geocenter if not configured)
+                    try:
+                        # Allow both get_site_config() or overlay.site
+                        site_cfg = None
+                        if hasattr(self.config, "get_site_config"):
+                            site_cfg = self.config.get_site_config()
+                        if not site_cfg:
+                            ovl = (
+                                self.config.get_overlay_config()
+                                if hasattr(self.config, "get_overlay_config")
+                                else {}
+                            )
+                            site_cfg = ovl.get("site", {}) if isinstance(ovl, dict) else {}
+                        lat_raw = site_cfg.get("latitude")
+                        lon_raw = site_cfg.get("longitude")
+                        elev_raw = site_cfg.get("elevation_m", 0.0)
+                        lat = float(lat_raw) if lat_raw is not None else 0.0
+                        lon = float(lon_raw) if lon_raw is not None else 0.0
+                        elev = float(elev_raw) if elev_raw is not None else 0.0
+                        location = EarthLocation(
+                            lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m
+                        )
+                    except Exception:
+                        location = None
+
+                    # FOV half-diagonal
+                    half_diag = (
+                        (result.fov_width or 0.0) ** 2 + (result.fov_height or 0.0) ** 2
+                    ) ** 0.5 / 2.0
+                    center = SkyCoord(
+                        ra=(result.ra_center or 0.0) * u.deg,
+                        dec=(result.dec_center or 0.0) * u.deg,
+                        frame="icrs",
+                    )
+
+                    # Check common bright bodies
+                    solar_present = False
+                    bodies = [
+                        "moon",
+                        "mercury",
+                        "venus",
+                        "mars",
+                        "jupiter",
+                        "saturn",
+                        "uranus",
+                        "neptune",
+                    ]
+                    try:
+                        solar_system_ephemeris.set("de432s")
+                    except Exception:
+                        pass
+                    for b in bodies:
+                        try:
+                            coord = (
+                                get_moon(obstime, location=location)
+                                if b == "moon"
+                                else get_body(b, obstime, location=location)
+                            )
+                            sep = coord.icrs.separation(center).degree
+                            if sep <= half_diag:
+                                solar_present = True
+                                break
+                        except Exception:
+                            continue
+
+                if solar_present:
+                    # Use conservative cap of 0.01s unless already shorter
+                    try:
+                        ovl = (
+                            self.config.get_overlay_config()
+                            if hasattr(self.config, "get_overlay_config")
+                            else {}
+                        )
+                        solar_cfg = ovl.get("solar_system", {}) if isinstance(ovl, dict) else {}
+                        cap_s = float(solar_cfg.get("bright_exposure_cap_s", 0.01))
+                    except Exception:
+                        cap_s = 0.01
+                    # Only apply if current was longer than cap
+                    if isinstance(self.last_frame_metadata, dict):
+                        cur_exp = self.last_frame_metadata.get(
+                            "exposure_time_s"
+                        ) or self.last_frame_metadata.get("exposure_time")
+                        try:
+                            cur_exp_f = float(cur_exp) if cur_exp is not None else None
+                        except Exception:
+                            cur_exp_f = None
+                    else:
+                        cur_exp_f = None
+                    if cur_exp_f is None or cur_exp_f > cap_s:
+                        self.next_exposure_time_override = cap_s
+                        self.logger.info(
+                            "Adaptive exposure: applying bright target cap to %.4fs (was %s)",
+                            cap_s,
+                            str(cur_exp_f),
+                        )
+        except Exception:
+            pass
         # If we have a callback, it will be triggered in _solve_frame on success
         return result
 

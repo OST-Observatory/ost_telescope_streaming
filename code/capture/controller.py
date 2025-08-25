@@ -436,6 +436,13 @@ class VideoCapture:
             section = cam_cfg.get("opencv", {})
             binning = 1
         exposure_time = section.get("exposure_time", 1.0)
+        # Allow adaptive override (set by VideoProcessor)
+        try:
+            override = getattr(self, "next_exposure_time_override", None)
+            if override is not None:
+                exposure_time = float(override)
+        except Exception:
+            pass
         gain = section.get("gain", None)
         return self.capture_single_frame_generic(exposure_time, gain, binning)
 
