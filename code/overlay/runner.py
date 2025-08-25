@@ -406,7 +406,37 @@ class OverlayRunner:
         finally:
             # ASCOMMount is a context manager, so it will be cleaned up automatically
             if self.video_processor:
-                self.video_processor.stop()
+                try:
+                    # Log final rolling telemetry before stopping
+                    try:
+                        stats = self.video_processor.get_statistics()
+                        if getattr(stats, "is_success", False):
+                            data = getattr(stats, "data", {}) or {}
+                            tm = data.get("timings_ms", {})
+                            cap = tm.get("capture", {})
+                            sav = tm.get("save", {})
+                            sol = tm.get("solve", {})
+                            self.logger.info(
+                                (
+                                    "Session timings_ms avg(min/max) "
+                                    "capture=%.1f(%.1f/%.1f) "
+                                    "save=%.1f(%.1f/%.1f) "
+                                    "solve=%.1f(%.1f/%.1f)"
+                                ),
+                                float(cap.get("avg", 0.0)),
+                                float(cap.get("min", 0.0)),
+                                float(cap.get("max", 0.0)),
+                                float(sav.get("avg", 0.0)),
+                                float(sav.get("min", 0.0)),
+                                float(sav.get("max", 0.0)),
+                                float(sol.get("avg", 0.0)),
+                                float(sol.get("min", 0.0)),
+                                float(sol.get("max", 0.0)),
+                            )
+                    except Exception:
+                        pass
+                finally:
+                    self.video_processor.stop()
             self.logger.info("Overlay Runner stopped.")
 
     def _main_loop(self) -> None:
@@ -431,6 +461,7 @@ class OverlayRunner:
                             result.ra_center,
                             result.dec_center,
                         )
+                        # Overlay generation/composition handled in main loop
 
                     def on_error(error):
                         # Don't log every plate-solving failure as an error
@@ -746,6 +777,57 @@ class OverlayRunner:
                             wcs_path if (self.wait_for_plate_solve or self.mount is None) else None
                         ),
                     )
+
+                    # Additionally, if VideoProcessor provides a chosen base frame
+                    # generate an overlay matched to that base and combine.
+                    try:
+                        if self.video_processor:
+                            base_png = getattr(self.video_processor, "last_overlay_base_png", None)
+                            if base_png and os.path.exists(str(base_png)):
+                                base_png_str = str(base_png)
+                                # Derive size from base image
+                                try:
+                                    from PIL import Image as _PILImage
+
+                                    with _PILImage.open(base_png_str) as _im:
+                                        base_size = _im.size
+                                except Exception:
+                                    base_size = image_size
+
+                                # Save overlay next to base
+                                base_dir = os.path.dirname(base_png_str)
+                                base_name, _ = os.path.splitext(os.path.basename(base_png_str))
+                                overlay_for_base = os.path.join(
+                                    base_dir, f"{base_name}_overlay.png"
+                                )
+
+                                overlay_for_base_status = self.generate_overlay_with_coords(
+                                    ra_deg,
+                                    dec_deg,
+                                    overlay_for_base,
+                                    fov_width_deg,
+                                    fov_height_deg,
+                                    position_angle_deg,
+                                    base_size,
+                                    None,
+                                    flip_x,
+                                    self.force_flip_y,
+                                    status_messages=status_messages if status_messages else None,
+                                    wcs_path=(
+                                        wcs_path
+                                        if (self.wait_for_plate_solve or self.mount is None)
+                                        else None
+                                    ),
+                                )
+                                if getattr(overlay_for_base_status, "is_success", False):
+                                    try:
+                                        self.video_processor.combine_overlay_with_image(
+                                            base_png_str, overlay_for_base, None
+                                        )
+                                    except Exception as _e:
+                                        self.logger.debug(f"Combine skipped: {_e}")
+                    except Exception as e:
+                        self.logger.debug(f"Overlay combine in main loop skipped: {e}")
 
                     if overlay_status.is_success:
                         # Get the overlay file path

@@ -254,7 +254,10 @@ pip install -r requirements-dev.txt
 # Unit tests by default
 pytest -q -m "not integration"
 
-# Run integration tests explicitly (may require hardware/ASCOM/PlateSolve2)
+# Selective integration (live-stacking, no hardware required)
+pytest -q -m "integration and not hardware" -k stacking_rollover_integration
+
+# Full integration (may require optional deps/hardware)
 pytest -q -m integration
 
 # Enable image regression tests (optional; requires real baseline images)

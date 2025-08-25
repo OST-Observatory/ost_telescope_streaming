@@ -15,6 +15,10 @@ jobs:
       OST_CAMERA_CONNECTED: '0'
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Set up pip cache
         uses: actions/cache@v4
         with:
@@ -22,16 +26,15 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install pytest-regressions
+      - name: Run stacking rollover integration (selective)
+        run: |
+          pytest -q -m "integration and not hardware" -k stacking_rollover_integration
       - name: Run integration tests (no hardware)
         run: |
           pytest -q -m integration

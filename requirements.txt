@@ -11,6 +11,9 @@ numpy>=1.20.0
 # Video processing
 opencv-python>=4.5.0
 
+# Alignment for live stacking (robust to rotation)
+astroalign>=2.5
+
 # Configuration management
 PyYAML>=6.0
 

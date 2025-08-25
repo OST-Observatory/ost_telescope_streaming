@@ -10,3 +10,4 @@ pre-commit>=3.7.0
 pytest-cov>=4.1.0
 hypothesis>=6.92.0
 pytest-regressions>=2.5.0
+astroalign>=2.5

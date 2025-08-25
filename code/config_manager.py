@@ -154,6 +154,18 @@ class ConfigManager:
                 "output_dir": "captured_frames",  # Directory for captured frames
                 "cache_dir": "cache",  # Directory for temporary files
                 "file_format": "PNG",  # File format for saved frames (fits, jpg, png, tiff, etc.)
+                "stacking": {
+                    "enabled": False,
+                    "method": "median",  # 'median' or 'mean'
+                    "sigma_clip": {"enabled": True, "sigma": 3.0},
+                    "max_frames": 100,  # 0 = unlimited
+                    "max_integration_s": 0,  # 0 = ignore
+                    "align": "astroalign",  # 'astroalign' or 'none'
+                    "movement_reset_arcmin": 10.0,
+                    "write_interval_s": 10,
+                    "min_frames_for_stack_solve": 3,
+                    "output_format": ["png", "fits"],
+                },
             },
             "plate_solve": {
                 "auto_solve": True,
@@ -365,6 +377,35 @@ class ConfigManager:
         for key, default_value in defaults.items():
             if key not in frame_config:
                 frame_config[key] = default_value
+
+        # Ensure stacking sub-config and its defaults
+        stacking_defaults = {
+            "enabled": False,
+            "method": "median",
+            "sigma_clip": {"enabled": True, "sigma": 3.0},
+            "max_frames": 100,
+            "max_integration_s": 0,
+            "align": "astroalign",
+            "movement_reset_arcmin": 10.0,
+            "write_interval_s": 10,
+            "min_frames_for_stack_solve": 3,
+            "output_format": ["png", "fits"],
+        }
+        stacking_cfg = frame_config.get("stacking", {})
+        if not isinstance(stacking_cfg, dict):
+            stacking_cfg = {}
+        for k, v in stacking_defaults.items():
+            if k not in stacking_cfg:
+                stacking_cfg[k] = v
+        # Deep default for sigma_clip
+        if "sigma_clip" not in stacking_cfg or not isinstance(stacking_cfg["sigma_clip"], dict):
+            stacking_cfg["sigma_clip"] = {"enabled": True, "sigma": 3.0}
+        else:
+            if "enabled" not in stacking_cfg["sigma_clip"]:
+                stacking_cfg["sigma_clip"]["enabled"] = True
+            if "sigma" not in stacking_cfg["sigma_clip"]:
+                stacking_cfg["sigma_clip"]["sigma"] = 3.0
+        frame_config["stacking"] = stacking_cfg
 
         return cast(Dict[str, Any], frame_config)
 

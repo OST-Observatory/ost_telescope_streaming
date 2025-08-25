@@ -38,9 +38,11 @@ from typing import Any, Callable, Optional
 
 # Import local modules
 from capture.controller import VideoCapture
+import numpy as np
 from overlay.generator import OverlayGenerator
 from PIL import Image
 from platesolve.solver import PlateSolveResult, PlateSolverFactory
+from processing.stacker import FrameStacker
 from services.frame_writer import FrameWriter
 from status import VideoProcessingStatus, error_status, success_status
 from utils.status_utils import unwrap_status
@@ -97,6 +99,7 @@ class VideoProcessor:
         self.mount: Optional[Any] = None  # ASCOM mount for slewing detection
         self.is_running: bool = False
         self.processing_thread: Optional[threading.Thread] = None
+        self.capture_thread: Optional[threading.Thread] = None
 
         # Load configuration sections
         self.frame_config: dict[str, Any] = self.config.get_frame_processing_config()
@@ -115,6 +118,33 @@ class VideoProcessor:
         self.timestamp_format: str = self.frame_config.get("timestamp_format", "%Y%m%d_%H%M%S")
         self.use_capture_count: bool = self.frame_config.get("use_capture_count", True)
         self.file_format: str = self.frame_config.get("file_format", "PNG")
+
+        # Live stacking configuration
+        stacking_cfg = self.frame_config.get("stacking", {})
+        self.stacking_enabled: bool = bool(stacking_cfg.get("enabled", False))
+        self.stacking_method: str = str(stacking_cfg.get("method", "median")).lower()
+        sigma_cfg = stacking_cfg.get("sigma_clip", {}) if isinstance(stacking_cfg, dict) else {}
+        self.stacking_sigma_enabled: bool = bool(sigma_cfg.get("enabled", True))
+        self.stacking_sigma: float = float(sigma_cfg.get("sigma", 3.0))
+        self.stacking_max_frames: int = int(stacking_cfg.get("max_frames", 100))
+        self.stacking_max_integration_s: int = int(stacking_cfg.get("max_integration_s", 0))
+        self.stacking_align: str = str(stacking_cfg.get("align", "astroalign")).lower()
+        self.stacking_write_interval_s: int = int(stacking_cfg.get("write_interval_s", 10))
+        self.stacking_min_frames_for_solve: int = int(
+            stacking_cfg.get("min_frames_for_stack_solve", 3)
+        )
+        self.stacking_output_format: list[str] = list(
+            stacking_cfg.get("output_format", ["png", "fits"])
+        )
+        self.stacking_movement_reset_arcmin: float = float(
+            stacking_cfg.get("movement_reset_arcmin", 10.0)
+        )
+        self.stacker: Optional[FrameStacker] = None
+        self.stacks_dir: Path = Path(
+            self.frame_config.get("plate_solve_dir", "plate_solve_frames")
+        ).joinpath("stacks")
+        self.last_single_frame_png: Optional[Path] = None
+        self.last_single_frame_fits: Optional[Path] = None
 
         # Capture gating (slew/tracking) from overlay config (robust to minimal test configs)
         try:
@@ -154,6 +184,8 @@ class VideoProcessor:
         self.capture_count: int = 0
         self.solve_count: int = 0
         self.successful_solves: int = 0
+        # Rolling telemetry
+        self._telemetry: dict[str, list[float]] = {"capture": [], "save": [], "solve": []}
         self.last_frame_metadata: Optional[dict[str, Any]] = None
         # Scheduling condition for efficient sleeps and external wake-ups
         self._condition = threading.Condition()
@@ -318,6 +350,21 @@ class VideoProcessor:
         # Video capture is already started in start_observation_session
         # Just start the processing loop
         self.is_running = True
+        # Start capture worker if stacking enabled
+        if self.stacking_enabled:
+            self.stacker = FrameStacker(
+                output_dir=self.stacks_dir,
+                method=self.stacking_method,
+                sigma_clip_enabled=self.stacking_sigma_enabled,
+                sigma=self.stacking_sigma,
+                max_frames=self.stacking_max_frames,
+                max_integration_s=self.stacking_max_integration_s,
+                align=self.stacking_align,
+                write_interval_s=self.stacking_write_interval_s,
+                logger=self.logger,
+            )
+            self.capture_thread = threading.Thread(target=self._capture_worker, daemon=True)
+            self.capture_thread.start()
         self.processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
         self.processing_thread.start()
         self.logger.info("Video processing loop started")
@@ -339,6 +386,8 @@ class VideoProcessor:
             pass
         if self.processing_thread:
             self.processing_thread.join(timeout=5.0)
+        if self.capture_thread:
+            self.capture_thread.join(timeout=5.0)
         if self.video_capture:
             self.video_capture.stop_capture()
             self.video_capture.disconnect()
@@ -763,7 +812,15 @@ class VideoProcessor:
                 now = time.monotonic()
                 elapsed = now - self.last_capture_time
                 if elapsed >= self.capture_interval:
-                    self._capture_and_solve()
+                    if self.stacking_enabled:
+                        self._solve_only_cycle_with_stacking()
+                        # Periodic non-final snapshot for monitoring
+                        try:
+                            self._maybe_write_periodic_stack_snapshot()
+                        except Exception as e:
+                            self.logger.debug(f"Periodic stack snapshot failed: {e}")
+                    else:
+                        self._capture_and_solve()
                     self.last_capture_time = time.monotonic()
                     continue
                 # Efficient wait for the remaining interval or external wake-up
@@ -780,6 +837,242 @@ class VideoProcessor:
                         self._condition.wait(timeout=0.5)
                 except Exception:
                     time.sleep(0.5)
+
+    # Capture worker continuously produces frames for stacking
+    def _capture_worker(self) -> None:
+        if not self.video_capture or not self.stacker:
+            return
+        while self.is_running:
+            try:
+                # If mount is slewing significantly, finalize current stack and reset
+                try:
+                    if self.slewing_detection_enabled and self._mount_is_slewing():
+                        self._rollover_stack(reason="slew_detected")
+                except Exception:
+                    pass
+                # capture single frame without solving
+                frame = self._obtain_frame()
+                if frame is None:
+                    with self._condition:
+                        self._condition.wait(timeout=0.1)
+                    continue
+                # save single frame paths for SS fallback
+                frame_png, frame_fits = self._save_outputs(frame)
+                self.last_single_frame_png = frame_png
+                self.last_single_frame_fits = frame_fits
+                # push to stacker
+                try:
+                    img, _ = unwrap_status(frame)
+                except Exception:
+                    img = frame
+                if isinstance(img, np.ndarray):
+                    self.stacker.add_frame(img)
+                else:
+                    # try to derive numpy array from writer path
+                    pass
+                # pacing: capture thread should follow camera exposure timing; use small sleep
+                with self._condition:
+                    self._condition.wait(timeout=0.05)
+            except Exception as e:
+                self.logger.warning(f"Capture worker error: {e}")
+                with self._condition:
+                    self._condition.wait(timeout=0.5)
+
+    def _solve_only_cycle_with_stacking(self) -> None:
+        # Decide source: stacked vs last single frame depending on SS object presence
+        try:
+            use_stack = True
+            if self._solar_system_present_last_solve_context():
+                use_stack = False
+        except Exception:
+            use_stack = True
+
+        candidate_png: Optional[Path] = None
+        candidate_fits: Optional[Path] = None
+        if use_stack and self.stacker:
+            snap = self.stacker.get_snapshot()
+            if snap and snap.frame_count >= self.stacking_min_frames_for_solve:
+                # persist transient snapshot to disk for solver consumption
+                base = "stack"
+                want_png = "png" in self.stacking_output_format
+                want_fits = "fits" in self.stacking_output_format
+                snap = self.stacker.write_snapshot(base, write_png=want_png, write_fits=want_fits)
+                if snap:
+                    candidate_png = snap.output_path_png
+                    candidate_fits = snap.output_path_fits
+        if not candidate_png and not candidate_fits:
+            candidate_png = self.last_single_frame_png
+            candidate_fits = self.last_single_frame_fits
+        # Remember chosen base for overlay composition in runner
+        self.last_overlay_base_png = candidate_png
+        self.last_overlay_base_fits = candidate_fits
+        # Solve
+        result = self._maybe_plate_solve(candidate_fits, candidate_png)
+        # Overlay: combine as usual when available
+        try:
+            if result and isinstance(result, PlateSolveResult):
+                # Check for significant target change -> rollover stack
+                try:
+                    prev = self.last_solve_result
+                    if prev and hasattr(prev, "ra_center") and hasattr(prev, "dec_center"):
+                        sep_arcmin = self._separation_arcmin(prev, result)
+                        if (
+                            sep_arcmin is not None
+                            and sep_arcmin >= self.stacking_movement_reset_arcmin
+                        ):
+                            self._rollover_stack(reason=f"solve_delta_{sep_arcmin:.1f}arcmin")
+                except Exception:
+                    pass
+                self.last_solve_result = result
+        except Exception:
+            pass
+
+    def _solar_system_present_last_solve_context(self) -> bool:
+        # Reuse presence check logic but based on last known center/fov if available
+        try:
+            result = self.last_solve_result
+            if not result:
+                return False
+            from astropy.coordinates import (
+                EarthLocation,
+                SkyCoord,
+                get_body,
+                get_moon,
+                solar_system_ephemeris,
+            )
+            from astropy.time import Time
+            import astropy.units as u
+        except Exception:
+            return False
+        # Observation time
+        try:
+            ts = None
+            if isinstance(self.last_frame_metadata, dict):
+                ts = (
+                    self.last_frame_metadata.get("date_obs")
+                    or self.last_frame_metadata.get("DATE-OBS")
+                    or self.last_frame_metadata.get("capture_started_at")
+                )
+            obstime = Time(ts) if ts else Time.now()
+        except Exception:
+            obstime = Time.now()
+        # Location
+        try:
+            site_cfg = None
+            if hasattr(self.config, "get_site_config"):
+                site_cfg = self.config.get_site_config()
+            if not site_cfg:
+                ovl = (
+                    self.config.get_overlay_config()
+                    if hasattr(self.config, "get_overlay_config")
+                    else {}
+                )
+                site_cfg = ovl.get("site", {}) if isinstance(ovl, dict) else {}
+            lat_raw = site_cfg.get("latitude")
+            lon_raw = site_cfg.get("longitude")
+            elev_raw = site_cfg.get("elevation_m", 0.0)
+            lat = float(lat_raw) if lat_raw is not None else 0.0
+            lon = float(lon_raw) if lon_raw is not None else 0.0
+            elev = float(elev_raw) if elev_raw is not None else 0.0
+            location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m)
+        except Exception:
+            location = None
+        # FOV
+        try:
+            half_diag = (
+                (result.fov_width or 0.0) ** 2 + (result.fov_height or 0.0) ** 2
+            ) ** 0.5 / 2.0
+            center = SkyCoord(
+                ra=(result.ra_center or 0.0) * u.deg,
+                dec=(result.dec_center or 0.0) * u.deg,
+                frame="icrs",
+            )
+            solar_system_ephemeris.set("de432s")
+            bodies = ["moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
+            for b in bodies:
+                coord = (
+                    get_moon(obstime, location=location)
+                    if b == "moon"
+                    else get_body(b, obstime, location=location)
+                )
+                sep = coord.icrs.separation(center).degree
+                if sep <= half_diag:
+                    return True
+        except Exception:
+            return False
+        return False
+
+    def _separation_arcmin(self, a: PlateSolveResult, b: PlateSolveResult) -> Optional[float]:
+        try:
+            from astropy.coordinates import SkyCoord
+            import astropy.units as u
+        except Exception:
+            return None
+        try:
+            if (
+                a.ra_center is None
+                or a.dec_center is None
+                or b.ra_center is None
+                or b.dec_center is None
+            ):
+                return None
+            ca = SkyCoord(
+                ra=float(a.ra_center) * u.deg, dec=float(a.dec_center) * u.deg, frame="icrs"
+            )
+            cb = SkyCoord(
+                ra=float(b.ra_center) * u.deg, dec=float(b.dec_center) * u.deg, frame="icrs"
+            )
+            return float(ca.separation(cb).arcminute)
+        except Exception:
+            return None
+
+    def _rollover_stack(self, reason: str = "movement") -> None:
+        if not self.stacker:
+            return
+        try:
+            # Build descriptive base name with time and coords if available
+            ts = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+            ra = None
+            dec = None
+            if self.last_solve_result and self.last_solve_result.ra_center is not None:
+                ra = float(self.last_solve_result.ra_center)
+                dec = float(self.last_solve_result.dec_center or 0.0)
+            coord_suffix = (
+                f"_RA{ra:07.3f}_DEC{dec:+07.3f}" if ra is not None and dec is not None else ""
+            )
+            base = f"stack_{ts}{coord_suffix}"
+            want_png = "png" in self.stacking_output_format
+            want_fits = "fits" in self.stacking_output_format
+            snap = self.stacker.write_snapshot(base, write_png=want_png, write_fits=want_fits)
+            if snap:
+                self.logger.info(
+                    "Stack rollover (%s): frames=%s png=%s fits=%s",
+                    reason,
+                    snap.frame_count,
+                    str(snap.output_path_png),
+                    str(snap.output_path_fits),
+                )
+            # Reset stack for new target
+            self.stacker.reset()
+        except Exception as e:
+            self.logger.warning(f"Stack rollover failed: {e}")
+
+    def _maybe_write_periodic_stack_snapshot(self) -> None:
+        if not self.stacker:
+            return
+        now = time.monotonic()
+        # Use internal cadence from config
+        if (now - getattr(self.stacker, "_last_write_at", 0.0)) < float(
+            self.stacking_write_interval_s
+        ):
+            return
+        snap = self.stacker.write_snapshot("stack_live", write_png=True, write_fits=True)
+        if snap:
+            # Update last write timestamp
+            try:
+                self.stacker._last_write_at = now
+            except Exception:
+                pass
 
     def _capture_and_solve(self) -> None:
         """Capture a frame and perform plate-solving if enabled.
@@ -937,6 +1230,16 @@ class VideoProcessor:
             solve_ms = (time.monotonic() - t_solve_start) * 1000.0
 
             # Aggregate and log timings
+            try:
+                self._telemetry["capture"].append(capture_ms)
+                self._telemetry["save"].append(total_save_ms)
+                self._telemetry["solve"].append(solve_ms)
+                # limit memory
+                for k in self._telemetry:
+                    if len(self._telemetry[k]) > 500:
+                        self._telemetry[k] = self._telemetry[k][-500:]
+            except Exception:
+                pass
             self.logger.info(
                 "capture_id=%s timings_ms capture=%.1f save=%.1f solve=%.1f",
                 self.capture_count,
@@ -1485,6 +1788,16 @@ class VideoProcessor:
         Returns:
             VideoProcessingStatus: Status object with statistics data.
         """
+
+        def agg(values: list[float]) -> dict[str, float]:
+            if not values:
+                return {"avg": 0.0, "min": 0.0, "max": 0.0}
+            return {
+                "avg": float(sum(values) / len(values)),
+                "min": float(min(values)),
+                "max": float(max(values)),
+            }
+
         stats = {
             "capture_count": self.capture_count,
             "solve_count": self.solve_count,
@@ -1492,6 +1805,11 @@ class VideoProcessor:
             "last_capture_time": self.last_capture_time,
             "last_solve_time": self.last_solve_time,
             "is_running": self.is_running,
+            "timings_ms": {
+                "capture": agg(self._telemetry.get("capture", [])),
+                "save": agg(self._telemetry.get("save", [])),
+                "solve": agg(self._telemetry.get("solve", [])),
+            },
         }
 
         return success_status(
