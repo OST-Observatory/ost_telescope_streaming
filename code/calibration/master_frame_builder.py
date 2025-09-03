@@ -856,9 +856,18 @@ class MasterFrameCreator:
 
             # Convert to 32-bit float if not already
             data_to_save = data.astype(np.float32, copy=False)
+            from astropy.time import Time
+
             header = fits.Header()
             header["EXPTIME"] = float(exposure_time)
             header["FRAMETYP"] = frame_type
+            # Provide standard timing keywords to avoid downstream WCS warnings
+            try:
+                obstime = Time.now()
+                header["DATE-OBS"] = obstime.isot
+                header["MJD-OBS"] = float(obstime.mjd)
+            except Exception:
+                pass
             hdu = fits.PrimaryHDU(data_to_save, header=header)
             hdu.writeto(file_path, overwrite=True)
             self.logger.info(f"Saved {frame_type} to {file_path}")

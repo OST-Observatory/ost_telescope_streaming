@@ -537,6 +537,17 @@ class OverlayRunner:
                                         )
                                 except Exception as e:
                                     self.logger.debug(f"Overlay generator refresh failed: {e}")
+
+                                # Refresh plate-solve settings on the running processor
+                                try:
+                                    if self.video_processor and hasattr(
+                                        self.video_processor, "refresh_plate_solve_settings"
+                                    ):
+                                        self.video_processor.refresh_plate_solve_settings()
+                                except Exception as e:
+                                    self.logger.debug(
+                                        f"Could not refresh video processor solver settings: {e}"
+                                    )
                 except Exception:
                     pass
                 try:

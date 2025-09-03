@@ -933,7 +933,6 @@ class OverlayGenerator:
                 EarthLocation,
                 SkyCoord,
                 get_body,
-                get_moon,
                 solar_system_ephemeris,
             )
             from astropy.time import Time
@@ -993,6 +992,10 @@ class OverlayGenerator:
         color = tuple(self.solar_system_config.get("color", [255, 255, 0, 255]))
         line_width = int(self.solar_system_config.get("line_width", 2))
         min_px = int(self.solar_system_config.get("min_diameter_px", 6))
+        # Minimum ellipse pixel size to enforce for visibility (major/minor axes)
+        min_ellipse_px = int(self.solar_system_config.get("min_ellipse_px", 3))
+        # Optional visual enlargement for Saturn rings
+        saturn_ring_factor = float(self.solar_system_config.get("saturn_ring_factor", 2.3))
         show_labels = bool(self.solar_system_config.get("show_labels", True))
 
         def apparent_diameter_arcmin(radius_m: float, distance_m: float) -> float:
@@ -1007,7 +1010,7 @@ class OverlayGenerator:
         for name, R in bodies:
             try:
                 if name == "Moon":
-                    coord = get_moon(obstime, location=location)
+                    coord = get_body("moon", obstime, location=location)
                 else:
                     coord = get_body(name.lower(), obstime, location=location)
 
@@ -1029,6 +1032,26 @@ class OverlayGenerator:
                 else:
                     dia_arcmin = 30.0 if name == "Moon" else 2.0
 
+                # Account for Saturn's rings to make the ellipse more visible
+                if name == "Saturn":
+                    try:
+                        dia_arcmin *= saturn_ring_factor
+                    except Exception:
+                        pass
+
+                # Enforce a minimum on-screen ellipse size in pixels for visibility
+                try:
+                    scale_x = (fov_w * 60.0) / max(img_size[0], 1)
+                    scale_y = (fov_h * 60.0) / max(img_size[1], 1)
+                    # Required arcmin to reach the minimum ellipse pixels
+                    min_arcmin_x = max(min_px, min_ellipse_px) * scale_x
+                    min_arcmin_y = max(min_px, min_ellipse_px) * scale_y
+                    dim_maj_arcmin = max(float(dia_arcmin), float(min_arcmin_x))
+                    dim_min_arcmin = max(float(dia_arcmin), float(min_arcmin_y))
+                except Exception:
+                    dim_maj_arcmin = float(dia_arcmin)
+                    dim_min_arcmin = float(dia_arcmin)
+
                 # Project to pixel coordinate
                 x, y = self.skycoord_to_pixel_with_rotation(
                     coord.icrs,
@@ -1046,8 +1069,8 @@ class OverlayGenerator:
                     draw,
                     int(x),
                     int(y),
-                    float(dia_arcmin),
-                    float(dia_arcmin),
+                    float(dim_maj_arcmin),
+                    float(dim_min_arcmin),
                     0.0,
                     img_size,
                     fov_w,

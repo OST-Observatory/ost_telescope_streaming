@@ -199,7 +199,52 @@ class FrameWriter:
             except Exception:
                 pass
 
-            header["DATE-OBS"] = Time.now().isot
+            # Observation time
+            try:
+                obstime = None
+                # Prefer explicit metadata provided to the call
+                if isinstance(metadata, dict):
+                    for k in (
+                        "date_obs",
+                        "DATE-OBS",
+                        "capture_started_at",
+                        "timestamp",
+                        "frame_timestamp_iso",
+                    ):
+                        if metadata.get(k):
+                            try:
+                                obstime = Time(metadata.get(k))
+                                break
+                            except Exception:
+                                obstime = None
+                # Fall back to frame details
+                if obstime is None and isinstance(frame_details, dict):
+                    for k in (
+                        "date_obs",
+                        "DATE-OBS",
+                        "capture_started_at",
+                        "timestamp",
+                        "frame_timestamp_iso",
+                    ):
+                        if frame_details.get(k):
+                            try:
+                                obstime = Time(frame_details.get(k))
+                                break
+                            except Exception:
+                                obstime = None
+                # If header already had DATE-OBS, respect it
+                if obstime is None and "DATE-OBS" in header and header["DATE-OBS"]:
+                    try:
+                        obstime = Time(header["DATE-OBS"])
+                    except Exception:
+                        obstime = None
+                if obstime is None:
+                    obstime = Time.now()
+
+                header["DATE-OBS"] = obstime.isot
+                header["MJD-OBS"] = float(obstime.mjd)
+            except Exception:
+                header["DATE-OBS"] = Time.now().isot
 
             hdu = fits.PrimaryHDU(image_data, header=header)
             # Measure write time for telemetry

@@ -159,6 +159,9 @@ class VideoProcessor:
         self._condition = threading.Condition()
         # Adaptive exposure override (seconds) set between captures
         self.next_exposure_time_override: Optional[float] = None
+        # Window during which bright-target short exposure may cause poor star detection;
+        # fallback to last successful solve within this window on solve failure
+        self.solar_bright_override_until: Optional[float] = None
 
         # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
@@ -381,6 +384,73 @@ class VideoProcessor:
             self.logger.info("Camera disconnected")
         return success_status("Camera disconnected")
 
+    def refresh_plate_solve_settings(self) -> None:
+        """Refresh plate-solve related settings after a config reload.
+
+        Updates solver type, auto_solve flag, and intervals. If the solver type
+        changed or settings likely require re-initialization, recreate the solver instance.
+        """
+        try:
+            new_cfg = self.config.get_plate_solve_config()
+            new_solver_type = str(new_cfg.get("default_solver", self.solver_type))
+            new_auto_solve = bool(new_cfg.get("auto_solve", self.auto_solve))
+            new_min_interval = int(new_cfg.get("min_solve_interval", self.min_solve_interval))
+            new_capture_interval = int(new_cfg.get("min_solve_interval", self.capture_interval))
+
+            solver_type_changed = new_solver_type.lower() != str(self.solver_type).lower()
+            interval_changed = (
+                new_min_interval != self.min_solve_interval
+                or new_capture_interval != self.capture_interval
+            )
+            auto_changed = new_auto_solve != self.auto_solve
+
+            # Apply new values
+            self.solver_type = new_solver_type
+            self.auto_solve = new_auto_solve
+            self.min_solve_interval = new_min_interval
+            self.capture_interval = new_capture_interval
+
+            # Recreate solver to pick up new settings if autosolve enabled
+            if self.auto_solve:
+                if solver_type_changed or auto_changed or True:
+                    try:
+                        solver = PlateSolverFactory.create_solver(
+                            self.solver_type, config=self.config, logger=self.logger
+                        )
+                        if solver and hasattr(solver, "is_available") and solver.is_available():
+                            self.plate_solver = solver
+                            name = solver.get_name() if hasattr(solver, "get_name") else str(solver)
+                            self.logger.info(
+                                "Plate solver reinitialized: %s (auto_solve=%s)",
+                                name,
+                                self.auto_solve,
+                            )
+                        else:
+                            self.logger.warning(
+                                "Plate solver not available after reload: %s",
+                                self.solver_type,
+                            )
+                            self.plate_solver = None
+                    except Exception as e:
+                        self.logger.error(f"Error reinitializing plate solver: {e}")
+                        self.plate_solver = None
+            else:
+                if self.plate_solver is not None:
+                    self.logger.info("Auto-solve disabled; releasing plate solver instance")
+                self.plate_solver = None
+
+            if interval_changed:
+                self.logger.info(
+                    "Updated solve/capture interval: min_solve_interval=%ss, capture_interval=%ss",
+                    self.min_solve_interval,
+                    self.capture_interval,
+                )
+        except Exception as e:
+            try:
+                self.logger.debug(f"Failed to refresh plate-solve settings: {e}")
+            except Exception:
+                pass
+
     def _obtain_frame(self):
         """Obtain a frame via one-shot (ASCOM/Alpaca) or current frame (OpenCV)."""
         if not self.video_capture:
@@ -542,7 +612,6 @@ class VideoProcessor:
                         EarthLocation,
                         SkyCoord,
                         get_body,
-                        get_moon,
                         solar_system_ephemeris,
                     )
                     from astropy.time import Time
@@ -617,7 +686,7 @@ class VideoProcessor:
                     for b in bodies:
                         try:
                             coord = (
-                                get_moon(obstime, location=location)
+                                get_body("moon", obstime, location=location)
                                 if b == "moon"
                                 else get_body(b, obstime, location=location)
                             )
@@ -653,6 +722,22 @@ class VideoProcessor:
                         cur_exp_f = None
                     if cur_exp_f is None or cur_exp_f > cap_s:
                         self.next_exposure_time_override = cap_s
+                        # Define a fallback window to reuse last good solve if
+                        # subsequent solves fail
+                        try:
+                            ovl = (
+                                self.config.get_overlay_config()
+                                if hasattr(self.config, "get_overlay_config")
+                                else {}
+                            )
+                            solar_cfg = ovl.get("solar_system", {}) if isinstance(ovl, dict) else {}
+                            window_s = float(solar_cfg.get("bright_override_window_s", 120.0))
+                        except Exception:
+                            window_s = 120.0
+                        try:
+                            self.solar_bright_override_until = time.monotonic() + float(window_s)
+                        except Exception:
+                            self.solar_bright_override_until = time.monotonic() + 120.0
                         self.logger.info(
                             "Adaptive exposure: applying bright target cap to %.4fs (was %s)",
                             cap_s,
@@ -1088,12 +1173,29 @@ class VideoProcessor:
                     "Continuing with next exposure - conditions may improve for next attempt"
                 )
 
-                # Check if this is a "no stars" or "poor conditions" failure
-                if "no_stars" in error_msg.lower() or "poor_conditions" in str(details).lower():
-                    self.logger.info(
-                        "Failure likely due to poor seeing or cloud cover",
+                # Check if this is a "no stars" or "poor conditions" failure and within
+                # bright-target short-exposure window; if so, fall back to last good solve
+                no_stars = "no_stars" in error_msg.lower() or "no stars" in error_msg.lower()
+                poor_cond = "poor_conditions" in str(details).lower()
+                within_bright_window = False
+                try:
+                    within_bright_window = (
+                        self.solar_bright_override_until is not None
+                        and time.monotonic() <= float(self.solar_bright_override_until)
                     )
-                    self.logger.info("This is normal for astronomical imaging")
+                except Exception:
+                    within_bright_window = False
+
+                if (no_stars or poor_cond) and within_bright_window and self.last_solve_result:
+                    self.logger.info(
+                        "Using last successful plate-solve result due to short exposure"
+                    )
+                    result = self.last_solve_result
+                else:
+                    if no_stars or poor_cond:
+                        self.logger.info(
+                            "Failure likely due to poor seeing/short exposure; will retry later",
+                        )
 
             self.last_solve_time = time.time()
             return result

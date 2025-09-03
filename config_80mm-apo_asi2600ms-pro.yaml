@@ -230,7 +230,7 @@ overlay:
     # Adaptive exposure for bright bodies (Moon/planets)
     # If enabled, the processor caps exposure to this value (seconds)
     # on the next capture after a successful solve. Set to null to disable.
-    bright_exposure_cap_s: 0.01
+    bright_exposure_cap_s: 0.001
 
   # Information panel settings
   info_panel:
