@@ -672,6 +672,62 @@ class OverlayRunner:
                                     )
                                     image_size = (1920, 1080)  # Final fallback
 
+                    # If Moon predicted in FOV by processor, render minimal overlay only
+                    try:
+                        moon_pred = (
+                            hasattr(self, "video_processor")
+                            and self.video_processor is not None
+                            and getattr(self.video_processor, "moon_in_fov_predicted", False)
+                        )
+                    except Exception:
+                        moon_pred = False
+                    if moon_pred:
+                        try:
+                            # Use mount coordinates if available; else fallback to last solve
+                            if ra_deg is None or dec_deg is None:
+                                if self.mount is not None:
+                                    mstat = self.mount.get_coordinates()
+                                    if getattr(mstat, "is_success", False):
+                                        ra_deg, dec_deg = mstat.data
+                                elif self.last_solve_result is not None:
+                                    ra_deg = self.last_solve_result.ra_center
+                                    dec_deg = self.last_solve_result.dec_center
+                            # Ensure floats
+                            if ra_deg is None or dec_deg is None:
+                                raise ValueError("No coordinates available for minimal overlay")
+                            ra_f = float(ra_deg)
+                            dec_f = float(dec_deg)
+                            status_msgs = [
+                                "Moon detected in FOV; plate-solving skipped",
+                            ]
+                            # Generate overlay with minimal content; the generator
+                            # respects config flags for title, info panel, and secondary FOV
+                            overlay_status = self.generate_overlay_with_coords(
+                                ra_deg=ra_f,
+                                dec_deg=dec_f,
+                                output_file=None,
+                                fov_width_deg=None,
+                                fov_height_deg=None,
+                                position_angle_deg=None,
+                                image_size=None,
+                                mag_limit=0.0,  # effectively hide stars/DSO
+                                is_flipped=self.force_flip_x,
+                                flip_y=self.force_flip_y,
+                                status_messages=status_msgs,
+                                wcs_path=None,
+                            )
+                            if overlay_status.is_success:
+                                self.logger.info("Minimal overlay generated (Moon in FOV)")
+                            else:
+                                self.logger.warning(
+                                    "Minimal overlay failed: %s", overlay_status.message
+                                )
+                            # Skip normal overlay generation this iteration
+                            time.sleep(self.update_interval)
+                            continue
+                        except Exception as e:
+                            self.logger.warning(f"Minimal overlay generation failed: {e}")
+
                     # Generate output filename
                     if self.use_timestamps:
                         timestamp = datetime.now().strftime(self.timestamp_format)

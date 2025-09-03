@@ -600,6 +600,271 @@ class VideoProcessor:
         else:
             self.logger.error("No suitable file to plate-solve")
             return None
+        # Pre-check: if the Moon is predicted to be inside the FOV (from mount pointing
+        # or last plate-solve center + FOV from camera/telescope), skip solving entirely
+        # and let the runner render a minimal overlay for this iteration.
+        try:
+            self.moon_in_fov_predicted = False  # default
+            # Compute pointing center
+            center_ra_dec = None
+            if hasattr(self, "mount") and self.mount is not None:
+                try:
+                    mstat = self.mount.get_coordinates()
+                    if (
+                        getattr(mstat, "is_success", False)
+                        and isinstance(getattr(mstat, "data", None), (list, tuple))
+                        and len(mstat.data) == 2
+                    ):
+                        center_ra_dec = (float(mstat.data[0]), float(mstat.data[1]))
+                except Exception:
+                    center_ra_dec = None
+            if (
+                center_ra_dec is None
+                and self.last_solve_result is not None
+                and isinstance(self.last_solve_result, PlateSolveResult)
+            ):
+                center_ra_dec = (
+                    float(self.last_solve_result.ra_center or 0.0),
+                    float(self.last_solve_result.dec_center or 0.0),
+                )
+            # Compute half diagonal FOV from config
+            half_diag_deg = 0.0
+            try:
+                tel_cfg = self.config.get_telescope_config()
+                cam_cfg = self.config.get_camera_config()
+                focal_length_mm = float(tel_cfg.get("focal_length", 1000.0))
+                sensor_w_mm = float(cam_cfg.get("sensor_width", 13.2))
+                sensor_h_mm = float(cam_cfg.get("sensor_height", 8.8))
+                import math as _math
+
+                fov_w = 2.0 * _math.degrees(_math.atan((sensor_w_mm / 2.0) / focal_length_mm))
+                fov_h = 2.0 * _math.degrees(_math.atan((sensor_h_mm / 2.0) / focal_length_mm))
+                half_diag_deg = ((_math.pow(fov_w, 2) + _math.pow(fov_h, 2)) ** 0.5) / 2.0
+            except Exception:
+                half_diag_deg = 0.0
+            if center_ra_dec is not None and half_diag_deg > 0.0:
+                try:
+                    from astropy.coordinates import (
+                        EarthLocation,
+                        SkyCoord,
+                        get_body,
+                        solar_system_ephemeris,
+                    )
+                    from astropy.time import Time
+                    import astropy.units as u
+                except Exception:
+                    pass
+                else:
+                    # Observation time
+                    try:
+                        ts = None
+                        if isinstance(self.last_frame_metadata, dict):
+                            ts = (
+                                self.last_frame_metadata.get("date_obs")
+                                or self.last_frame_metadata.get("DATE-OBS")
+                                or self.last_frame_metadata.get("capture_started_at")
+                            )
+                        obstime = Time(ts) if ts else Time.now()
+                    except Exception:
+                        obstime = Time.now()
+                    # Location
+                    try:
+                        site_cfg = None
+                        if hasattr(self.config, "get_site_config"):
+                            site_cfg = self.config.get_site_config()
+                        if not site_cfg:
+                            ovl = (
+                                self.config.get_overlay_config()
+                                if hasattr(self.config, "get_overlay_config")
+                                else {}
+                            )
+                            site_cfg = ovl.get("site", {}) if isinstance(ovl, dict) else {}
+                        lat_raw = site_cfg.get("latitude")
+                        lon_raw = site_cfg.get("longitude")
+                        elev_raw = site_cfg.get("elevation_m", 0.0)
+                        lat = float(lat_raw) if lat_raw is not None else 0.0
+                        lon = float(lon_raw) if lon_raw is not None else 0.0
+                        elev = float(elev_raw) if elev_raw is not None else 0.0
+                        location = EarthLocation(
+                            lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m
+                        )
+                    except Exception:
+                        location = None
+                    # Center coordinate
+                    center = SkyCoord(
+                        ra=center_ra_dec[0] * u.deg, dec=center_ra_dec[1] * u.deg, frame="icrs"
+                    )
+                    try:
+                        solar_system_ephemeris.set("de432s")
+                    except Exception:
+                        pass
+                    try:
+                        moon_coord = get_body("moon", obstime, location=location)
+                        sep = moon_coord.icrs.separation(center).degree
+                        if sep <= half_diag_deg:
+                            self.moon_in_fov_predicted = True
+                    except Exception:
+                        pass
+            # If Moon predicted in FOV, skip solving now
+            if getattr(self, "moon_in_fov_predicted", False):
+                self.logger.info("Moon predicted in FOV; skipping plate-solve for this frame")
+                self.last_solve_time = time.monotonic()
+                return None
+        except Exception as _e:
+            self.logger.debug(f"Moon pre-check failed: {_e}")
+
+        # Always proceed to solving. If using astrometry_local and a FITS exists,
+        # optionally write a masked copy with the central region set to zero to
+        # avoid planets being detected as stars. Masking is applied only if a
+        # solar-system object is predicted to be inside the FOV (based on the
+        # mount pointing or the last successful solution center + FOV).
+        try:
+            if candidate and candidate.suffix.lower() in {".fits", ".fit", ".fts"}:
+                ps_cfg = self.config.get_plate_solve_config()
+                ast_local_cfg = (
+                    ps_cfg.get("astrometry_local", {}) if isinstance(ps_cfg, dict) else {}
+                )
+                if str(getattr(self, "solver_type", "")).lower() == "astrometry_local" and bool(
+                    ast_local_cfg.get("mask_center_on_solve", False)
+                ):
+                    should_mask = False
+                    # Predict presence of SS object near pointing center using mount
+                    try:
+                        from astropy.coordinates import (
+                            EarthLocation,
+                            SkyCoord,
+                            get_body,
+                            solar_system_ephemeris,
+                        )
+                        from astropy.time import Time
+                        import astropy.units as u
+                    except Exception:
+                        should_mask = False
+                    else:
+                        center = None
+                        half_diag = 0.0
+                        # 1) Mount coordinates if available
+                        try:
+                            if hasattr(self, "mount") and self.mount is not None:
+                                mstat = self.mount.get_coordinates()
+                                if (
+                                    getattr(mstat, "is_success", False)
+                                    and isinstance(getattr(mstat, "data", None), (list, tuple))
+                                    and len(mstat.data) == 2
+                                ):
+                                    ra_deg, dec_deg = float(mstat.data[0]), float(mstat.data[1])
+                                    center = SkyCoord(
+                                        ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame="icrs"
+                                    )
+                        except Exception:
+                            center = None
+                        # Compute FOV from telescope and camera config
+                        try:
+                            tel_cfg = self.config.get_telescope_config()
+                            focal_length_mm = float(tel_cfg.get("focal_length", 1000.0))
+                            cam_cfg = self.config.get_camera_config()
+                            sensor_w_mm = float(cam_cfg.get("sensor_width", 13.2))
+                            sensor_h_mm = float(cam_cfg.get("sensor_height", 8.8))
+                            import math as _math
+
+                            fov_w = 2.0 * _math.degrees(
+                                _math.atan((sensor_w_mm / 2.0) / focal_length_mm)
+                            )
+                            fov_h = 2.0 * _math.degrees(
+                                _math.atan((sensor_h_mm / 2.0) / focal_length_mm)
+                            )
+                            half_diag = ((_math.pow(fov_w, 2) + _math.pow(fov_h, 2)) ** 0.5) / 2.0
+                        except Exception:
+                            half_diag = 0.0
+                        # 2) Fallback to last plate-solve if mount not available
+                        if (
+                            center is None
+                            and self.last_solve_result is not None
+                            and isinstance(self.last_solve_result, PlateSolveResult)
+                        ):
+                            center = SkyCoord(
+                                ra=(self.last_solve_result.ra_center or 0.0) * u.deg,
+                                dec=(self.last_solve_result.dec_center or 0.0) * u.deg,
+                                frame="icrs",
+                            )
+                            if half_diag <= 0.0:
+                                half_diag = (
+                                    ((self.last_solve_result.fov_width or 0.0) ** 2)
+                                    + ((self.last_solve_result.fov_height or 0.0) ** 2)
+                                ) ** 0.5 / 2.0
+                        if center is not None and half_diag > 0.0:
+                            # Observation time from metadata or now
+                            try:
+                                ts = None
+                                if isinstance(self.last_frame_metadata, dict):
+                                    ts = (
+                                        self.last_frame_metadata.get("date_obs")
+                                        or self.last_frame_metadata.get("DATE-OBS")
+                                        or self.last_frame_metadata.get("capture_started_at")
+                                    )
+                                obstime = Time(ts) if ts else Time.now()
+                            except Exception:
+                                obstime = Time.now()
+                            # Location from config (fallback geocenter)
+                            try:
+                                site_cfg = None
+                                if hasattr(self.config, "get_site_config"):
+                                    site_cfg = self.config.get_site_config()
+                                if not site_cfg:
+                                    ovl = (
+                                        self.config.get_overlay_config()
+                                        if hasattr(self.config, "get_overlay_config")
+                                        else {}
+                                    )
+                                    site_cfg = ovl.get("site", {}) if isinstance(ovl, dict) else {}
+                                lat_raw = site_cfg.get("latitude")
+                                lon_raw = site_cfg.get("longitude")
+                                elev_raw = site_cfg.get("elevation_m", 0.0)
+                                lat = float(lat_raw) if lat_raw is not None else 0.0
+                                lon = float(lon_raw) if lon_raw is not None else 0.0
+                                elev = float(elev_raw) if elev_raw is not None else 0.0
+                                location = EarthLocation(
+                                    lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m
+                                )
+                            except Exception:
+                                location = None
+                            # Bodies to check
+                            bodies = [
+                                "moon",
+                                "mercury",
+                                "venus",
+                                "mars",
+                                "jupiter",
+                                "saturn",
+                                "uranus",
+                                "neptune",
+                            ]
+                            try:
+                                solar_system_ephemeris.set("de432s")
+                            except Exception:
+                                pass
+                            for b in bodies:
+                                try:
+                                    coord = (
+                                        get_body("moon", obstime, location=location)
+                                        if b == "moon"
+                                        else get_body(b, obstime, location=location)
+                                    )
+                                    sep = coord.icrs.separation(center).degree
+                                    if sep <= half_diag:
+                                        should_mask = True
+                                        break
+                                except Exception:
+                                    continue
+                    if should_mask:
+                        masked = self._create_center_masked_fits(candidate, ast_local_cfg)
+                        if masked is not None:
+                            self.logger.info(f"Using center-masked FITS for solving: {masked}")
+                            candidate = masked
+        except Exception as _e:
+            # Proceed without masking on any error
+            self.logger.debug(f"Center-masking skipped due to error: {_e}")
+
         result = self._solve_frame(str(candidate))
         # Update last_solve_time only after the attempt completes
         self.last_solve_time = time.monotonic()
@@ -1205,6 +1470,82 @@ class VideoProcessor:
             if self.on_error:
                 self.on_error(e)
             return None
+
+    def _create_center_masked_fits(
+        self, fits_path: Path, astrometry_cfg: dict[str, Any]
+    ) -> Optional[Path]:
+        """Create a temporary FITS with central region zeroed for astrometry.
+
+        The central rectangle size is defined by fraction parameters; defaults to 0.2 (20%).
+        The masked file is written next to the original with suffix `_masked.fits`.
+        """
+        try:
+            from astropy.io import fits as _fits
+            import numpy as _np
+        except Exception:
+            return None
+
+        try:
+            frac = float(astrometry_cfg.get("mask_center_fraction", 0.2))
+            frac = max(0.0, min(frac, 0.9))
+        except Exception:
+            frac = 0.2
+
+        try:
+            with _fits.open(str(fits_path), mode="readonly") as hdul:
+                # Assume primary HDU contains image
+                hdu = None
+                for cand in hdul:
+                    if getattr(cand, "data", None) is not None:
+                        hdu = cand
+                        break
+                if hdu is None:
+                    return None
+                data = _np.array(hdu.data, copy=True)
+                if data.ndim == 3:
+                    # If stacked cube, mask the middle slice only to
+                    # preserve edges; else mask all planes
+                    try:
+                        mid = data.shape[0] // 2
+                        planes = [mid]
+                    except Exception:
+                        planes = list(range(data.shape[0]))
+                    for p in planes:
+                        self._mask_center_inplace(data[p], frac)
+                elif data.ndim == 2:
+                    self._mask_center_inplace(data, frac)
+                else:
+                    return None
+                # Write masked file
+                out_path = fits_path.with_name(f"{fits_path.stem}_masked.fits")
+                hdu_out = _fits.PrimaryHDU(data=data, header=hdu.header)
+                hdul_out = _fits.HDUList([hdu_out])
+                # Avoid overwriting original
+                hdul_out.writeto(str(out_path), overwrite=True)
+                return out_path
+        except Exception as e:
+            self.logger.debug(f"Center masking failed: {e}")
+            return None
+
+    def _mask_center_inplace(self, arr: Any, fraction: float) -> None:
+        """Zero the central rectangle of the given 2D array in-place.
+
+        fraction defines the width/height of the mask relative to image size.
+        """
+        try:
+            pass
+        except Exception:
+            return
+        if not hasattr(arr, "shape") or len(arr.shape) != 2:
+            return
+        height, width = int(arr.shape[0]), int(arr.shape[1])
+        if height <= 0 or width <= 0:
+            return
+        mask_w = max(1, int(width * fraction))
+        mask_h = max(1, int(height * fraction))
+        x0 = (width - mask_w) // 2
+        y0 = (height - mask_h) // 2
+        arr[y0 : y0 + mask_h, x0 : x0 + mask_w] = 0
 
     def combine_overlay_with_image(
         self, image_path, overlay_path, output_path: Optional[str] = None

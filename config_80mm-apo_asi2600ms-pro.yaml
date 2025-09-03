@@ -154,6 +154,10 @@ plate_solve:
     use_bash: true
     bash_path: "bash"        # oder voller Pfad zu bash.exe
     bash_args: ["-lc"]
+    # Prevent planets from being matched as stars by masking the image center
+    mask_center_on_solve: true
+    # Fraction of image width/height to mask around the center (0..0.9)
+    mask_center_fraction: 0.2
 
   # Settings for Astrometry.net
   astrometry:
@@ -231,6 +235,9 @@ overlay:
     # If enabled, the processor caps exposure to this value (seconds)
     # on the next capture after a successful solve. Set to null to disable.
     bright_exposure_cap_s: 0.001
+    # Time window (seconds) after applying the bright exposure cap during which
+    # a failed solve will fall back to the last known good solution.
+    bright_override_window_s: 120
 
   # Information panel settings
   info_panel:
