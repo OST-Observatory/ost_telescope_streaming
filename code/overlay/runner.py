@@ -700,6 +700,10 @@ class OverlayRunner:
                             status_msgs = [
                                 "Moon detected in FOV; plate-solving skipped",
                             ]
+                            try:
+                                self.logger.info("Moon detected in FOV; generating minimal overlay")
+                            except Exception:
+                                pass
                             # Generate overlay with minimal content; the generator
                             # respects config flags for title, info panel, and secondary FOV
                             overlay_status = self.generate_overlay_with_coords(
@@ -796,6 +800,17 @@ class OverlayRunner:
                     except Exception:
                         status_messages = []
 
+                    # If the last capture was discarded (e.g., due to slewing),
+                    # annotate the overlay with a status message and reuse last combined
+                    discarded_msg = None
+                    try:
+                        if self.video_processor is not None and getattr(
+                            self.video_processor, "last_discard_message", None
+                        ):
+                            discarded_msg = str(self.video_processor.last_discard_message)
+                    except Exception:
+                        discarded_msg = None
+
                     # Create overlay with all available parameters
                     overlay_status = self.generate_overlay_with_coords(
                         ra_deg,
@@ -808,7 +823,10 @@ class OverlayRunner:
                         None,
                         flip_x,
                         self.force_flip_y,
-                        status_messages=status_messages if status_messages else None,
+                        status_messages=(
+                            (status_messages or []) + ([discarded_msg] if discarded_msg else [])
+                        )
+                        or None,
                         wcs_path=(
                             wcs_path if (self.wait_for_plate_solve or self.mount is None) else None
                         ),
@@ -860,6 +878,40 @@ class OverlayRunner:
                                         self.logger.warning(
                                             "Failed to combine images: %s",
                                             combine_status.message,
+                                        )
+                                elif discarded_msg:
+                                    # No new frame available; if previous combined exists,
+                                    # add banner
+                                    try:
+                                        prev = "combined.png"
+                                        if os.path.exists(prev):
+                                            from PIL import Image, ImageDraw, ImageFont
+
+                                            img = Image.open(prev).convert("RGBA")
+                                            draw = ImageDraw.Draw(img)
+                                            # Simple top banner
+                                            banner_h = max(40, img.height // 20)
+                                            draw.rectangle(
+                                                [(0, 0), (img.width, banner_h)],
+                                                fill=(0, 0, 0, 180),
+                                            )
+                                            # Text
+                                            try:
+                                                font = ImageFont.load_default()
+                                            except Exception:
+                                                font = None
+                                            text = discarded_msg
+                                            draw.text(
+                                                (10, 10), text, fill=(255, 255, 0, 255), font=font
+                                            )
+                                            img.save(prev)
+                                            self.logger.info(
+                                                "Annotated previous combined image "
+                                                "with discard message"
+                                            )
+                                    except Exception as e:
+                                        self.logger.debug(
+                                            f"Could not annotate previous combined: {e}"
                                         )
                                 else:
                                     self.logger.info("No captured frame available for combination")

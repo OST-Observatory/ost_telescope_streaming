@@ -162,6 +162,9 @@ class VideoProcessor:
         # Window during which bright-target short exposure may cause poor star detection;
         # fallback to last successful solve within this window on solve failure
         self.solar_bright_override_until: Optional[float] = None
+        # Last discard information (e.g., slewing/tracking off)
+        self.last_discard_message: Optional[str] = None
+        self.last_discard_time: Optional[float] = None
 
         # Callbacks for external integration
         self.on_solve_result: Optional[Callable[[PlateSolveResult], None]] = None
@@ -615,7 +618,15 @@ class VideoProcessor:
                         and isinstance(getattr(mstat, "data", None), (list, tuple))
                         and len(mstat.data) == 2
                     ):
-                        center_ra_dec = (float(mstat.data[0]), float(mstat.data[1]))
+                        ra_val = float(mstat.data[0])
+                        dec_val = float(mstat.data[1])
+                        # Heuristic: convert RA hours to degrees if it looks like hours
+                        if 0.0 <= ra_val <= 24.0:
+                            self.logger.debug(
+                                "Assuming mount RA is in hours; converting to degrees"
+                            )
+                            ra_val *= 15.0
+                        center_ra_dec = (ra_val, dec_val)
                 except Exception:
                     center_ra_dec = None
             if (
@@ -703,6 +714,10 @@ class VideoProcessor:
                         sep = moon_coord.icrs.separation(center).degree
                         if sep <= half_diag_deg:
                             self.moon_in_fov_predicted = True
+                            try:
+                                self.logger.info("Moon predicted in FOV (sep=%.3f°)", sep)
+                            except Exception:
+                                pass
                     except Exception:
                         pass
             # If Moon predicted in FOV, skip solving now
@@ -843,6 +858,8 @@ class VideoProcessor:
                                 solar_system_ephemeris.set("de432s")
                             except Exception:
                                 pass
+                            mask_body: Optional[str] = None
+                            mask_sep: Optional[float] = None
                             for b in bodies:
                                 try:
                                     coord = (
@@ -853,12 +870,23 @@ class VideoProcessor:
                                     sep = coord.icrs.separation(center).degree
                                     if sep <= half_diag:
                                         should_mask = True
+                                        mask_body = b
+                                        mask_sep = float(sep)
                                         break
                                 except Exception:
                                     continue
                     if should_mask:
                         masked = self._create_center_masked_fits(candidate, ast_local_cfg)
                         if masked is not None:
+                            try:
+                                if mask_body is not None and mask_sep is not None:
+                                    self.logger.info(
+                                        "Center-masking due to bright SS body: %s (sep=%.3f°)",
+                                        mask_body,
+                                        mask_sep,
+                                    )
+                            except Exception:
+                                pass
                             self.logger.info(f"Using center-masked FITS for solving: {masked}")
                             candidate = masked
         except Exception as _e:
@@ -934,6 +962,8 @@ class VideoProcessor:
 
                     # Check common bright bodies
                     solar_present = False
+                    detected_body: Optional[str] = None
+                    detected_sep: Optional[float] = None
                     bodies = [
                         "moon",
                         "mercury",
@@ -958,11 +988,22 @@ class VideoProcessor:
                             sep = coord.icrs.separation(center).degree
                             if sep <= half_diag:
                                 solar_present = True
+                                detected_body = b
+                                detected_sep = float(sep)
                                 break
                         except Exception:
                             continue
 
                 if solar_present:
+                    try:
+                        if detected_body is not None and detected_sep is not None:
+                            self.logger.info(
+                                "Bright solar-system body in FOV: %s (sep=%.3f°)",
+                                detected_body,
+                                detected_sep,
+                            )
+                    except Exception:
+                        pass
                     # Use conservative cap of 0.01s unless already shorter
                     try:
                         ovl = (
@@ -1270,6 +1311,15 @@ class VideoProcessor:
                                 os.remove(fits_filename)
                         except Exception:
                             pass
+                    except Exception:
+                        pass
+                    # Record discard reason for runner to annotate status
+                    try:
+                        reason = "Discarding capture due to slewing detected post-capture"
+                        if self.gating_require_tracking and tracking is False:
+                            reason = "Discarding capture due to tracking OFF post-capture"
+                        self.last_discard_message = reason
+                        self.last_discard_time = time.time()
                     except Exception:
                         pass
                     # Skip plate solving for discarded capture

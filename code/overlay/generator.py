@@ -988,6 +988,16 @@ class OverlayGenerator:
             ("Uranus", const.R_uranus),
             ("Neptune", const.R_neptune),
         ]
+        # Optional config: include Pluto and set magnitude threshold to draw small/ dim bodies
+        try:
+            include_pluto = bool(self.solar_system_config.get("include_pluto", True))
+        except Exception:
+            include_pluto = True
+        if include_pluto:
+            try:
+                bodies.append(("Pluto", const.R_earth * 0.18))  # rough visual proxy
+            except Exception:
+                pass
 
         color = tuple(self.solar_system_config.get("color", [255, 255, 0, 255]))
         line_width = int(self.solar_system_config.get("line_width", 2))
@@ -1030,7 +1040,13 @@ class OverlayGenerator:
                 if dist_m:
                     dia_arcmin = apparent_diameter_arcmin(R.to(u.m).value, dist_m)
                 else:
-                    dia_arcmin = 30.0 if name == "Moon" else 2.0
+                    # Use a smaller default for dim/remote bodies to ensure visibility when scaled
+                    if name == "Moon":
+                        dia_arcmin = 30.0
+                    elif name in ("Uranus", "Neptune", "Pluto"):
+                        dia_arcmin = 1.0
+                    else:
+                        dia_arcmin = 2.0
 
                 # Account for Saturn's rings to make the ellipse more visible
                 if name == "Saturn":

@@ -605,13 +605,18 @@ class LocalAstrometryNetSolver(PlateSolver):
                 # Try to parse hints even on failure
                 combined_output = (proc.stdout or "") + "\n" + (proc.stderr or "")
                 hints = self._parse_cli_output_for_hints(combined_output)
+                solving_time = time.time() - start_time
                 return error_status(
                     f"Astrometry.net solve-field error: {msg}",
-                    details={"cli_hints": hints},
+                    details={"cli_hints": hints, "solving_time": solving_time},
                 )
 
             if not os.path.exists(new_fits):
-                return error_status("Astrometry.net did not produce a .new FITS file")
+                solving_time = time.time() - start_time
+                return error_status(
+                    "Astrometry.net did not produce a .new FITS file",
+                    details={"solving_time": solving_time},
+                )
 
             data = self._parse_wcs_result(new_fits, image_path)
             # Enrich data with CLI hints if available
@@ -640,7 +645,11 @@ class LocalAstrometryNetSolver(PlateSolver):
                 details={"solving_time": solving_time, "method": self.get_name()},
             )
         except subprocess.TimeoutExpired:
-            return error_status(f"Astrometry.net solve-field timed out after {self.timeout_s}s")
+            solving_time = time.time() - start_time
+            return error_status(
+                f"Astrometry.net solve-field timed out after {self.timeout_s}s",
+                details={"solving_time": solving_time},
+            )
         except Exception as e:
             solving_time = time.time() - start_time
             self.logger.error(f"Astrometry.net local exception after {solving_time:.2f}s: {e}")

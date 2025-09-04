@@ -117,9 +117,9 @@ mount:
   slewing_detection:
     enabled: true  # Enable slewing detection to prevent captures during movement
     check_before_capture: true  # Check slewing status before each capture
-    wait_for_completion: false  # Wait for slewing to complete before capturing
-    wait_timeout: 300  # Maximum wait time in seconds (5 minutes)
-    check_interval: 1.0  # Interval between slewing checks in seconds
+    wait_for_completion: true  # Wait for slewing to complete before capturing
+    wait_timeout: 300  # Maximum wait time in seconds
+    check_interval: 5.0  # Interval between slewing checks in seconds
 
 # =============================================================================
 # PLATE SOLVING CONFIGURATION
@@ -147,9 +147,9 @@ plate_solve:
   astrometry_local:
     solve_field_path: "solve-field"
     working_directory: "astrometry_output"
-    timeout: 240
-    search_radius_deg: 3.5
-    downsample: 2
+    timeout: 300
+    search_radius_deg: 1.5
+    downsample: 4
     scale_pad_arcsec: 0.3
     use_bash: true
     bash_path: "bash"        # oder voller Pfad zu bash.exe
@@ -231,6 +231,7 @@ overlay:
     min_diameter_px: 6
     show_labels: true
     ephemeris: de432s
+    include_pluto: true
     # Adaptive exposure for bright bodies (Moon/planets)
     # If enabled, the processor caps exposure to this value (seconds)
     # on the next capture after a successful solve. Set to null to disable.
