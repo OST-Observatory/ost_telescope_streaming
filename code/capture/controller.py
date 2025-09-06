@@ -576,17 +576,36 @@ class VideoCapture:
                     )
                     if pattern:
                         frame_details["bayer_pattern"] = pattern
+                    # Prefer raw mosaic derived from calibrated_frame when possible
+                    try:
+                        import numpy as _np
+
+                        raw_mosaic_cf = _np.squeeze(calibrated_frame)
+                        if getattr(raw_mosaic_cf, "ndim", 0) == 2:
+                            raw_mosaic_use = raw_mosaic_cf
+                        elif getattr(raw_mosaic_cf, "ndim", 0) == 3 and (
+                            raw_mosaic_cf.shape[-1] == 1 or raw_mosaic_cf.shape[0] == 1
+                        ):
+                            raw_mosaic_use = (
+                                raw_mosaic_cf[..., 0]
+                                if raw_mosaic_cf.shape[-1] == 1
+                                else raw_mosaic_cf[0, ...]
+                            )
+                        else:
+                            raw_mosaic_use = raw_mosaic
+                    except Exception:
+                        raw_mosaic_use = raw_mosaic
                     if color16 is not None and green16 is not None:
                         frame_details["debayered"] = True
                         frame_obj = Frame(
                             data=color16,
                             metadata=frame_details,
                             green_channel=green16,
-                            raw_data=raw_mosaic,
+                            raw_data=raw_mosaic_use,
                         )
                     else:
                         frame_obj = Frame(
-                            data=calibrated_frame, metadata=frame_details, raw_data=raw_mosaic
+                            data=calibrated_frame, metadata=frame_details, raw_data=raw_mosaic_use
                         )
                 except Exception:
                     frame_obj = Frame(
