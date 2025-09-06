@@ -444,6 +444,15 @@ class VideoCapture:
         except Exception:
             pass
         gain = section.get("gain", None)
+        # Hot-reload offset/readout_mode alongside exposure/gain
+        try:
+            self.offset = section.get("offset", getattr(self, "offset", None))
+        except Exception:
+            pass
+        try:
+            self.readout_mode = section.get("readout_mode", getattr(self, "readout_mode", None))
+        except Exception:
+            pass
         return self.capture_single_frame_generic(exposure_time, gain, binning)
 
     def capture_single_frame_generic(

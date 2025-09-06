@@ -548,6 +548,68 @@ class OverlayRunner:
                                     self.logger.debug(
                                         f"Could not refresh video processor solver settings: {e}"
                                     )
+                                # Refresh frame-processing settings (timestamps, RAW FITS, etc.)
+                                try:
+                                    if self.video_processor and hasattr(
+                                        self.video_processor, "refresh_frame_processing_settings"
+                                    ):
+                                        self.video_processor.refresh_frame_processing_settings()
+                                except Exception as e:
+                                    self.logger.debug(
+                                        f"Could not refresh frame-processing settings: {e}"
+                                    )
+
+                                # Update cooling parameters live
+                                # (target temp, status interval, etc.)
+                                try:
+                                    if self.cooling_service:
+                                        camera_config = self.config.get_camera_config()
+                                        cooling_config = camera_config.get("cooling", {})
+                                        # Update target temperature if cooling active
+                                        if cooling_config.get("enable_cooling", False):
+                                            target_temp = float(
+                                                cooling_config.get("target_temperature", -10.0)
+                                            )
+                                            set_status = (
+                                                self.cooling_service.set_target_temperature(
+                                                    target_temp
+                                                )
+                                            )
+                                            if not set_status.is_success:
+                                                self.logger.debug(
+                                                    f"Cooling target update: {set_status.message}"
+                                                )
+                                        # Update status monitor interval
+                                        try:
+                                            interval = float(
+                                                cooling_config.get("status_interval", 30)
+                                            )
+                                            mon_status = self.cooling_service.start_status_monitor(
+                                                interval=interval
+                                            )
+                                            if not mon_status.is_success:
+                                                self.logger.debug(
+                                                    f"Cooling monitor update: {mon_status.message}"
+                                                )
+                                        except Exception:
+                                            pass
+                                except Exception as e:
+                                    self.logger.debug(f"Cooling live-update failed: {e}")
+
+                                # Update camera capture parameters live (exp/gain/offset/binning)
+                                try:
+                                    if (
+                                        self.video_processor
+                                        and hasattr(self.video_processor, "video_capture")
+                                        and self.video_processor.video_capture is not None
+                                    ):
+                                        # Controller reads ConfigManager on each capture,
+                                        # so no explicit push is required. Log intent.
+                                        self.logger.info(
+                                            "Camera config changes will apply on next capture"
+                                        )
+                                except Exception as e:
+                                    self.logger.debug(f"Camera param live-update note failed: {e}")
                 except Exception:
                     pass
                 try:

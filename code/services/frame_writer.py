@@ -263,3 +263,101 @@ class FrameWriter:
             return error_status("FITS file was not created")
         except Exception as e:
             return error_status(f"Error saving FITS file: {e}")
+
+    def save_raw_fits(
+        self, image_data: Any, filename: str, metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Save raw (non-debayered) camera data to FITS without orientation changes.
+
+        - Writes a single-HDU FITS preserving array shape
+        - Enriches header similar to save_fits
+        - Casts to uint16 if needed
+        """
+        try:
+            try:
+                import astropy.io.fits as fits
+                from astropy.time import Time
+            except ImportError as e:
+                return error_status(f"Astropy not available for FITS saving: {e}")
+
+            # Convert to numpy
+            if not isinstance(image_data, np.ndarray):
+                try:
+                    image_data = np.array(image_data)
+                except Exception as conv_e:
+                    return error_status(f"Failed to convert to numpy array: {conv_e}")
+
+            # Ensure 2D for FITS if possible; if color slipped through, take green channel
+            try:
+                if image_data.ndim == 3 and image_data.shape[2] >= 3:
+                    if self.logger:
+                        self.logger.info(
+                            "RAW FITS input is color with shape %s; using green channel",
+                            str(image_data.shape),
+                        )
+                    image_data = image_data[:, :, 1]
+                elif image_data.ndim == 3 and image_data.shape[2] == 2:
+                    image_data = image_data[:, :, 0]
+            except Exception:
+                pass
+
+            # Cast datatype
+            if image_data.dtype != np.uint16:
+                image_data = image_data.astype(np.uint16)
+
+            # Build header
+            header = fits.Header()
+            header["NAXIS"] = image_data.ndim
+            header["NAXIS1"] = image_data.shape[1] if image_data.ndim >= 2 else 1
+            header["NAXIS2"] = image_data.shape[0] if image_data.ndim >= 2 else 1
+            if image_data.ndim == 3:
+                header["NAXIS3"] = image_data.shape[2]
+            header["BITPIX"] = 16
+            header["BZERO"] = 0
+            header["BSCALE"] = 1
+            header["CAMERA"] = self.camera_type.capitalize()
+            if hasattr(self.camera, "name"):
+                header["CAMNAME"] = self.camera.name
+
+            # Enrich with metadata/config
+            frame_details = metadata or {}
+            try:
+                enrich_header_from_metadata(
+                    header, frame_details, self.camera, self.config, self.camera_type, self.logger
+                )
+            except Exception:
+                pass
+
+            # Observation time
+            try:
+                obstime = None
+                if isinstance(frame_details, dict):
+                    for k in (
+                        "date_obs",
+                        "DATE-OBS",
+                        "capture_started_at",
+                        "timestamp",
+                        "frame_timestamp_iso",
+                    ):
+                        if frame_details.get(k):
+                            try:
+                                obstime = Time(frame_details.get(k))
+                                break
+                            except Exception:
+                                obstime = None
+                if obstime is None:
+                    obstime = Time.now()
+                header["DATE-OBS"] = obstime.isot
+                header["MJD-OBS"] = float(obstime.mjd)
+            except Exception:
+                pass
+
+            # Write file
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            hdu = fits.PrimaryHDU(image_data, header=header)
+            hdu.writeto(filename, overwrite=True)
+            if os.path.exists(filename):
+                return success_status("RAW FITS file saved", data=filename)
+            return error_status("RAW FITS file was not created")
+        except Exception as e:
+            return error_status(f"Error saving RAW FITS file: {e}")

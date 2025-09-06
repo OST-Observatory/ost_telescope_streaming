@@ -115,6 +115,9 @@ class VideoProcessor:
         self.timestamp_format: str = self.frame_config.get("timestamp_format", "%Y%m%d_%H%M%S")
         self.use_capture_count: bool = self.frame_config.get("use_capture_count", True)
         self.file_format: str = self.frame_config.get("file_format", "PNG")
+        # Raw FITS archival options
+        self.save_raw_fits: bool = bool(self.frame_config.get("save_raw_fits", False))
+        self.raw_fits_dir: Path = Path(self.frame_config.get("raw_fits_dir", "raw_fits"))
 
         # Capture gating (slew/tracking) from overlay config (robust to minimal test configs)
         try:
@@ -454,6 +457,57 @@ class VideoProcessor:
             except Exception:
                 pass
 
+    def refresh_frame_processing_settings(self) -> None:
+        """Refresh frame-processing options (hot-reload).
+
+        Updates timestamping, file format, and RAW FITS archival options and
+        recreates the FrameWriter to pick up orientation/normalization updates.
+        """
+        try:
+            self.frame_config = self.config.get_frame_processing_config()
+            self.use_timestamps = bool(self.frame_config.get("use_timestamps", self.use_timestamps))
+            self.timestamp_format = str(
+                self.frame_config.get("timestamp_format", self.timestamp_format)
+            )
+            self.use_capture_count = bool(
+                self.frame_config.get("use_capture_count", self.use_capture_count)
+            )
+            self.file_format = str(self.frame_config.get("file_format", self.file_format))
+            self.save_raw_fits = bool(
+                self.frame_config.get("save_raw_fits", getattr(self, "save_raw_fits", False))
+            )
+            self.raw_fits_dir = Path(
+                self.frame_config.get(
+                    "raw_fits_dir", str(getattr(self, "raw_fits_dir", "raw_fits"))
+                )
+            )
+
+            # Recreate FrameWriter to pick up orientation/normalization changes
+            try:
+                self.frame_writer = FrameWriter(
+                    config=self.config,
+                    logger=self.logger,
+                    camera=self.video_capture.camera if self.video_capture else None,
+                    camera_type=self.video_capture.camera_type if self.video_capture else "opencv",
+                )
+            except Exception as e:
+                try:
+                    self.logger.debug(f"Could not recreate FrameWriter on reload: {e}")
+                except Exception:
+                    pass
+
+            self.logger.info(
+                "Frame-processing settings reloaded (timestamps=%s, format=%s, raw_fits=%s)",
+                str(self.use_timestamps),
+                self.file_format,
+                str(self.save_raw_fits),
+            )
+        except Exception as e:
+            try:
+                self.logger.debug(f"Failed to refresh frame-processing settings: {e}")
+            except Exception:
+                pass
+
     def _obtain_frame(self):
         """Obtain a frame via one-shot (ASCOM/Alpaca) or current frame (OpenCV)."""
         if not self.video_capture:
@@ -579,6 +633,42 @@ class VideoProcessor:
             fits_filename = None
         else:
             self.logger.info(f"FITS frame saved: {fits_filename} save_ms={fits_ms:.1f}")
+
+        # Optionally save RAW (non-debayered) FITS with timestamp to separate directory
+        try:
+            if self.save_raw_fits and self.frame_writer is not None:
+                # Extract original camera array from frame status, not the debayered Frame
+                image_data, details = unwrap_status(frame)
+                try:
+                    from capture.frame import Frame as _Frame
+
+                    is_frame_obj = isinstance(image_data, _Frame)
+                except Exception:
+                    is_frame_obj = False
+                if is_frame_obj:
+                    raw_data = image_data.data
+                else:
+                    raw_data = image_data
+                if raw_data is not None:
+                    ts = datetime.now().strftime(self.timestamp_format)
+                    raw_name_parts = ["raw", ts]
+                    if self.use_capture_count:
+                        raw_name_parts.append(f"{self.capture_count:04d}")
+                    raw_base = "_".join(raw_name_parts)
+                    raw_path = self.raw_fits_dir / f"{raw_base}.fits"
+                    os.makedirs(self.raw_fits_dir, exist_ok=True)
+                    raw_status = self.frame_writer.save_raw_fits(
+                        raw_data, str(raw_path), metadata=details_with_id
+                    )
+                    if getattr(raw_status, "is_success", False):
+                        self.logger.info(f"RAW FITS saved: {raw_path}")
+                    else:
+                        self.logger.debug(
+                            "Failed to save RAW FITS: %s",
+                            getattr(raw_status, "message", "No status"),
+                        )
+        except Exception as e:
+            self.logger.debug(f"RAW FITS archival skipped: {e}")
 
         return frame_filename, fits_filename
 

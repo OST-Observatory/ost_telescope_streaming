@@ -81,6 +81,9 @@ frame_processing:
   output_dir: "captured_frames"  # Directory for captured frames
   cache_dir: "cache"  # Directory for temporary files
   file_format: "PNG"  # File format for saved frames (fits, jpg, png, tiff, etc.)
+  # Optional: also archive RAW (non-debayered) FITS in a separate folder with timestamps
+  save_raw_fits: true
+  raw_fits_dir: "raw_fits"
 
 # =============================================================================
 # SITE CONFIGURATION
