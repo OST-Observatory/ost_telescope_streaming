@@ -559,12 +559,19 @@ class VideoCapture:
                     if color16 is not None and green16 is not None:
                         frame_details["debayered"] = True
                         frame_obj = Frame(
-                            data=color16, metadata=frame_details, green_channel=green16
+                            data=color16,
+                            metadata=frame_details,
+                            green_channel=green16,
+                            raw_data=calibrated_frame,
                         )
                     else:
-                        frame_obj = Frame(data=calibrated_frame, metadata=frame_details)
+                        frame_obj = Frame(
+                            data=calibrated_frame, metadata=frame_details, raw_data=calibrated_frame
+                        )
                 except Exception:
-                    frame_obj = Frame(data=calibrated_frame, metadata=frame_details)
+                    frame_obj = Frame(
+                        data=calibrated_frame, metadata=frame_details, raw_data=calibrated_frame
+                    )
 
                 if self.return_frame_objects:
                     return success_status("Frame captured", data=frame_obj, details=frame_details)

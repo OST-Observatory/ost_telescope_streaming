@@ -130,7 +130,7 @@ mount:
 plate_solve:
   # General plate-solving settings
   auto_solve: true
-  min_solve_interval: 30
+  min_solve_interval: 10
   save_plate_solve_frames: true
   plate_solve_dir: "plate_solve_frames"
   default_solver: "astrometry_local"

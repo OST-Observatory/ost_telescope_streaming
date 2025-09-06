@@ -17,3 +17,5 @@ class Frame:
     metadata: Dict[str, Any] = field(default_factory=dict)
     source: Optional[str] = None  # e.g., 'alpaca', 'ascom', 'opencv'
     green_channel: Optional[np.ndarray] = None  # debayered green channel for solving/stacking
+    # Original undebayered (mono Bayer) data after calibration; used for RAW FITS archival
+    raw_data: Optional[np.ndarray] = None

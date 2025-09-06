@@ -646,7 +646,13 @@ class VideoProcessor:
                 except Exception:
                     is_frame_obj = False
                 if is_frame_obj:
-                    raw_data = image_data.data
+                    # Prefer original raw_data if provided by controller
+                    try:
+                        raw_data = getattr(image_data, "raw_data", None)
+                    except Exception:
+                        raw_data = None
+                    if raw_data is None:
+                        raw_data = image_data.data
                 else:
                     raw_data = image_data
                 if raw_data is not None:

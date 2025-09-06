@@ -287,19 +287,8 @@ class FrameWriter:
                 except Exception as conv_e:
                     return error_status(f"Failed to convert to numpy array: {conv_e}")
 
-            # Ensure 2D for FITS if possible; if color slipped through, take green channel
-            try:
-                if image_data.ndim == 3 and image_data.shape[2] >= 3:
-                    if self.logger:
-                        self.logger.info(
-                            "RAW FITS input is color with shape %s; using green channel",
-                            str(image_data.shape),
-                        )
-                    image_data = image_data[:, :, 1]
-                elif image_data.ndim == 3 and image_data.shape[2] == 2:
-                    image_data = image_data[:, :, 0]
-            except Exception:
-                pass
+            # Preserve original undebayered mosaic shape (do NOT collapse to 2D green).
+            # If multi-plane array is supplied, write as-is; consumers can interpret mosaic.
 
             # Cast datatype
             if image_data.dtype != np.uint16:
