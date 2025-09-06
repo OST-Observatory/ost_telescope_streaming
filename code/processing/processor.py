@@ -637,24 +637,53 @@ class VideoProcessor:
         # Optionally save RAW (non-debayered) FITS with timestamp to separate directory
         try:
             if self.save_raw_fits and self.frame_writer is not None:
-                # Extract original camera array from frame status, not the debayered Frame
+                # Extract original undebayered mosaic from Frame wherever available
                 image_data, details = unwrap_status(frame)
+                raw_data = None
+                frame_obj = None
                 try:
                     from capture.frame import Frame as _Frame
-
-                    is_frame_obj = isinstance(image_data, _Frame)
                 except Exception:
-                    is_frame_obj = False
-                if is_frame_obj:
-                    # Prefer original raw_data if provided by controller
+                    _Frame = None
+
+                # Try direct Frame
+                if _Frame is not None and isinstance(frame, _Frame):
+                    frame_obj = frame
+                # Try Status-like .data holding Frame
+                if frame_obj is None and hasattr(frame, "data"):
                     try:
-                        raw_data = getattr(image_data, "raw_data", None)
+                        cand = frame.data
+                        if _Frame is not None and isinstance(cand, _Frame):
+                            frame_obj = cand
+                    except Exception:
+                        pass
+                # Try unwrap result holding Frame
+                if frame_obj is None and _Frame is not None and isinstance(image_data, _Frame):
+                    frame_obj = image_data
+
+                if frame_obj is not None:
+                    try:
+                        raw_data = getattr(frame_obj, "raw_data", None)
                     except Exception:
                         raw_data = None
                     if raw_data is None:
-                        raw_data = image_data.data
+                        try:
+                            raw_data = getattr(frame_obj, "data", None)
+                        except Exception:
+                            raw_data = None
                 else:
+                    # Last resort: use unwrapped image_data directly
                     raw_data = image_data
+
+                # Debug hints
+                try:
+                    self.logger.debug(
+                        "raw save: frame_obj=%s raw_data_shape=%s",
+                        type(frame_obj).__name__ if frame_obj is not None else "None",
+                        str(getattr(raw_data, "shape", None)),
+                    )
+                except Exception:
+                    pass
                 if raw_data is not None:
                     ts = datetime.now().strftime(self.timestamp_format)
                     raw_name_parts = ["raw", ts]
