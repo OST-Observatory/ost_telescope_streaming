@@ -290,20 +290,33 @@ class FrameWriter:
             # Preserve original undebayered mosaic shape (do NOT collapse to 2D green).
             # If multi-plane array is supplied, write as-is; consumers can interpret mosaic.
 
+            # Squeeze singleton dimensions and ensure 2D for DS9 compatibility
+            try:
+                image_data = np.squeeze(image_data)
+                if image_data.ndim == 3:
+                    # Collapse to 2D:
+                    # - Prefer last-dimension squeeze if it's a single plane
+                    # - Else pick channel 1 (green) if available, otherwise channel 0
+                    if image_data.shape[-1] == 1:
+                        image_data = image_data[..., 0]
+                    elif image_data.shape[0] == 1:
+                        image_data = image_data[0, ...]
+                    else:
+                        ch = 1 if image_data.shape[-1] >= 2 else 0
+                        image_data = image_data[..., ch]
+                elif image_data.ndim > 3:
+                    # As a last resort, flatten higher dims into 2D by using the last two axes
+                    h, w = image_data.shape[-2], image_data.shape[-1]
+                    image_data = image_data.reshape(h, w)
+            except Exception:
+                pass
+
             # Cast datatype
             if image_data.dtype != np.uint16:
                 image_data = image_data.astype(np.uint16)
 
             # Build header
             header = fits.Header()
-            header["NAXIS"] = image_data.ndim
-            header["NAXIS1"] = image_data.shape[1] if image_data.ndim >= 2 else 1
-            header["NAXIS2"] = image_data.shape[0] if image_data.ndim >= 2 else 1
-            if image_data.ndim == 3:
-                header["NAXIS3"] = image_data.shape[2]
-            header["BITPIX"] = 16
-            header["BZERO"] = 0
-            header["BSCALE"] = 1
             header["CAMERA"] = self.camera_type.capitalize()
             if hasattr(self.camera, "name"):
                 header["CAMNAME"] = self.camera.name
@@ -338,6 +351,16 @@ class FrameWriter:
                     obstime = Time.now()
                 header["DATE-OBS"] = obstime.isot
                 header["MJD-OBS"] = float(obstime.mjd)
+            except Exception:
+                pass
+
+            # Bayer pattern if known (helps consumers interpret RAW mosaic)
+            try:
+                pattern = None
+                if isinstance(frame_details, dict):
+                    pattern = frame_details.get("bayer_pattern")
+                if pattern:
+                    header["BAYERPAT"] = str(pattern)
             except Exception:
                 pass
 
