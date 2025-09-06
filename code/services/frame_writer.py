@@ -294,22 +294,23 @@ class FrameWriter:
             try:
                 image_data = np.squeeze(image_data)
                 if image_data.ndim == 3:
-                    # Collapse to 2D:
-                    # - Prefer last-dimension squeeze if it's a single plane
-                    # - Else pick channel 1 (green) if available, otherwise channel 0
+                    # If this is a true multi-channel array (likely debayered color),
+                    # we do NOT guess a channel for RAW archival. Report as error to
+                    # encourage passing the undebayered mono mosaic (2D) to this function.
                     if image_data.shape[-1] == 1:
                         image_data = image_data[..., 0]
                     elif image_data.shape[0] == 1:
                         image_data = image_data[0, ...]
                     else:
-                        ch = 1 if image_data.shape[-1] >= 2 else 0
-                        image_data = image_data[..., ch]
+                        return error_status(
+                            "RAW FITS expects undebayered 2D mosaic; received multi-channel data"
+                        )
                 elif image_data.ndim > 3:
-                    # As a last resort, flatten higher dims into 2D by using the last two axes
-                    h, w = image_data.shape[-2], image_data.shape[-1]
-                    image_data = image_data.reshape(h, w)
-            except Exception:
-                pass
+                    return error_status(
+                        "RAW FITS expects 2D data; received array with more than 3 dimensions"
+                    )
+            except Exception as _shape_e:
+                return error_status(f"RAW FITS shape handling failed: {_shape_e}")
 
             # Cast datatype
             if image_data.dtype != np.uint16:
