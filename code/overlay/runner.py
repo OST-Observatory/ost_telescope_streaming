@@ -756,9 +756,10 @@ class OverlayRunner:
                                 fov_width_deg = fov_w
                                 fov_height_deg = fov_h
                                 self.logger.debug(
-                                    "Computed FOV from config: %.3f° x %.3f°",
+                                    "Computed FOV from config: %.3f° x %.3f° (diag=%.3f°)",
                                     fov_width_deg,
                                     fov_height_deg,
+                                    ((fov_width_deg**2 + fov_height_deg**2) ** 0.5),
                                 )
                             except Exception as e:
                                 self.logger.debug(f"Could not compute FOV from config: {e}")

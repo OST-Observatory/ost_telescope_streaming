@@ -601,6 +601,23 @@ class VideoProcessor:
         except Exception:
             details = {}
         details_with_id = {**details, "capture_id": self.capture_count}
+        # If a mount is available, add current RA/Dec (degrees) to metadata for FITS headers
+        try:
+            if hasattr(self, "mount") and self.mount is not None:
+                mstat = self.mount.get_coordinates()
+                if (
+                    getattr(mstat, "is_success", False)
+                    and isinstance(getattr(mstat, "data", None), (list, tuple))
+                    and len(mstat.data) == 2
+                ):
+                    ra_m, dec_m = float(mstat.data[0]), float(mstat.data[1])
+                    # Convert RA hours to degrees if needed
+                    if 0.0 <= ra_m <= 24.0:
+                        ra_m *= 15.0
+                    details_with_id.setdefault("RA", ra_m)
+                    details_with_id.setdefault("DEC", dec_m)
+        except Exception:
+            pass
 
         # Save display image (measure duration)
         frame_filename = self.frame_dir / f"{base}.{self.file_format}"
