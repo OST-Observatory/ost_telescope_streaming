@@ -94,6 +94,11 @@ class OverlayRunner:
         self.block_during_slew: bool = bool(gate_cfg.get("block_during_slew", True))
         self.require_tracking: bool = bool(gate_cfg.get("require_tracking", False))
         self.alert_on_slew: bool = bool(gate_cfg.get("alert_on_slew", True))
+        # Fallback overlay when solve fails or is delayed
+        self.fallback_on_solve_failure: bool = bool(
+            overlay_cfg.get("fallback_on_solve_failure", False)
+        )
+        self.fallback_wait_s: float = float(overlay_cfg.get("fallback_wait_s", 10))
 
         # Initialize components
         self._initialize_components()
@@ -1019,6 +1024,57 @@ class OverlayRunner:
                         self.logger.error(
                             f"Error #{consecutive_failures}: {overlay_status.message}"
                         )
+
+                        # Fallback overlay if enabled: use mount/FITS center when solve failed
+                        if self.fallback_on_solve_failure:
+                            try:
+                                self.logger.info(
+                                    "Fallback overlay active: rendering without plate-solve"
+                                )
+                                # If RA/Dec missing, try FITS header via last saved FITS
+                                if ra_deg is None or dec_deg is None:
+                                    # No direct FITS path here; rely on last_solve_result or mount
+                                    pass
+                                # Ensure FOV present
+                                if fov_width_deg is None or fov_height_deg is None:
+                                    try:
+                                        cam_cfg = self.config.get_camera_config()
+                                        tel_cfg = self.config.get_telescope_config()
+                                        import math as _math
+
+                                        sensor_w = float(cam_cfg.get("sensor_width", 13.2))
+                                        sensor_h = float(cam_cfg.get("sensor_height", 8.8))
+                                        focal_mm = float(tel_cfg.get("focal_length", 1000.0))
+                                        fov_width_deg = 2.0 * _math.degrees(
+                                            _math.atan((sensor_w / 2.0) / focal_mm)
+                                        )
+                                        fov_height_deg = 2.0 * _math.degrees(
+                                            _math.atan((sensor_h / 2.0) / focal_mm)
+                                        )
+                                    except Exception:
+                                        pass
+                                # Render minimal overlay with current coords/FOV
+                                _ = self.generate_overlay_with_coords(
+                                    ra_deg,
+                                    dec_deg,
+                                    output_file,
+                                    fov_width_deg,
+                                    fov_height_deg,
+                                    position_angle_deg,
+                                    image_size,
+                                    None,
+                                    flip_x,
+                                    self.force_flip_y,
+                                    status_messages=[
+                                        "Fallback overlay: plate-solving not available",
+                                    ],
+                                    wcs_path=None,
+                                )
+                                # Small wait to avoid tight loop
+                                time.sleep(max(1.0, float(self.fallback_wait_s)))
+                                continue
+                            except Exception as e:
+                                self.logger.debug(f"Fallback overlay failed: {e}")
 
                         if consecutive_failures >= self.max_retries:
                             self.logger.error(

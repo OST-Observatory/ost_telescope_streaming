@@ -193,6 +193,9 @@ overlay:
   use_timestamps: false
   # Timestamp format for overlay filenames
   timestamp_format: "%Y%m%d_%H%M%S"
+  # Overlay fallback settings
+  fallback_on_solve_failure: true
+  fallback_wait_s: 10.0
 
   # Combined output settings
   combined_output:
