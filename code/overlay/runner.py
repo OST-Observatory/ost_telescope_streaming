@@ -666,7 +666,92 @@ class OverlayRunner:
                         )
                         # Wait for a fresh solve event since the last iteration
                         prev_seq = self._solve_seq
+                        t_wait_start = time.time()
+                        # Initialize local fallbacks
+                        fov_width_deg = None
+                        fov_height_deg = None
+                        position_angle_deg = None
+                        image_size = None
+                        flip_x = self.force_flip_x
                         while self.running and self._solve_seq == prev_seq:
+                            # Fallback overlay if waiting too long for solves
+                            if self.fallback_on_solve_failure and (
+                                time.time() - t_wait_start
+                            ) >= float(self.fallback_wait_s):
+                                try:
+                                    self.logger.info(
+                                        "Fallback overlay active while waiting for plate-solve"
+                                    )
+                                    # Use mount coordinates if available
+                                    if self.mount is not None:
+                                        mstat = self.mount.get_coordinates()
+                                        if getattr(mstat, "is_success", False):
+                                            ra_deg, dec_deg = mstat.data
+                                            try:
+                                                if (
+                                                    isinstance(ra_deg, (int, float))
+                                                    and 0.0 <= float(ra_deg) <= 24.0
+                                                ):
+                                                    ra_deg = float(ra_deg) * 15.0
+                                            except Exception:
+                                                pass
+                                    # Compute FOV from config if missing
+                                    if ra_deg is not None and dec_deg is not None:
+                                        if image_size is None:
+                                            try:
+                                                overlay_config = self.config.get_overlay_config()
+                                                image_size = overlay_config.get(
+                                                    "image_size", [1920, 1080]
+                                                )
+                                                if (
+                                                    isinstance(image_size, list)
+                                                    and len(image_size) == 2
+                                                ):
+                                                    image_size = tuple(image_size)
+                                                else:
+                                                    image_size = (1920, 1080)
+                                            except Exception:
+                                                image_size = (1920, 1080)
+                                        if fov_width_deg is None:
+                                            try:
+                                                cam_cfg = self.config.get_camera_config()
+                                                tel_cfg = self.config.get_telescope_config()
+                                                import math as _math
+
+                                                sensor_w = float(cam_cfg.get("sensor_width", 13.2))
+                                                sensor_h = float(cam_cfg.get("sensor_height", 8.8))
+                                                focal_mm = float(
+                                                    tel_cfg.get("focal_length", 1000.0)
+                                                )
+                                                fov_width_deg = 2.0 * _math.degrees(
+                                                    _math.atan((sensor_w / 2.0) / focal_mm)
+                                                )
+                                                fov_height_deg = 2.0 * _math.degrees(
+                                                    _math.atan((sensor_h / 2.0) / focal_mm)
+                                                )
+                                            except Exception:
+                                                pass
+                                        # Render fallback overlay
+                                        _ = self.generate_overlay_with_coords(
+                                            ra_deg,
+                                            dec_deg,
+                                            None,
+                                            fov_width_deg,
+                                            fov_height_deg,
+                                            None,
+                                            image_size,
+                                            None,
+                                            False,
+                                            self.force_flip_y,
+                                            status_messages=[
+                                                "Fallback overlay: plate-solving pending",
+                                            ],
+                                            wcs_path=None,
+                                        )
+                                except Exception as e:
+                                    self.logger.debug(f"Fallback overlay during wait failed: {e}")
+                                # Reset wait timer to avoid flooding
+                                t_wait_start = time.time()
                             time.sleep(0.5)
                         # Outer loop condition will handle stop
                         # Use plate-solving results for coordinates and parameters
@@ -747,7 +832,7 @@ class OverlayRunner:
                                     image_size = (1920, 1080)  # Final fallback
 
                         # Compute FOV from telescope and camera if not provided
-                        if fov_width_deg is None or fov_height_deg is None:
+                        if fov_width_deg is None:
                             try:
                                 cam_cfg = self.config.get_camera_config()
                                 tel_cfg = self.config.get_telescope_config()
