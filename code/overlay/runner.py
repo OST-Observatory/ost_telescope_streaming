@@ -643,6 +643,13 @@ class OverlayRunner:
                             time.sleep(self.retry_delay)
                             continue
                         ra_deg, dec_deg = mount_status.data
+                        # Some mounts report RA in hours; convert if it looks like hours
+                        try:
+                            if isinstance(ra_deg, (int, float)) and 0.0 <= float(ra_deg) <= 24.0:
+                                self.logger.debug("Converting mount RA from hours to degrees")
+                                ra_deg = float(ra_deg) * 15.0
+                        except Exception:
+                            pass
 
                     # Video processing is handled automatically by the video processor
                     # Plate-solving results are available via callbacks
@@ -733,6 +740,28 @@ class OverlayRunner:
                                         f"Could not get image size from overlay config: {e}"
                                     )
                                     image_size = (1920, 1080)  # Final fallback
+
+                        # Compute FOV from telescope and camera if not provided
+                        if fov_width_deg is None or fov_height_deg is None:
+                            try:
+                                cam_cfg = self.config.get_camera_config()
+                                tel_cfg = self.config.get_telescope_config()
+                                sensor_w = float(cam_cfg.get("sensor_width", 13.2))
+                                sensor_h = float(cam_cfg.get("sensor_height", 8.8))
+                                focal_mm = float(tel_cfg.get("focal_length", 1000.0))
+                                import math as _math
+
+                                fov_w = 2.0 * _math.degrees(_math.atan((sensor_w / 2.0) / focal_mm))
+                                fov_h = 2.0 * _math.degrees(_math.atan((sensor_h / 2.0) / focal_mm))
+                                fov_width_deg = fov_w
+                                fov_height_deg = fov_h
+                                self.logger.debug(
+                                    "Computed FOV from config: %.3f° x %.3f°",
+                                    fov_width_deg,
+                                    fov_height_deg,
+                                )
+                            except Exception as e:
+                                self.logger.debug(f"Could not compute FOV from config: {e}")
 
                     # If Moon predicted in FOV by processor, render minimal overlay only
                     try:

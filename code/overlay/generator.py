@@ -950,9 +950,11 @@ class OverlayGenerator:
         # Ephemeris selection (optional)
         try:
             eph = str(self.solar_system_config.get("ephemeris", "de432s")).lower()
+            eph = {"de432": "de432s", "de430": "de430"}.get(eph, eph)
             solar_system_ephemeris.set(eph)
-        except Exception:
-            pass
+            self.logger.debug(f"Solar-system ephemeris set to: {eph}")
+        except Exception as e:
+            self.logger.debug(f"Could not set ephemeris: {e}")
 
         # Site location from config (optional; defaults to geocenter)
         try:
@@ -971,10 +973,19 @@ class OverlayGenerator:
                 obstime = Time(self.frame_timestamp_iso)
             else:
                 obstime = Time.now()
+            self.logger.debug(f"Solar-system obstime: {obstime.isot}")
         except Exception:
             obstime = Time.now()
 
         center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame="icrs")
+        self.logger.debug(
+            "SS center RA=%.5f Dec=%.5f FOV=%.3fx%.3f halfdiag=%.3f",
+            ra_deg,
+            dec_deg,
+            fov_w,
+            fov_h,
+            (fov_w**2 + fov_h**2) ** 0.5 / 2.0,
+        )
         half_diag = (fov_w**2 + fov_h**2) ** 0.5 / 2.0
 
         # Targets and radii
