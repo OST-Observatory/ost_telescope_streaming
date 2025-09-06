@@ -532,6 +532,26 @@ class VideoCapture:
             }
 
             frame_data = image_data
+            # Preserve original undebayered mosaic (if available) for RAW FITS archival
+            raw_mosaic = None
+            try:
+                import numpy as _np
+
+                raw_mosaic = _np.squeeze(frame_data)
+                if getattr(raw_mosaic, "ndim", 0) == 2:
+                    pass
+                elif getattr(raw_mosaic, "ndim", 0) == 3 and (
+                    raw_mosaic.shape[-1] == 1 or raw_mosaic.shape[0] == 1
+                ):
+                    # Squeeze single-plane dimension
+                    raw_mosaic = (
+                        raw_mosaic[..., 0] if raw_mosaic.shape[-1] == 1 else raw_mosaic[0, ...]
+                    )
+                else:
+                    # If truly multi-channel, we cannot treat as undebayered mosaic
+                    raw_mosaic = None
+            except Exception:
+                raw_mosaic = None
             if self.enable_calibration and self.calibration_applier:
                 calibration_status = self.calibration_applier.calibrate_frame(
                     frame_data, exposure_time_s, frame_details
@@ -562,15 +582,15 @@ class VideoCapture:
                             data=color16,
                             metadata=frame_details,
                             green_channel=green16,
-                            raw_data=calibrated_frame,
+                            raw_data=raw_mosaic,
                         )
                     else:
                         frame_obj = Frame(
-                            data=calibrated_frame, metadata=frame_details, raw_data=calibrated_frame
+                            data=calibrated_frame, metadata=frame_details, raw_data=raw_mosaic
                         )
                 except Exception:
                     frame_obj = Frame(
-                        data=calibrated_frame, metadata=frame_details, raw_data=calibrated_frame
+                        data=calibrated_frame, metadata=frame_details, raw_data=raw_mosaic
                     )
 
                 if self.return_frame_objects:
