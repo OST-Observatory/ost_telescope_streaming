@@ -582,7 +582,11 @@ class VideoCapture:
                 if self.return_frame_objects:
                     return success_status(
                         "Frame captured (calibration failed)",
-                        data=Frame(data=frame_data, metadata=frame_details),
+                        data=Frame(
+                            data=frame_data,
+                            metadata=frame_details,
+                            raw_data=frame_data,
+                        ),
                         details=frame_details,
                     )
                 return success_status(

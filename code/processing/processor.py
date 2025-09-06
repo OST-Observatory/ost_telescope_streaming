@@ -669,8 +669,8 @@ class VideoProcessor:
                     if getattr(raw_status, "is_success", False):
                         self.logger.info(f"RAW FITS saved: {raw_path}")
                     else:
-                        self.logger.debug(
-                            "Failed to save RAW FITS: %s",
+                        self.logger.warning(
+                            "RAW FITS save failed: %s",
                             getattr(raw_status, "message", "No status"),
                         )
         except Exception as e:
