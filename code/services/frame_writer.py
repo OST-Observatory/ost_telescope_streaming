@@ -302,9 +302,17 @@ class FrameWriter:
                     elif image_data.shape[0] == 1:
                         image_data = image_data[0, ...]
                     else:
-                        return error_status(
-                            "RAW FITS expects undebayered 2D mosaic; received multi-channel data"
-                        )
+                        if self.logger:
+                            self.logger.warning(
+                                "RAW FITS expects 2D mosaic; received multi-channel data"
+                            )
+                        # Attempt fallback: take green as last resort
+                        try:
+                            image_data = image_data[..., 1]
+                        except Exception:
+                            return error_status(
+                                "RAW FITS expects 2D mosaic; received multi-channel data"
+                            )
                 elif image_data.ndim > 3:
                     return error_status(
                         "RAW FITS expects 2D data; received array with more than 3 dimensions"

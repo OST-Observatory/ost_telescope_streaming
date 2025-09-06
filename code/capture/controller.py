@@ -512,6 +512,18 @@ class VideoCapture:
                 elif self.camera_type == "ascom":
                     time.sleep(min(max(exposure_time_s, 0.0) + 0.05, exposure_time_s + 0.5))
             image_data = self.camera.get_image_array()
+            try:
+                import numpy as _np
+
+                shape0 = getattr(image_data, "shape", None)
+                dtype0 = getattr(image_data, "dtype", None)
+                self.logger.debug(
+                    "capture raw image_data shape=%s dtype=%s",
+                    str(shape0),
+                    str(dtype0),
+                )
+            except Exception:
+                pass
 
             if image_data is None:
                 return error_status("Failed to get image data from camera")
@@ -538,6 +550,11 @@ class VideoCapture:
                 import numpy as _np
 
                 raw_mosaic = _np.squeeze(frame_data)
+                self.logger.debug(
+                    "capture raw_mosaic pre-check shape=%s ndim=%s",
+                    str(getattr(raw_mosaic, "shape", None)),
+                    str(getattr(raw_mosaic, "ndim", None)),
+                )
                 if getattr(raw_mosaic, "ndim", 0) == 2:
                     pass
                 elif getattr(raw_mosaic, "ndim", 0) == 3 and (
@@ -550,6 +567,10 @@ class VideoCapture:
                 else:
                     # If truly multi-channel, we cannot treat as undebayered mosaic
                     raw_mosaic = None
+                self.logger.debug(
+                    "capture raw_mosaic final shape=%s",
+                    str(getattr(raw_mosaic, "shape", None)),
+                )
             except Exception:
                 raw_mosaic = None
             if self.enable_calibration and self.calibration_applier:
@@ -581,6 +602,11 @@ class VideoCapture:
                         import numpy as _np
 
                         raw_mosaic_cf = _np.squeeze(calibrated_frame)
+                        self.logger.debug(
+                            "capture raw_mosaic_cf shape=%s ndim=%s",
+                            str(getattr(raw_mosaic_cf, "shape", None)),
+                            str(getattr(raw_mosaic_cf, "ndim", None)),
+                        )
                         if getattr(raw_mosaic_cf, "ndim", 0) == 2:
                             raw_mosaic_use = raw_mosaic_cf
                         elif getattr(raw_mosaic_cf, "ndim", 0) == 3 and (
@@ -593,6 +619,10 @@ class VideoCapture:
                             )
                         else:
                             raw_mosaic_use = raw_mosaic
+                        self.logger.debug(
+                            "capture raw_mosaic_use shape=%s",
+                            str(getattr(raw_mosaic_use, "shape", None)),
+                        )
                     except Exception:
                         raw_mosaic_use = raw_mosaic
                     if color16 is not None and green16 is not None:
