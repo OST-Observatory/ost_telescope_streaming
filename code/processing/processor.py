@@ -763,6 +763,71 @@ class VideoProcessor:
                     float(self.last_solve_result.ra_center or 0.0),
                     float(self.last_solve_result.dec_center or 0.0),
                 )
+            # Fallback: read RA/Dec from FITS header if available
+            if center_ra_dec is None and isinstance(fits_filename, Path) and fits_filename.exists():
+                try:
+                    import astropy.io.fits as _fits
+
+                    with _fits.open(str(fits_filename)) as _hdul:
+                        _hdr = _hdul[0].header
+                        ra_deg_hdr = _hdr.get("RA")
+                        dec_deg_hdr = _hdr.get("DEC")
+
+                        def _parse_sexagesimal(val: str, is_ra: bool) -> float | None:
+                            try:
+                                txt = str(val).strip().replace(" ", ":").replace("::", ":")
+                                parts = [p for p in txt.split(":") if p != ""]
+                                if not parts:
+                                    return None
+                                parts_f = [float(p) for p in parts]
+                                if is_ra:
+                                    hours = parts_f[0]
+                                    minutes = parts_f[1] if len(parts_f) > 1 else 0.0
+                                    seconds = parts_f[2] if len(parts_f) > 2 else 0.0
+                                    sign = -1.0 if str(val).lstrip().startswith("-") else 1.0
+                                    hours_total = sign * (
+                                        abs(hours) + minutes / 60.0 + seconds / 3600.0
+                                    )
+                                    return hours_total * 15.0
+                                else:
+                                    deg = parts_f[0]
+                                    minutes = parts_f[1] if len(parts_f) > 1 else 0.0
+                                    seconds = parts_f[2] if len(parts_f) > 2 else 0.0
+                                    sign = -1.0 if str(val).lstrip().startswith("-") else 1.0
+                                    return sign * (abs(deg) + minutes / 60.0 + seconds / 3600.0)
+                            except Exception:
+                                return None
+
+                        if ra_deg_hdr is None:
+                            ra_txt = _hdr.get("OBJCTRA") or _hdr.get("RA_OBJ") or _hdr.get("TELRA")
+                            if isinstance(ra_txt, str):
+                                ra_deg_hdr = _parse_sexagesimal(ra_txt, True)
+                        if dec_deg_hdr is None:
+                            dec_txt = (
+                                _hdr.get("OBJCTDEC") or _hdr.get("DEC_OBJ") or _hdr.get("TELDEC")
+                            )
+                            if isinstance(dec_txt, str):
+                                dec_deg_hdr = _parse_sexagesimal(dec_txt, False)
+                        # Heuristic: RA header may be hours
+                        if (
+                            isinstance(ra_deg_hdr, (int, float))
+                            and 0.0 <= float(ra_deg_hdr) <= 24.0
+                        ):
+                            ra_deg_hdr = float(ra_deg_hdr) * 15.0
+                        if isinstance(ra_deg_hdr, (int, float)) and isinstance(
+                            dec_deg_hdr, (int, float)
+                        ):
+                            center_ra_dec = (float(ra_deg_hdr), float(dec_deg_hdr))
+                            try:
+                                self.logger.debug(
+                                    "Moon precheck using FITS header center RA=%.5f Dec=%.5f",
+                                    center_ra_dec[0],
+                                    center_ra_dec[1],
+                                )
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
             # Compute half diagonal FOV from config
             half_diag_deg = 0.0
             try:
@@ -840,7 +905,23 @@ class VideoProcessor:
                         if sep <= half_diag_deg:
                             self.moon_in_fov_predicted = True
                             try:
-                                self.logger.info("Moon predicted in FOV (sep=%.3f°)", sep)
+                                self.logger.info(
+                                    "Moon predicted in FOV (sep=%.3f°) center=(%.4f,%.4f)",
+                                    sep,
+                                    center_ra_dec[0],
+                                    center_ra_dec[1],
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                self.logger.debug(
+                                    "Moon OUT of FOV (sep=%.3f°) halfdiag=%.3f° center=(%.4f,%.4f)",
+                                    sep,
+                                    half_diag_deg,
+                                    center_ra_dec[0],
+                                    center_ra_dec[1],
+                                )
                             except Exception:
                                 pass
                     except Exception:
