@@ -787,7 +787,7 @@ class OverlayRunner:
                                             except Exception:
                                                 pass
                                         # Render minimal fallback overlay
-                                        _ = self.generate_overlay_with_coords(
+                                        overlay_status_wait = self.generate_overlay_with_coords(
                                             ra_deg,
                                             dec_deg,
                                             None,
@@ -805,6 +805,56 @@ class OverlayRunner:
                                             solar_system_enabled_override=False,
                                             include_no_magnitude_override=False,
                                         )
+                                        # Combine minimal overlay into combined.png
+                                        try:
+                                            if overlay_status_wait.is_success:
+                                                overlay_file_w = overlay_status_wait.data
+                                                combined_file_w = (
+                                                    f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
+                                                    if self.use_timestamps
+                                                    else "combined.png"
+                                                )
+                                                latest_frame_w = None
+                                                if self.video_processor and hasattr(
+                                                    self.video_processor,
+                                                    "get_latest_frame_path",
+                                                ):
+                                                    latest_frame_w = (
+                                                        self.video_processor.get_latest_frame_path()
+                                                    )
+                                                if latest_frame_w and os.path.exists(
+                                                    latest_frame_w
+                                                ):
+                                                    comb_fn = (
+                                                        self.video_processor.combine_overlay_with_image
+                                                    )
+                                                    _st = comb_fn(
+                                                        latest_frame_w,
+                                                        overlay_file_w,
+                                                        combined_file_w,
+                                                    )
+                                                    if _st.is_success:
+                                                        self.logger.info(
+                                                            "Combined image created: %s",
+                                                            combined_file_w,
+                                                        )
+                                                else:
+                                                    try:
+                                                        import shutil as _shutil
+
+                                                        _shutil.copyfile(
+                                                            overlay_file_w, combined_file_w
+                                                        )
+                                                        self.logger.info(
+                                                            "Combined (copied) image: %s",
+                                                            combined_file_w,
+                                                        )
+                                                    except Exception:
+                                                        pass
+                                        except Exception as _e:
+                                            self.logger.debug(
+                                                f"Combine during wait-fallback failed: {_e}"
+                                            )
                                 except Exception as e:
                                     self.logger.debug(f"Fallback overlay during wait failed: {e}")
                                 # Reset wait timer to avoid flooding
@@ -961,6 +1011,44 @@ class OverlayRunner:
                             )
                             if overlay_status.is_success:
                                 self.logger.info("Minimal overlay generated (Moon in FOV)")
+                                # Combine into combined.png (or timestamped)
+                                try:
+                                    overlay_file_m = overlay_status.data
+                                    combined_file_m = (
+                                        f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
+                                        if self.use_timestamps
+                                        else "combined.png"
+                                    )
+                                    latest_frame_m = None
+                                    if self.video_processor and hasattr(
+                                        self.video_processor, "get_latest_frame_path"
+                                    ):
+                                        latest_frame_m = (
+                                            self.video_processor.get_latest_frame_path()
+                                        )
+                                    if latest_frame_m and os.path.exists(latest_frame_m):
+                                        comb_fn_m = self.video_processor.combine_overlay_with_image
+                                        _st_m = comb_fn_m(
+                                            latest_frame_m, overlay_file_m, combined_file_m
+                                        )
+                                        if _st_m.is_success:
+                                            self.logger.info(
+                                                "Combined image created: %s", combined_file_m
+                                            )
+                                    else:
+                                        try:
+                                            import shutil as _shutil
+
+                                            _shutil.copyfile(overlay_file_m, combined_file_m)
+                                            self.logger.info(
+                                                "Combined (copied) image: %s", combined_file_m
+                                            )
+                                        except Exception:
+                                            pass
+                                except Exception as _e:
+                                    self.logger.debug(
+                                        f"Combine for Moon minimal overlay failed: {_e}"
+                                    )
                             else:
                                 self.logger.warning(
                                     "Minimal overlay failed: %s", overlay_status.message
@@ -1196,7 +1284,7 @@ class OverlayRunner:
                                     except Exception:
                                         pass
                                 # Render minimal overlay with current coords/FOV
-                                _ = self.generate_overlay_with_coords(
+                                overlay_status_fb = self.generate_overlay_with_coords(
                                     ra_deg,
                                     dec_deg,
                                     output_file,
@@ -1214,6 +1302,51 @@ class OverlayRunner:
                                     solar_system_enabled_override=False,
                                     include_no_magnitude_override=False,
                                 )
+                                # Combine fallback minimal overlay into combined.png
+                                try:
+                                    if overlay_status_fb.is_success:
+                                        overlay_file_fb = overlay_status_fb.data
+                                        combined_file_fb = (
+                                            f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
+                                            if self.use_timestamps
+                                            else "combined.png"
+                                        )
+                                        latest_frame_fb = None
+                                        if self.video_processor and hasattr(
+                                            self.video_processor, "get_latest_frame_path"
+                                        ):
+                                            latest_frame_fb = (
+                                                self.video_processor.get_latest_frame_path()
+                                            )
+                                        if latest_frame_fb and os.path.exists(latest_frame_fb):
+                                            comb_fn_fb = (
+                                                self.video_processor.combine_overlay_with_image
+                                            )
+                                            _st_fb = comb_fn_fb(
+                                                latest_frame_fb,
+                                                overlay_file_fb,
+                                                combined_file_fb,
+                                            )
+                                            if _st_fb.is_success:
+                                                self.logger.info(
+                                                    "Combined image created: %s",
+                                                    combined_file_fb,
+                                                )
+                                        else:
+                                            try:
+                                                import shutil as _shutil
+
+                                                _shutil.copyfile(overlay_file_fb, combined_file_fb)
+                                                self.logger.info(
+                                                    "Combined (copied) image: %s",
+                                                    combined_file_fb,
+                                                )
+                                            except Exception:
+                                                pass
+                                except Exception as _e:
+                                    self.logger.debug(
+                                        f"Combine for fallback minimal overlay failed: {_e}"
+                                    )
                                 # Small wait to avoid tight loop
                                 time.sleep(max(1.0, float(self.fallback_wait_s)))
                                 continue
