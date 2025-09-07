@@ -290,6 +290,8 @@ class OverlayRunner:
         flip_y: Optional[bool] = None,
         status_messages: Optional[list[str]] = None,
         wcs_path: Optional[str] = None,
+        solar_system_enabled_override: Optional[bool] = None,
+        include_no_magnitude_override: Optional[bool] = None,
     ) -> Status:
         """Generate astronomical overlay with given coordinates."""
         if not OVERLAY_AVAILABLE:
@@ -351,6 +353,43 @@ class OverlayRunner:
             except Exception:
                 pass
 
+            # Optionally override minimal content settings (e.g., disable solar system,
+            # exclude objects without magnitude)
+            # Save originals to restore after rendering
+            original_ss_enabled: Optional[bool] = None
+            original_include_no_mag: Optional[bool] = None
+            try:
+                if overlay_generator is not None and solar_system_enabled_override is not None:
+                    if hasattr(overlay_generator, "solar_system_config") and isinstance(
+                        overlay_generator.solar_system_config, dict
+                    ):
+                        try:
+                            original_ss_enabled = bool(
+                                overlay_generator.solar_system_config.get("enabled", True)
+                            )
+                        except Exception:
+                            original_ss_enabled = None
+                    try:
+                        overlay_generator.solar_system_config["enabled"] = bool(
+                            solar_system_enabled_override
+                        )
+                    except Exception:
+                        pass
+                if overlay_generator is not None and include_no_magnitude_override is not None:
+                    if hasattr(overlay_generator, "include_no_magnitude"):
+                        try:
+                            original_include_no_mag = bool(overlay_generator.include_no_magnitude)
+                        except Exception:
+                            original_include_no_mag = None
+                    try:
+                        overlay_generator.include_no_magnitude = bool(include_no_magnitude_override)
+                    except Exception:
+                        pass
+
+            except Exception:
+                # Non-fatal; continue with rendering
+                pass
+
             # Generate overlay and wrap result into a Status
             overlay_path = overlay_generator.generate_overlay(
                 ra_deg=ra_deg,
@@ -373,6 +412,22 @@ class OverlayRunner:
         except Exception as e:
             self.logger.error(f"Error generating overlay: {e}")
             return error_status(f"Error generating overlay: {e}")
+        finally:
+            # Restore overridden flags if they were changed
+            try:
+                if "overlay_generator" in locals() and overlay_generator is not None:
+                    if original_ss_enabled is not None:
+                        try:
+                            overlay_generator.solar_system_config["enabled"] = original_ss_enabled
+                        except Exception:
+                            pass
+                    if original_include_no_mag is not None:
+                        try:
+                            overlay_generator.include_no_magnitude = original_include_no_mag
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
     def run(self) -> None:
         """Main loop of the overlay runner."""
@@ -731,7 +786,7 @@ class OverlayRunner:
                                                 )
                                             except Exception:
                                                 pass
-                                        # Render fallback overlay
+                                        # Render minimal fallback overlay
                                         _ = self.generate_overlay_with_coords(
                                             ra_deg,
                                             dec_deg,
@@ -740,13 +795,15 @@ class OverlayRunner:
                                             fov_height_deg,
                                             None,
                                             image_size,
-                                            None,
+                                            0.0,  # hide stars/DSO
                                             False,
                                             self.force_flip_y,
                                             status_messages=[
                                                 "Fallback overlay: plate-solving pending",
                                             ],
                                             wcs_path=None,
+                                            solar_system_enabled_override=False,
+                                            include_no_magnitude_override=False,
                                         )
                                 except Exception as e:
                                     self.logger.debug(f"Fallback overlay during wait failed: {e}")
@@ -1147,13 +1204,15 @@ class OverlayRunner:
                                     fov_height_deg,
                                     position_angle_deg,
                                     image_size,
-                                    None,
+                                    0.0,  # hide stars/DSO
                                     flip_x,
                                     self.force_flip_y,
                                     status_messages=[
                                         "Fallback overlay: plate-solving not available",
                                     ],
                                     wcs_path=None,
+                                    solar_system_enabled_override=False,
+                                    include_no_magnitude_override=False,
                                 )
                                 # Small wait to avoid tight loop
                                 time.sleep(max(1.0, float(self.fallback_wait_s)))
