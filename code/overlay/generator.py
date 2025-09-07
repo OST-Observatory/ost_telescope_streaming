@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Moved from code/generate_overlay.py
 import logging
+import os
 import platform
+import tempfile
 from typing import Optional, Tuple
 
 # astroquery is optional; we import Simbad lazily in generate_overlay()
@@ -895,7 +897,24 @@ class OverlayGenerator:
                         self.logger.warning(f"Error processing object: {e}")
                     continue
 
-            img.save(output_file)
+            # Atomic save to avoid partial writes/race conditions
+            try:
+                out_dir = os.path.dirname(output_file) or "."
+                os.makedirs(out_dir, exist_ok=True)
+                fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=out_dir)
+                os.close(fd)
+                try:
+                    img.save(tmp_path)
+                    os.replace(tmp_path, output_file)
+                finally:
+                    try:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                    except Exception:
+                        pass
+            except Exception:
+                # Fallback to direct save if atomic path fails
+                img.save(output_file)
             self.logger.info("Overlay with %d objects saved as %s", objects_drawn, output_file)
             # Return path string to satisfy method signature
             return str(output_file)
