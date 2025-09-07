@@ -19,7 +19,6 @@ from overlay.info import cooling_info, format_coordinates, fov_info, telescope_i
 from overlay.projection import skycoord_to_pixel_with_rotation as project_skycoord
 from overlay.simbad_fields import discover_simbad_dimension_fields
 from PIL import Image, ImageDraw, ImageFont
-from status import success_status
 
 
 class OverlayGenerator:
@@ -480,27 +479,12 @@ class OverlayGenerator:
             if result is None or len(result) == 0:
                 if simbad_available:
                     self.logger.warning("No objects found.")
-                # Create empty overlay if configured
-                if self.advanced_config.get("save_empty_overlays", True):
-                    img = Image.new("RGBA", img_size, (0, 0, 0, 0))
-                    img.save(output_file)
-                    self.logger.info(f"Empty overlay saved as {output_file}")
-                _ = success_status(
-                    f"Empty overlay saved as {output_file}",
-                    data=output_file,
-                    details={
-                        "fov_width_deg": fov_w,
-                        "fov_height_deg": fov_h,
-                        "position_angle_deg": pa_deg,
-                        "image_size": img_size,
-                        "magnitude_limit": mag_limit,
-                    },
-                )
-                # Return the path string for this method's contract
-                return str(output_file)
+                # Continue to render minimal overlay elements (title, info panel, secondary FOV)
+                # without any catalog objects.
+                result = None
 
             # Debug: Print available column names
-            if self.advanced_config.get("debug_simbad", False):
+            if result is not None and self.advanced_config.get("debug_simbad", False):
                 self.logger.debug("Available columns: %s", result.colnames)
                 self.logger.debug("Number of objects: %d", len(result))
 
@@ -637,9 +621,9 @@ class OverlayGenerator:
                 # Do not fail overlay on ephemeris errors
                 self.logger.debug(f"Solar system overlay skipped: {e}")
 
-            # Process objects
+            # Process objects (if any)
             objects_drawn = 0
-            for row in result:
+            for row in result or []:
                 try:
                     # Handle objects with and without V magnitude
                     has_v_magnitude = (
