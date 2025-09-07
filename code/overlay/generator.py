@@ -85,6 +85,13 @@ class OverlayGenerator:
         # Secondary FOV settings
         self.secondary_fov_config = self.overlay_config.get("secondary_fov", {})
         self.secondary_fov_enabled = self.secondary_fov_config.get("enabled", False)
+        # Catalog query toggle (SIMBAD); can be overridden by runner for minimal overlays
+        try:
+            self.catalog_query_enabled = bool(
+                self.advanced_config.get("catalog_query_enabled", True)
+            )
+        except Exception:
+            self.catalog_query_enabled = True
         # Coordinate handling options
         coords_cfg = self.overlay_config.get("coordinates", {})
         # In astronomical convention with north up, RA increases to the left; default True
@@ -429,15 +436,18 @@ class OverlayGenerator:
 
             center = SkyCoord(ra=ra_deg * u.deg, dec=dec_deg * u.deg, frame="icrs")
 
-            # Try to import astroquery lazily
-            simbad_available = True
-            try:
-                from astroquery.simbad import Simbad  # noqa: F401
-            except Exception:
-                simbad_available = False
-                self.logger.warning(
-                    "astroquery not available; generating overlay without catalog objects"
-                )
+            # Try to import astroquery lazily (if enabled)
+            simbad_available = False
+            if bool(getattr(self, "catalog_query_enabled", True)):
+                try:
+                    from astroquery.simbad import Simbad  # noqa: F401
+
+                    simbad_available = True
+                except Exception:
+                    simbad_available = False
+                    self.logger.warning(
+                        "astroquery not available; generating overlay without catalog objects"
+                    )
 
             result = None
             if simbad_available:

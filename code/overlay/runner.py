@@ -358,6 +358,7 @@ class OverlayRunner:
             # Save originals to restore after rendering
             original_ss_enabled: Optional[bool] = None
             original_include_no_mag: Optional[bool] = None
+            original_catalog_query_enabled: Optional[bool] = None
             try:
                 if overlay_generator is not None and solar_system_enabled_override is not None:
                     if hasattr(overlay_generator, "solar_system_config") and isinstance(
@@ -383,6 +384,23 @@ class OverlayRunner:
                             original_include_no_mag = None
                     try:
                         overlay_generator.include_no_magnitude = bool(include_no_magnitude_override)
+                    except Exception:
+                        pass
+
+                # Suppress SIMBAD/cat queries for minimal overlays
+                if overlay_generator is not None and (
+                    mag_limit == 0.0
+                    or solar_system_enabled_override is False
+                    or include_no_magnitude_override is False
+                ):
+                    try:
+                        original_catalog_query_enabled = bool(
+                            getattr(overlay_generator, "catalog_query_enabled", True)
+                        )
+                    except Exception:
+                        original_catalog_query_enabled = None
+                    try:
+                        overlay_generator.catalog_query_enabled = False
                     except Exception:
                         pass
 
@@ -424,6 +442,11 @@ class OverlayRunner:
                     if original_include_no_mag is not None:
                         try:
                             overlay_generator.include_no_magnitude = original_include_no_mag
+                        except Exception:
+                            pass
+                    if original_catalog_query_enabled is not None:
+                        try:
+                            overlay_generator.catalog_query_enabled = original_catalog_query_enabled
                         except Exception:
                             pass
             except Exception:
