@@ -882,7 +882,36 @@ class VideoProcessor:
                                 or self.last_frame_metadata.get("DATE-OBS")
                                 or self.last_frame_metadata.get("capture_started_at")
                             )
-                        obstime = Time(ts) if ts else Time.now()
+                        if ts:
+                            # Normalize to ISO with explicit Z if missing tz
+                            if isinstance(ts, str):
+                                ts_str = ts.strip()
+                                # Add Z if naive ISO (no timezone info present)
+                                if ts_str.endswith("Z"):
+                                    obstime = Time(ts_str, format="isot", scale="utc")
+                                else:
+                                    # Heuristic: if contains 'T' and no space/tz, append Z
+                                    if "T" in ts_str and (
+                                        "+" not in ts_str and "-" not in ts_str[-6:]
+                                    ):
+                                        ts_str = ts_str + "Z"
+                                    obstime = Time(ts_str, format="isot", scale="utc")
+                            else:
+                                # If ts is a datetime, ensure UTC
+                                try:
+                                    from datetime import datetime
+                                    from datetime import timezone as _tz
+
+                                    if isinstance(ts, datetime):
+                                        if ts.tzinfo is None:
+                                            ts = ts.replace(tzinfo=_tz.utc)
+                                        obstime = Time(ts)
+                                    else:
+                                        obstime = Time(ts)
+                                except Exception:
+                                    obstime = Time(ts)
+                        else:
+                            obstime = Time.now()
                     except Exception:
                         obstime = Time.now()
                     # Location

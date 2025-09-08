@@ -525,11 +525,14 @@ class OverlayGenerator:
                         lines.append((msg, alert_color))
                     lines.append(("", text_color))
                 if self.info_panel_config.get("show_timestamp", True):
-                    from datetime import datetime
+                    try:
+                        from datetime import datetime
+                        from datetime import timezone as _tz
 
-                    lines.append(
-                        (f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", text_color)
-                    )
+                        ts_now = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+                    except Exception:
+                        ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%SZ")
+                    lines.append((f"Time (UTC): {ts_now}", text_color))
                 if self.info_panel_config.get("show_coordinates", True):
                     lines.append((format_coordinates(ra_deg, dec_deg), text_color))
                 if pa_deg != 0.0:

@@ -483,8 +483,14 @@ class VideoCapture:
             except Exception as param_e:
                 self.logger.debug(f"Non-fatal: could not set some camera parameters: {param_e}")
 
-            # Start exposure and timestamp
-            capture_started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+            # Start exposure and timestamp (UTC, ISO 8601 with Z)
+            try:
+                from datetime import datetime
+                from datetime import timezone as _tz
+
+                capture_started_at = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                capture_started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ")
             self.logger.info(
                 "Capture %s start: exp=%.3fs, gain=%s, bin=%s",
                 capture_started_at,
@@ -586,7 +592,15 @@ class VideoCapture:
                 calibrated_frame = calibration_status.data
                 frame_details.update(calibration_status.details)
                 frame_details["capture_started_at"] = capture_started_at
-                frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                try:
+                    from datetime import datetime
+                    from datetime import timezone as _tz
+
+                    frame_details["capture_finished_at"] = datetime.now(_tz.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                except Exception:
+                    frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
                 # Centralized debayer: produce color and green once for the frame
                 try:
@@ -647,7 +661,15 @@ class VideoCapture:
                 return success_status("Frame captured", data=frame_obj.data, details=frame_details)
             else:
                 frame_details["capture_started_at"] = capture_started_at
-                frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                try:
+                    from datetime import datetime
+                    from datetime import timezone as _tz
+
+                    frame_details["capture_finished_at"] = datetime.now(_tz.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+                except Exception:
+                    frame_details["capture_finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
                 if self.return_frame_objects:
                     return success_status(
                         "Frame captured (calibration failed)",
