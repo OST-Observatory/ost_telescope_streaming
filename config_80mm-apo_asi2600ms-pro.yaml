@@ -82,7 +82,7 @@ frame_processing:
   cache_dir: "cache"  # Directory for temporary files
   file_format: "PNG"  # File format for saved frames (fits, jpg, png, tiff, etc.)
   # Optional: also archive RAW (non-debayered) FITS in a separate folder with timestamps
-  save_raw_fits: true
+  save_raw_fits: false
   raw_fits_dir: "raw_fits"
 
 # =============================================================================
@@ -209,7 +209,7 @@ overlay:
 
   # Update settings
   update:
-    update_interval: 30
+    update_interval: 10
     max_retries: 3
     retry_delay: 5
 
