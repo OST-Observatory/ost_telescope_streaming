@@ -762,13 +762,61 @@ class VideoProcessor:
                     ):
                         ra_val = float(mstat.data[0])
                         dec_val = float(mstat.data[1])
-                        # Heuristic: convert RA hours to degrees if it looks like hours
-                        if 0.0 <= ra_val <= 24.0:
-                            self.logger.debug(
-                                "Assuming mount RA is in hours; converting to degrees"
+                        # Determine RA unit robustly: config hint > heuristic > fallback
+                        try:
+                            mount_cfg = (
+                                self.config.get_mount_config()
+                                if hasattr(self.config, "get_mount_config")
+                                else {}
                             )
-                            ra_val *= 15.0
-                        center_ra_dec = (ra_val, dec_val)
+                            ra_unit = str(mount_cfg.get("ra_unit", "auto")).lower()
+                            ra_is_hours = bool(mount_cfg.get("ra_is_hours", False))
+                        except Exception:
+                            ra_unit = "auto"
+                            ra_is_hours = False
+
+                        ra_deg = ra_val
+                        if ra_unit == "hours" or ra_is_hours:
+                            ra_deg = ra_val * 15.0
+                        elif ra_unit == "degrees":
+                            ra_deg = ra_val
+                        else:
+                            # auto: if ambiguous (0..24), compare to last solve if available
+                            if 0.0 <= ra_val <= 24.0:
+                                try:
+                                    ref_ra = None
+                                    ref_dec = None
+                                    if (
+                                        hasattr(self, "last_solve_result")
+                                        and self.last_solve_result is not None
+                                    ):
+                                        ref_ra = float(self.last_solve_result.ra_center)
+                                        ref_dec = float(self.last_solve_result.dec_center)
+                                    if ref_ra is not None and ref_dec is not None:
+                                        # Compute small-angle distance for both candidates
+                                        import math as _math
+
+                                        def _dist(a1, d1, a2, d2):
+                                            # degrees to radians
+                                            a1r, d1r, a2r, d2r = map(
+                                                _math.radians, [a1, d1, a2, d2]
+                                            )
+                                            cosd = _math.sin(d1r) * _math.sin(d2r) + _math.cos(
+                                                d1r
+                                            ) * _math.cos(d2r) * _math.cos(a1r - a2r)
+                                            cosd = max(-1.0, min(1.0, cosd))
+                                            return _math.degrees(_math.acos(cosd))
+
+                                        d_hours = _dist(ra_val * 15.0, dec_val, ref_ra, ref_dec)
+                                        d_degs = _dist(ra_val, dec_val, ref_ra, ref_dec)
+                                        ra_deg = ra_val * 15.0 if d_hours <= d_degs else ra_val
+                                    else:
+                                        ra_deg = ra_val * 15.0
+                                except Exception:
+                                    ra_deg = ra_val * 15.0
+                            else:
+                                ra_deg = ra_val
+                        center_ra_dec = (ra_deg, dec_val)
                 except Exception:
                     center_ra_dec = None
             if (
@@ -942,12 +990,24 @@ class VideoProcessor:
                         ra=center_ra_dec[0] * u.deg, dec=center_ra_dec[1] * u.deg, frame="icrs"
                     )
                     try:
-                        solar_system_ephemeris.set("de432s")
-                    except Exception:
-                        pass
-                    try:
+                        # Ensure ephemeris is set to a modern file; ignore errors
+                        try:
+                            solar_system_ephemeris.set("de432s")
+                        except Exception:
+                            pass
                         moon_coord = get_body("moon", obstime, location=location)
                         sep = moon_coord.icrs.separation(center).degree
+                        # Extra debug to catch implausible large separations
+                        try:
+                            self.logger.debug(
+                                "Moon sep raw=%.3f° center=(%.4f,%.4f) obstime=%s",
+                                sep,
+                                center_ra_dec[0],
+                                center_ra_dec[1],
+                                getattr(obstime, "isot", str(obstime)),
+                            )
+                        except Exception:
+                            pass
                         try:
                             self.logger.info(
                                 "Pre-capture Moon separation: %.3f° (halfdiag=%.3f°) "
