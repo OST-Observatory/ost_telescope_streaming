@@ -642,6 +642,76 @@ class OverlayRunner:
                                         f"Could not refresh frame-processing settings: {e}"
                                     )
 
+                                # Refresh camera capture parameters (hot-reload): exposure, gain,
+                                # offset, readout_mode, binning for ASCOM/Alpaca
+                                try:
+                                    if (
+                                        self.video_processor
+                                        and hasattr(self.video_processor, "video_capture")
+                                        and self.video_processor.video_capture
+                                    ):
+                                        vc = self.video_processor.video_capture
+                                        cam_cfg = self.config.get_camera_config()
+                                        cam_type = getattr(vc, "camera_type", "opencv")
+                                        if cam_type in ["alpaca", "ascom"]:
+                                            section = (
+                                                cam_cfg.get("alpaca", {})
+                                                if cam_type == "alpaca"
+                                                else cam_cfg.get("ascom", {})
+                                            )
+                                            # Apply immediately on adapter if attributes exist
+                                            try:
+                                                if "gain" in section and hasattr(vc.camera, "gain"):
+                                                    vc.camera.gain = section.get("gain")
+                                            except Exception:
+                                                pass
+                                            try:
+                                                if "offset" in section and hasattr(
+                                                    vc.camera, "offset"
+                                                ):
+                                                    vc.camera.offset = section.get("offset")
+                                            except Exception:
+                                                pass
+                                            try:
+                                                if "readout_mode" in section and hasattr(
+                                                    vc.camera, "readout_mode"
+                                                ):
+                                                    vc.camera.readout_mode = section.get(
+                                                        "readout_mode"
+                                                    )
+                                            except Exception:
+                                                pass
+                                            # Binning may require a reconnect on some drivers.
+                                            # Apply best-effort updates to the adapter.
+                                            try:
+                                                b = section.get("binning")
+                                                if b is not None:
+                                                    bx = (
+                                                        b[0]
+                                                        if isinstance(b, (list, tuple))
+                                                        else int(b)
+                                                    )
+                                                    if hasattr(vc.camera, "bin_x"):
+                                                        vc.camera.bin_x = int(bx)
+                                                    if hasattr(vc.camera, "bin_y"):
+                                                        vc.camera.bin_y = int(bx)
+                                            except Exception:
+                                                pass
+                                            # Ensure next exposure uses updated exposure_time
+                                            try:
+                                                exp = section.get("exposure_time")
+                                                if exp is not None:
+                                                    vc.next_exposure_time_override = float(exp)
+                                            except Exception:
+                                                pass
+                                            self.logger.info(
+                                                "Camera settings hot-reloaded for %s "
+                                                "(exp/gain/offset/readout/binning)",
+                                                cam_type,
+                                            )
+                                except Exception as e:
+                                    self.logger.debug(f"Could not refresh camera settings: {e}")
+
                                 # Update cooling parameters live
                                 # (target temp, status interval, etc.)
                                 try:
@@ -935,10 +1005,10 @@ class OverlayRunner:
 
                                     with Image.open(latest_frame) as img:
                                         image_size = img.size
-                                        self.logger.debug(
-                                            "Detected image size from captured frame: %s",
-                                            image_size,
-                                        )
+                                    self.logger.debug(
+                                        "Detected image size from captured frame: %s",
+                                        image_size,
+                                    )
                             except Exception as e:
                                 self.logger.warning(
                                     f"Could not get image size from captured frame: {e}"
