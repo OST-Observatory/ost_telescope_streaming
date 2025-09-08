@@ -752,6 +752,7 @@ class VideoProcessor:
             self.moon_in_fov_predicted = False  # default
             # Compute pointing center
             center_ra_dec = None
+            center_candidates: list[tuple[float, float]] = []
             if hasattr(self, "mount") and self.mount is not None:
                 try:
                     mstat = self.mount.get_coordinates()
@@ -783,37 +784,9 @@ class VideoProcessor:
                         else:
                             # auto: if ambiguous (0..24), compare to last solve if available
                             if 0.0 <= ra_val <= 24.0:
-                                try:
-                                    ref_ra = None
-                                    ref_dec = None
-                                    if (
-                                        hasattr(self, "last_solve_result")
-                                        and self.last_solve_result is not None
-                                    ):
-                                        ref_ra = float(self.last_solve_result.ra_center)
-                                        ref_dec = float(self.last_solve_result.dec_center)
-                                    if ref_ra is not None and ref_dec is not None:
-                                        # Compute small-angle distance for both candidates
-                                        import math as _math
-
-                                        def _dist(a1, d1, a2, d2):
-                                            # degrees to radians
-                                            a1r, d1r, a2r, d2r = map(
-                                                _math.radians, [a1, d1, a2, d2]
-                                            )
-                                            cosd = _math.sin(d1r) * _math.sin(d2r) + _math.cos(
-                                                d1r
-                                            ) * _math.cos(d2r) * _math.cos(a1r - a2r)
-                                            cosd = max(-1.0, min(1.0, cosd))
-                                            return _math.degrees(_math.acos(cosd))
-
-                                        d_hours = _dist(ra_val * 15.0, dec_val, ref_ra, ref_dec)
-                                        d_degs = _dist(ra_val, dec_val, ref_ra, ref_dec)
-                                        ra_deg = ra_val * 15.0 if d_hours <= d_degs else ra_val
-                                    else:
-                                        ra_deg = ra_val * 15.0
-                                except Exception:
-                                    ra_deg = ra_val * 15.0
+                                # Defer decision to Moon-based check: test both candidates later
+                                center_candidates = [(ra_val, dec_val), (ra_val * 15.0, dec_val)]
+                                ra_deg = ra_val * 15.0
                             else:
                                 ra_deg = ra_val
                         center_ra_dec = (ra_deg, dec_val)
@@ -985,7 +958,29 @@ class VideoProcessor:
                         )
                     except Exception:
                         location = None
-                    # Center coordinate
+                    # Center coordinate (choose best RA interpretation if ambiguous)
+                    # Build candidate list: include center_ra_dec and any deferred candidates
+                    candidates: list[tuple[float, float]] = [center_ra_dec]
+                    try:
+                        if center_candidates:
+                            candidates = center_candidates
+                    except Exception:
+                        pass
+                    # Evaluate separation for candidates; choose smallest
+                    best_center = center_ra_dec
+                    try:
+                        moon_coord = get_body("moon", obstime, location=location)
+                        best_sep = 1e9
+                        for ra_c, dec_c in candidates:
+                            c = SkyCoord(ra=ra_c * u.deg, dec=dec_c * u.deg, frame="icrs")
+                            s = c.separation(moon_coord.icrs).degree
+                            if s < best_sep:
+                                best_sep = s
+                                best_center = (ra_c, dec_c)
+                        center_ra_dec = best_center
+                    except Exception:
+                        # Fall back to original center
+                        pass
                     center = SkyCoord(
                         ra=center_ra_dec[0] * u.deg, dec=center_ra_dec[1] * u.deg, frame="icrs"
                     )
