@@ -801,8 +801,8 @@ class VideoProcessor:
                     float(self.last_solve_result.ra_center or 0.0),
                     float(self.last_solve_result.dec_center or 0.0),
                 )
-            # Fallback: read RA/Dec from FITS header if available
-            if center_ra_dec is None and isinstance(fits_filename, Path) and fits_filename.exists():
+            # Prefer: read RA/Dec from current FITS header if available (most accurate)
+            if isinstance(fits_filename, Path) and fits_filename.exists():
                 try:
                     import astropy.io.fits as _fits
 
@@ -992,25 +992,16 @@ class VideoProcessor:
                             pass
                         moon_coord = get_body("moon", obstime, location=location)
                         sep = moon_coord.icrs.separation(center).degree
-                        # Extra debug to catch implausible large separations
-                        try:
-                            self.logger.debug(
-                                "Moon sep raw=%.3f° center=(%.4f,%.4f) obstime=%s",
-                                sep,
-                                center_ra_dec[0],
-                                center_ra_dec[1],
-                                getattr(obstime, "isot", str(obstime)),
-                            )
-                        except Exception:
-                            pass
+                        # Unified info log with obstime for troubleshooting
                         try:
                             self.logger.info(
-                                "Pre-capture Moon separation: %.3f° (halfdiag=%.3f°) "
-                                "center=(%.4f,%.4f)",
+                                "Pre-capture Moon sep: %.3f° (halfdiag=%.3f°) "
+                                "center=(%.4f,%.4f) obstime=%s",
                                 sep,
                                 half_diag_deg,
                                 center_ra_dec[0],
                                 center_ra_dec[1],
+                                getattr(obstime, "isot", str(obstime)),
                             )
                         except Exception:
                             pass
