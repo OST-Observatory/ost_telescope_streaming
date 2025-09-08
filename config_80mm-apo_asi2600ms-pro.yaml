@@ -196,6 +196,8 @@ overlay:
   # Overlay fallback settings
   fallback_on_solve_failure: true
   fallback_wait_s: 10.0
+  # Only regenerate fallback overlay if center moved more than this (degrees)
+  fallback_min_coord_delta_deg: 0.02
 
   # Combined output settings
   combined_output:

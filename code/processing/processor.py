@@ -948,6 +948,17 @@ class VideoProcessor:
                     try:
                         moon_coord = get_body("moon", obstime, location=location)
                         sep = moon_coord.icrs.separation(center).degree
+                        try:
+                            self.logger.info(
+                                "Pre-capture Moon separation: %.3f° (halfdiag=%.3f°) "
+                                "center=(%.4f,%.4f)",
+                                sep,
+                                half_diag_deg,
+                                center_ra_dec[0],
+                                center_ra_dec[1],
+                            )
+                        except Exception:
+                            pass
                         if sep <= half_diag_deg:
                             self.moon_in_fov_predicted = True
                             try:

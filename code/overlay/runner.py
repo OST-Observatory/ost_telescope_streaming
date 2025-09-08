@@ -99,6 +99,15 @@ class OverlayRunner:
             overlay_cfg.get("fallback_on_solve_failure", False)
         )
         self.fallback_wait_s: float = float(overlay_cfg.get("fallback_wait_s", 10))
+        # Only refresh fallback overlay when coords change beyond this threshold (deg)
+        self.fallback_min_coord_delta_deg: float = float(
+            overlay_cfg.get("fallback_min_coord_delta_deg", 0.02)
+        )
+
+        # Track last overlay info for reuse between captures
+        self._last_overlay_path: Optional[str] = None
+        self._last_overlay_ra_deg: Optional[float] = None
+        self._last_overlay_dec_deg: Optional[float] = None
 
         # Initialize components
         self._initialize_components()
@@ -275,6 +284,24 @@ class OverlayRunner:
             status = self.cooling_service.get_cooling_status()
             return status if isinstance(status, dict) else {}
         return {}
+
+    def _coords_delta_deg(
+        self, ra1_deg: float, dec1_deg: float, ra2_deg: float, dec2_deg: float
+    ) -> float:
+        try:
+            import math as _math
+
+            ra1 = _math.radians(float(ra1_deg))
+            dec1 = _math.radians(float(dec1_deg))
+            ra2 = _math.radians(float(ra2_deg))
+            dec2 = _math.radians(float(dec2_deg))
+            cos_d = _math.sin(dec1) * _math.sin(dec2) + _math.cos(dec1) * _math.cos(
+                dec2
+            ) * _math.cos(ra1 - ra2)
+            cos_d = max(-1.0, min(1.0, cos_d))
+            return _math.degrees(_math.acos(cos_d))
+        except Exception:
+            return 180.0
 
     def generate_overlay_with_coords(
         self,
@@ -845,6 +872,74 @@ class OverlayRunner:
                                                 pass
                                     # Compute FOV from config if missing
                                     if ra_deg is not None and dec_deg is not None:
+                                        # If coords changed less than threshold, reuse previous
+                                        # overlay instead of regenerating
+                                        try:
+                                            if (
+                                                self._last_overlay_path
+                                                and self._last_overlay_ra_deg is not None
+                                                and self._last_overlay_dec_deg is not None
+                                            ):
+                                                delta_deg = self._coords_delta_deg(
+                                                    self._last_overlay_ra_deg,
+                                                    self._last_overlay_dec_deg,
+                                                    float(ra_deg),
+                                                    float(dec_deg),
+                                                )
+                                                if delta_deg < max(
+                                                    0.0, float(self.fallback_min_coord_delta_deg)
+                                                ):
+                                                    # Reuse previous overlay; no regenerate
+                                                    overlay_file_w = self._last_overlay_path
+                                                    combined_file_w = (
+                                                        f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
+                                                        if self.use_timestamps
+                                                        else "combined.png"
+                                                    )
+                                                    # If latest frame exists, combine; else copy
+                                                    latest_frame_w = None
+                                                    if self.video_processor and hasattr(
+                                                        self.video_processor,
+                                                        "get_latest_frame_path",
+                                                    ):
+                                                        latest_frame_w = (
+                                                            self.video_processor.get_latest_frame_path()
+                                                        )
+                                                    if latest_frame_w and os.path.exists(
+                                                        latest_frame_w
+                                                    ):
+                                                        comb_fn = (
+                                                            self.video_processor.combine_overlay_with_image
+                                                        )
+                                                        _st = comb_fn(
+                                                            latest_frame_w,
+                                                            overlay_file_w,
+                                                            combined_file_w,
+                                                        )
+                                                        if _st.is_success:
+                                                            self.logger.info(
+                                                                "Combined (reused) image: %s",
+                                                                combined_file_w,
+                                                            )
+                                                    else:
+                                                        try:
+                                                            import shutil as _shutil
+
+                                                            _shutil.copyfile(
+                                                                overlay_file_w, combined_file_w
+                                                            )
+                                                            self.logger.info(
+                                                                "Combined (copied, reused): %s",
+                                                                combined_file_w,
+                                                            )
+                                                        except Exception:
+                                                            pass
+                                                    # Reset timer and continue waiting for solve
+                                                    t_wait_start = time.time()
+                                                    time.sleep(0.5)
+                                                    continue
+                                        except Exception:
+                                            pass
                                         if image_size is None:
                                             try:
                                                 overlay_config = self.config.get_overlay_config()
@@ -902,6 +997,13 @@ class OverlayRunner:
                                         try:
                                             if overlay_status_wait.is_success:
                                                 overlay_file_w = overlay_status_wait.data
+                                                # Cache last overlay and coords
+                                                try:
+                                                    self._last_overlay_path = overlay_file_w
+                                                    self._last_overlay_ra_deg = float(ra_deg)
+                                                    self._last_overlay_dec_deg = float(dec_deg)
+                                                except Exception:
+                                                    pass
                                                 combined_file_w = (
                                                     f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
                                                     if self.use_timestamps
@@ -1112,6 +1214,13 @@ class OverlayRunner:
                                         if self.use_timestamps
                                         else "combined.png"
                                     )
+                                    # Cache last overlay and coords
+                                    try:
+                                        self._last_overlay_path = overlay_file_m
+                                        self._last_overlay_ra_deg = float(ra_f)
+                                        self._last_overlay_dec_deg = float(dec_f)
+                                    except Exception:
+                                        pass
                                     latest_frame_m = None
                                     if self.video_processor and hasattr(
                                         self.video_processor, "get_latest_frame_path"
@@ -1404,6 +1513,13 @@ class OverlayRunner:
                                             if self.use_timestamps
                                             else "combined.png"
                                         )
+                                        # Cache last overlay and coords
+                                        try:
+                                            self._last_overlay_path = overlay_file_fb
+                                            self._last_overlay_ra_deg = float(ra_deg)
+                                            self._last_overlay_dec_deg = float(dec_deg)
+                                        except Exception:
+                                            pass
                                         latest_frame_fb = None
                                         if self.video_processor and hasattr(
                                             self.video_processor, "get_latest_frame_path"
