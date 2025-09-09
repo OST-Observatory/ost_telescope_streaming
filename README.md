@@ -32,6 +32,53 @@ A comprehensive astronomical telescope streaming and overlay system with plate-s
 - **Configurable**: Flexible configuration system for all components
 - **Telemetry & Timing**: Structured logs include capture_id and per-cycle timings (capture/save/solve)
 
+## Architecture
+
+The system is composed of modular subsystems orchestrated by the overlay runner.
+
+```text
++------------------------------+
+| overlay_pipeline.py (CLI)    |
++--------------+---------------+
+               |
+               v
++------------------------------+
+| ConfigManager (YAML)         |
+|  - loads/merges defaults     |
+|  - provides get_*_config()   |
++--------------+---------------+
+               |
+               v
++------------------------------+
+| OverlayRunner                |
+|  - session lifecycle         |
+|  - plate-solve/overlay loop  |
++----+--------------+----------+
+     |              |
+     v              v
++-----------+   +--------------------+
+| Cooling   |   | VideoProcessor     |
+| Service   |   | (code/processing)  |
++-----------+   +---------+----------+
+                          |
+        +-----------------+-------------------------------+
+        |                 |               |               |
+        v                 v               v               v
+  Capture Adapters   Processing Chain  PlateSolve      Overlay
+  (code/capture,     (format/normalize/ (code/platesolve, Generator
+   drivers/*)         orientation)        WCS/FOV)        (code/overlay)
+        |                 |               |               |
+        +-----------------+-------+-------+---------------+
+                                  v
+                           Combine & Save
+                         (services/frame_writer.py)
+                                  v
+                       Outputs (PNG/JPG, FITS, logs)
+```
+
+- Key configuration sections: `camera`, `telescope`, `mount`, `plate_solve`, `overlay`, `site`.
+- `site` provides observer coordinates (`latitude`, `longitude`, `elevation_m`), consumed by `VideoProcessor`.
+
 ## Quick Start
 
 ### 1. Installation
