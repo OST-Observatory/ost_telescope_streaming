@@ -102,6 +102,11 @@ class ConfigManager:
             Dict[str, Any]: Default configuration dictionary
         """
         return {
+            "site": {
+                "latitude": 0.0,
+                "longitude": 0.0,
+                "elevation_m": 0.0,
+            },
             "mount": {
                 "driver_id": "ASCOM.tenmicron_mount.Telescope",
                 "connection_timeout": 10,
@@ -282,6 +287,38 @@ class ConfigManager:
             Dict[str, Any]: The telescope configuration.
         """
         return cast(Dict[str, Any], self.config.get("telescope", {}))
+
+    def get_site_config(self) -> Dict[str, Any]:
+        """Get the site (observer location) configuration.
+
+        Returns:
+            Dict[str, Any]: The site configuration with defaults applied.
+        """
+        site_config = cast(Dict[str, Any], self.config.get("site", {}))
+
+        # Apply defaults if missing
+        defaults = {
+            "latitude": 0.0,
+            "longitude": 0.0,
+            "elevation_m": 0.0,
+        }
+
+        for key, default_value in defaults.items():
+            if key not in site_config:
+                site_config[key] = default_value
+
+        # Ensure numeric types if provided as strings
+        def _to_float(value: Any, fallback: float) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return fallback
+
+        site_config["latitude"] = _to_float(site_config.get("latitude"), 0.0)
+        site_config["longitude"] = _to_float(site_config.get("longitude"), 0.0)
+        site_config["elevation_m"] = _to_float(site_config.get("elevation_m"), 0.0)
+
+        return site_config
 
     def get_camera_config(self) -> Dict[str, Any]:
         """Get camera configuration."""
