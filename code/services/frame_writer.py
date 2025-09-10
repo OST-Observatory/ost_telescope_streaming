@@ -40,9 +40,9 @@ class FrameWriter:
         suffix = Path(filename).suffix.lower()
         if suffix in (".fit", ".fits"):
             return self.save_fits(frame, filename, metadata)
-        return self.save_image(frame, filename)
+        return self.save_image(frame, filename, metadata)
 
-    def save_image(self, frame: Any, filename: str):
+    def save_image(self, frame: Any, filename: str, metadata: Optional[Dict[str, Any]] = None):
         try:
             try:
                 import cv2
@@ -82,7 +82,15 @@ class FrameWriter:
                 try:
                     from processing.normalization import normalize_to_uint8
 
-                    frame_np = normalize_to_uint8(frame_np, self.config, self.logger)
+                    override_method = None
+                    try:
+                        if isinstance(metadata, dict):
+                            override_method = metadata.get("normalization_override")
+                    except Exception:
+                        override_method = None
+                    frame_np = normalize_to_uint8(
+                        frame_np, self.config, self.logger, override_method=override_method
+                    )
                 except Exception:
                     if frame_np.dtype in [np.float32, np.float64]:
                         vmin = float(np.min(frame_np))

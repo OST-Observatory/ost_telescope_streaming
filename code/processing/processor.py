@@ -619,11 +619,174 @@ class VideoProcessor:
         except Exception:
             pass
 
+        # Decide normalization override for display based on predicted bright bodies
+        normalization_override = None
+        try:
+            # Time
+            try:
+                from astropy.time import Time as _Time
+            except Exception:
+                _Time = None
+            if _Time is not None:
+                try:
+                    ts_val = None
+                    if isinstance(self.last_frame_metadata, dict):
+                        ts_val = (
+                            self.last_frame_metadata.get("date_obs")
+                            or self.last_frame_metadata.get("DATE-OBS")
+                            or self.last_frame_metadata.get("capture_started_at")
+                        )
+                    obstime_norm = _Time(ts_val) if ts_val else _Time.now()
+                except Exception:
+                    obstime_norm = _Time.now()
+            else:
+                obstime_norm = None
+
+            # Center + FOV half-diagonal
+            half_diag_for_norm = 0.0
+            center_for_norm = None
+            try:
+                if self.last_solve_result is not None:
+                    # Prefer last known solve
+                    half_diag_for_norm = (
+                        ((self.last_solve_result.fov_width or 0.0) ** 2)
+                        + ((self.last_solve_result.fov_height or 0.0) ** 2)
+                    ) ** 0.5 / 2.0
+                    center_for_norm = (
+                        float(self.last_solve_result.ra_center or 0.0),
+                        float(self.last_solve_result.dec_center or 0.0),
+                    )
+            except Exception:
+                center_for_norm = None
+            if center_for_norm is None:
+                # Compute FOV from config and read mount pointing
+                try:
+                    from math import atan
+                    from math import degrees as _degrees
+
+                    tel_cfg2 = self.config.get_telescope_config()
+                    cam_cfg2 = self.config.get_camera_config()
+                    fl_mm = float(tel_cfg2.get("focal_length", 1000.0))
+                    sw_mm = float(cam_cfg2.get("sensor_width", 13.2))
+                    sh_mm = float(cam_cfg2.get("sensor_height", 8.8))
+                    fov_w2 = 2.0 * _degrees(atan((sw_mm / 2.0) / fl_mm))
+                    fov_h2 = 2.0 * _degrees(atan((sh_mm / 2.0) / fl_mm))
+                    half_diag_for_norm = ((fov_w2**2 + fov_h2**2) ** 0.5) / 2.0
+                except Exception:
+                    half_diag_for_norm = 0.0
+                try:
+                    if hasattr(self, "mount") and self.mount is not None:
+                        mstat2 = self.mount.get_coordinates()
+                        if (
+                            getattr(mstat2, "is_success", False)
+                            and isinstance(getattr(mstat2, "data", None), (list, tuple))
+                            and len(mstat2.data) == 2
+                        ):
+                            ra_m = float(mstat2.data[0])
+                            dec_m = float(mstat2.data[1])
+                            # Heuristic: RA hours vs degrees
+                            if 0.0 <= ra_m <= 24.0:
+                                ra_m = ra_m * 15.0
+                            center_for_norm = (ra_m, dec_m)
+                except Exception:
+                    center_for_norm = None
+
+            # Location
+            earth_loc = None
+            try:
+                from astropy.coordinates import EarthLocation as _EarthLocation
+                import astropy.units as _u
+            except Exception:
+                _EarthLocation = None
+            if _EarthLocation is not None:
+                try:
+                    site_cfg2 = None
+                    if hasattr(self.config, "get_site_config"):
+                        site_cfg2 = self.config.get_site_config()
+                    if not site_cfg2:
+                        ovl2 = (
+                            self.config.get_overlay_config()
+                            if hasattr(self.config, "get_overlay_config")
+                            else {}
+                        )
+                        site_cfg2 = ovl2.get("site", {}) if isinstance(ovl2, dict) else {}
+                    lat2 = site_cfg2.get("latitude")
+                    lon2 = site_cfg2.get("longitude")
+                    el2 = site_cfg2.get("elevation_m", 0.0)
+                    latf = float(lat2) if lat2 is not None else 0.0
+                    lonf = float(lon2) if lon2 is not None else 0.0
+                    elf = float(el2) if el2 is not None else 0.0
+                    earth_loc = _EarthLocation(
+                        lat=latf * _u.deg, lon=lonf * _u.deg, height=elf * _u.m
+                    )
+                except Exception:
+                    earth_loc = None
+
+            # Check bodies
+            if (
+                obstime_norm is not None
+                and earth_loc is not None
+                and center_for_norm is not None
+                and half_diag_for_norm > 0.0
+            ):
+                try:
+                    from astropy.coordinates import SkyCoord as _SkyCoord
+                    from astropy.coordinates import get_body as _get_body
+                    import astropy.units as _u2
+                except Exception:
+                    pass
+                else:
+                    try:
+                        center_sc = _SkyCoord(
+                            ra=center_for_norm[0] * _u2.deg,
+                            dec=center_for_norm[1] * _u2.deg,
+                            frame="icrs",
+                        )
+                        # Moon first
+                        try:
+                            moon_sc = _get_body("moon", obstime_norm, location=earth_loc)
+                            sep_moon = float(moon_sc.icrs.separation(center_sc).degree)
+                            if sep_moon <= half_diag_for_norm:
+                                normalization_override = "moon"
+                        except Exception:
+                            pass
+                        if normalization_override is None:
+                            # Planets
+                            for bname in [
+                                "mercury",
+                                "venus",
+                                "mars",
+                                "jupiter",
+                                "saturn",
+                                "uranus",
+                                "neptune",
+                            ]:
+                                try:
+                                    b_sc = _get_body(bname, obstime_norm, location=earth_loc)
+                                    sep_b = float(b_sc.icrs.separation(center_sc).degree)
+                                    if sep_b <= half_diag_for_norm:
+                                        normalization_override = "planetary"
+                                        break
+                                except Exception:
+                                    continue
+                    except Exception:
+                        pass
+        except Exception:
+            normalization_override = None
+
         # Save display image (measure duration)
         frame_filename = self.frame_dir / f"{base}.{self.file_format}"
         t0 = time.monotonic()
+        # Attach normalization override to metadata for display saving
+        if normalization_override is not None:
+            try:
+                details_with_id["normalization_override"] = normalization_override
+            except Exception:
+                pass
         img_status = (
-            self.frame_writer.save(frame, str(frame_filename)) if self.frame_writer else None
+            self.frame_writer.save(frame, str(frame_filename), metadata=details_with_id)
+            if self.frame_writer
+            else None
         )
         img_ms = (time.monotonic() - t0) * 1000.0
         if not (img_status and getattr(img_status, "is_success", False)):

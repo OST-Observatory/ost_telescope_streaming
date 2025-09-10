@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 
 import numpy as np
 
@@ -36,7 +36,9 @@ def scale_16bit_to_8bit(image_16bit: np.ndarray) -> np.ndarray:
         return (image_16bit / 256).astype(np.uint8)
 
 
-def normalize_to_uint8(image: np.ndarray, config: Any, logger: Any = None) -> np.ndarray:
+def normalize_to_uint8(
+    image: np.ndarray, config: Any, logger: Any = None, override_method: Optional[str] = None
+) -> np.ndarray:
     """Normalize image (2D/3D) to uint8 using config-driven method.
 
     Supported methods:
@@ -179,6 +181,25 @@ def normalize_to_uint8(image: np.ndarray, config: Any, logger: Any = None) -> np
                 moon_cfg[k] = m[k]
     except Exception:
         pass
+
+    # Optional override (e.g., auto planetary/moon from processor)
+    if override_method:
+        try:
+            ov = str(override_method).lower()
+            if ov in {
+                "none",
+                "linear",
+                "gamma",
+                "log",
+                "asinh",
+                "zscale",
+                "hist",
+                "planetary",
+                "moon",
+            }:
+                method = ov
+        except Exception:
+            pass
 
     # Keep for config compatibility; behavior is enforced by clipping to [0,1]
     _ = preserve_black_point
