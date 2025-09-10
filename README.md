@@ -175,8 +175,33 @@ frame_processing:
   orientation: long_side_horizontal
   # Normalization settings for display (PNG/JPG); FITS always uses uint16 scaling
   normalization:
-    method: zscale   # zscale | hist
-    contrast: 0.15   # only for zscale
+    # Available methods:
+    #  none | linear | gamma | log | asinh | zscale | hist | planetary | moon
+    method: zscale
+    contrast: 0.15        # zscale only
+    per_channel: false    # apply per channel or on shared window
+    preserve_black_point: true
+    clip_percent:         # for linear/hist; ignored if linear_window set
+      black: 1.0
+      white: 99.5
+    linear_window:        # fixed min/max window; overrides clip_percent if both set
+      min: null
+      max: null
+    gamma_value: 0.9      # for gamma/asinh final tweak
+    asinh_soften: 12.0    # asinh stretch intensity
+    log_gain: 1000.0      # log stretch gain
+    planetary:
+      center_fraction: 0.2
+      white_percentile: 99.8
+      black_percentile: 3.0
+      auto_roi: false
+      auto_roi_sigma: 4.0
+      roi_min_area_frac: 0.02
+    moon:
+      midtone_boost: 1.25
+      shadows_boost: 1.1
+      white_percentile: 99.7
+      black_percentile: 2.0
   file_format: "PNG"
 ```
 
