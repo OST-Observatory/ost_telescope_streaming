@@ -939,8 +939,8 @@ class VideoProcessor:
                     float(self.last_solve_result.ra_center or 0.0),
                     float(self.last_solve_result.dec_center or 0.0),
                 )
-            # Prefer: read RA/Dec from current FITS header if available (most accurate)
-            if isinstance(fits_filename, Path) and fits_filename.exists():
+            # Prefer FITS header only if we don't already have a center from mount/last solve
+            if center_ra_dec is None and isinstance(fits_filename, Path) and fits_filename.exists():
                 try:
                     import astropy.io.fits as _fits
 
