@@ -1150,6 +1150,14 @@ class VideoProcessor:
                         except Exception:
                             pass
                         moon_coord = get_body("moon", obstime, location=location)
+                        try:
+                            self.logger.debug(
+                                "Moon precheck: moon RA=%.5f° Dec=%.5f° (ICRS)",
+                                float(moon_coord.icrs.ra.deg),
+                                float(moon_coord.icrs.dec.deg),
+                            )
+                        except Exception:
+                            pass
                         best_sep = 1e9
                         for ra_c, dec_c in candidates:
                             c = SkyCoord(ra=ra_c * u.deg, dec=dec_c * u.deg, frame="icrs")
