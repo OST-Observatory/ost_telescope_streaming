@@ -855,7 +855,12 @@ class OverlayRunner:
                             ) >= float(self.fallback_wait_s):
                                 try:
                                     self.logger.info(
-                                        "Fallback overlay active while waiting for plate-solve"
+                                        (
+                                            "Wait exceeded %.1fs; fallback: reuse last overlay "
+                                            "if Δ<%.3f°, else generate minimal"
+                                        ),
+                                        float(self.fallback_wait_s),
+                                        float(self.fallback_min_coord_delta_deg),
                                     )
                                     # Use mount coordinates if available
                                     if self.mount is not None:
@@ -890,6 +895,21 @@ class OverlayRunner:
                                                     0.0, float(self.fallback_min_coord_delta_deg)
                                                 ):
                                                     # Reuse previous overlay; no regenerate
+                                                    try:
+                                                        msg = (
+                                                            "Fallback reuse: reused last overlay "
+                                                            "(Δ=%.4f° < %.3f°): %s"
+                                                        )
+                                                        self.logger.info(
+                                                            msg,
+                                                            float(delta_deg),
+                                                            float(
+                                                                self.fallback_min_coord_delta_deg
+                                                            ),
+                                                            self._last_overlay_path,
+                                                        )
+                                                    except Exception:
+                                                        pass
                                                     overlay_file_w = self._last_overlay_path
                                                     combined_file_w = (
                                                         f"combined_{datetime.now().strftime(self.timestamp_format)}.png"
@@ -975,10 +995,20 @@ class OverlayRunner:
                                             except Exception:
                                                 pass
                                         # Render minimal fallback overlay
+                                        # Use a distinct filename to avoid races with main overlay
+                                        of_wait = (
+                                            f"overlay_wait_{datetime.now().strftime(self.timestamp_format)}.png"
+                                            if self.use_timestamps
+                                            else "overlay_wait.png"
+                                        )
+                                        _status_msg_wait = (
+                                            f"Minimal fallback overlay while waiting (timeout "
+                                            f"{float(self.fallback_wait_s):.1f}s)"
+                                        )
                                         overlay_status_wait = self.generate_overlay_with_coords(
                                             ra_deg,
                                             dec_deg,
-                                            None,
+                                            of_wait,
                                             fov_width_deg,
                                             fov_height_deg,
                                             None,
@@ -986,9 +1016,7 @@ class OverlayRunner:
                                             0.0,  # hide stars/DSO
                                             False,
                                             self.force_flip_y,
-                                            status_messages=[
-                                                "Fallback overlay: plate-solving pending",
-                                            ],
+                                            status_messages=[_status_msg_wait],
                                             wcs_path=None,
                                             solar_system_enabled_override=False,
                                             include_no_magnitude_override=False,
@@ -1190,10 +1218,15 @@ class OverlayRunner:
                                 pass
                             # Generate overlay with minimal content; the generator
                             # respects config flags for title, info panel, and secondary FOV
+                            of_moon = (
+                                f"overlay_moon_{datetime.now().strftime(self.timestamp_format)}.png"
+                                if self.use_timestamps
+                                else "overlay_moon.png"
+                            )
                             overlay_status = self.generate_overlay_with_coords(
                                 ra_deg=ra_f,
                                 dec_deg=dec_f,
-                                output_file=None,
+                                output_file=of_moon,
                                 fov_width_deg=None,
                                 fov_height_deg=None,
                                 position_angle_deg=None,
@@ -1460,9 +1493,23 @@ class OverlayRunner:
                         # Fallback overlay if enabled: use mount/FITS center when solve failed
                         if self.fallback_on_solve_failure:
                             try:
-                                self.logger.info(
-                                    "Fallback overlay active: rendering without plate-solve"
-                                )
+                                reason_msg = None
+                                try:
+                                    reason_msg = str(getattr(overlay_status, "message", ""))
+                                except Exception:
+                                    reason_msg = None
+                                if reason_msg:
+                                    self.logger.info(
+                                        (
+                                            "Plate-solve failed; generating minimal fallback "
+                                            "overlay (reason: %s)"
+                                        ),
+                                        reason_msg,
+                                    )
+                                else:
+                                    self.logger.info(
+                                        "Plate-solve failed; generating minimal fallback overlay"
+                                    )
                                 # If RA/Dec missing, try FITS header via last saved FITS
                                 if ra_deg is None or dec_deg is None:
                                     # No direct FITS path here; rely on last_solve_result or mount
@@ -1486,10 +1533,19 @@ class OverlayRunner:
                                     except Exception:
                                         pass
                                 # Render minimal overlay with current coords/FOV
+                                of_fb = (
+                                    f"overlay_fb_{datetime.now().strftime(self.timestamp_format)}.png"
+                                    if self.use_timestamps
+                                    else "overlay_fb.png"
+                                )
+                                _status_msg_fb = (
+                                    "Minimal fallback overlay: plate-solving unavailable"
+                                    + (f" (reason: {reason_msg})" if reason_msg else "")
+                                )
                                 overlay_status_fb = self.generate_overlay_with_coords(
                                     ra_deg,
                                     dec_deg,
-                                    output_file,
+                                    of_fb,
                                     fov_width_deg,
                                     fov_height_deg,
                                     position_angle_deg,
@@ -1497,9 +1553,7 @@ class OverlayRunner:
                                     0.0,  # hide stars/DSO
                                     flip_x,
                                     self.force_flip_y,
-                                    status_messages=[
-                                        "Fallback overlay: plate-solving not available",
-                                    ],
+                                    status_messages=[_status_msg_fb],
                                     wcs_path=None,
                                     solar_system_enabled_override=False,
                                     include_no_magnitude_override=False,
