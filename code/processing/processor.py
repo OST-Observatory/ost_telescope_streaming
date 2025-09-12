@@ -928,6 +928,14 @@ class VideoProcessor:
                         ra_deg = float(mstat.data[0])
                         dec_deg = float(mstat.data[1])
                         center_ra_dec = (ra_deg, dec_deg)
+                        try:
+                            self.logger.debug(
+                                "Moon precheck: mount center RA=%.5f° Dec=%.5f°",
+                                ra_deg,
+                                dec_deg,
+                            )
+                        except Exception:
+                            pass
                 except Exception:
                     center_ra_dec = None
             if (
@@ -939,6 +947,14 @@ class VideoProcessor:
                     float(self.last_solve_result.ra_center or 0.0),
                     float(self.last_solve_result.dec_center or 0.0),
                 )
+                try:
+                    self.logger.debug(
+                        "Moon precheck: last-solve center RA=%.5f° Dec=%.5f°",
+                        center_ra_dec[0],
+                        center_ra_dec[1],
+                    )
+                except Exception:
+                    pass
             # Prefer FITS header only if we don't already have a center from mount/last solve
             if center_ra_dec is None and isinstance(fits_filename, Path) and fits_filename.exists():
                 try:
@@ -996,7 +1012,7 @@ class VideoProcessor:
                             center_ra_dec = (float(ra_deg_hdr), float(dec_deg_hdr))
                             try:
                                 self.logger.debug(
-                                    "Moon precheck using FITS header center RA=%.5f Dec=%.5f",
+                                    "Moon precheck: FITS center RA=%.5f° Dec=%.5f°",
                                     center_ra_dec[0],
                                     center_ra_dec[1],
                                 )
@@ -1094,6 +1110,16 @@ class VideoProcessor:
                         location = EarthLocation(
                             lat=lat * u.deg, lon=lon * u.deg, height=elev * u.m
                         )
+                        try:
+                            self.logger.debug(
+                                "Moon precheck: site lat=%.5f lon=%.5f elev=%.1fm obstime=%s",
+                                lat,
+                                lon,
+                                elev,
+                                getattr(obstime, "isot", str(obstime)),
+                            )
+                        except Exception:
+                            pass
                     except Exception:
                         location = None
                     # Center coordinate (choose best RA interpretation if ambiguous)
@@ -1102,6 +1128,14 @@ class VideoProcessor:
                     try:
                         if center_candidates:
                             candidates = center_candidates
+                        try:
+                            self.logger.debug(
+                                "Moon precheck: %d candidate center(s): %s",
+                                len(candidates),
+                                str(candidates),
+                            )
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                     # Evaluate separation for candidates; choose smallest
@@ -1124,6 +1158,15 @@ class VideoProcessor:
                                 best_sep = s
                                 best_center = (ra_c, dec_c)
                         center_ra_dec = best_center
+                        try:
+                            self.logger.debug(
+                                "Moon precheck: chosen center RA=%.5f° Dec=%.5f° (sep=%.3f°)",
+                                center_ra_dec[0],
+                                center_ra_dec[1],
+                                best_sep,
+                            )
+                        except Exception:
+                            pass
                     except Exception:
                         # Fall back to original center
                         pass
