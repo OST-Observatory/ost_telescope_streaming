@@ -924,35 +924,10 @@ class VideoProcessor:
                         and isinstance(getattr(mstat, "data", None), (list, tuple))
                         and len(mstat.data) == 2
                     ):
-                        ra_val = float(mstat.data[0])
-                        dec_val = float(mstat.data[1])
-                        # Determine RA unit robustly: config hint > heuristic > fallback
-                        try:
-                            mount_cfg = (
-                                self.config.get_mount_config()
-                                if hasattr(self.config, "get_mount_config")
-                                else {}
-                            )
-                            ra_unit = str(mount_cfg.get("ra_unit", "auto")).lower()
-                            ra_is_hours = bool(mount_cfg.get("ra_is_hours", False))
-                        except Exception:
-                            ra_unit = "auto"
-                            ra_is_hours = False
-
-                        ra_deg = ra_val
-                        if ra_unit == "hours" or ra_is_hours:
-                            ra_deg = ra_val * 15.0
-                        elif ra_unit == "degrees":
-                            ra_deg = ra_val
-                        else:
-                            # auto: if ambiguous (0..24), compare to last solve if available
-                            if 0.0 <= ra_val <= 24.0:
-                                # Defer decision to Moon-based check: test both candidates later
-                                center_candidates = [(ra_val, dec_val), (ra_val * 15.0, dec_val)]
-                                ra_deg = ra_val * 15.0
-                            else:
-                                ra_deg = ra_val
-                        center_ra_dec = (ra_deg, dec_val)
+                        # Trust ASCOMMount.get_coordinates() to return degrees
+                        ra_deg = float(mstat.data[0])
+                        dec_deg = float(mstat.data[1])
+                        center_ra_dec = (ra_deg, dec_deg)
                 except Exception:
                     center_ra_dec = None
             if (
@@ -1132,6 +1107,14 @@ class VideoProcessor:
                     # Evaluate separation for candidates; choose smallest
                     best_center = center_ra_dec
                     try:
+                        # Normalize obstime to astropy Time if string/datetime slipped through
+                        try:
+                            from astropy.time import Time as _Time2
+
+                            if not isinstance(obstime, _Time2):
+                                obstime = _Time2(getattr(obstime, "isot", str(obstime)))
+                        except Exception:
+                            pass
                         moon_coord = get_body("moon", obstime, location=location)
                         best_sep = 1e9
                         for ra_c, dec_c in candidates:
@@ -1144,9 +1127,14 @@ class VideoProcessor:
                     except Exception:
                         # Fall back to original center
                         pass
-                    center = SkyCoord(
-                        ra=center_ra_dec[0] * u.deg, dec=center_ra_dec[1] * u.deg, frame="icrs"
-                    )
+                    # Ensure RA wraps into 0..360 to avoid large separations
+                    try:
+                        ra_wrapped = float(center_ra_dec[0]) % 360.0
+                        dec_clamped = max(-90.0, min(90.0, float(center_ra_dec[1])))
+                    except Exception:
+                        ra_wrapped = center_ra_dec[0]
+                        dec_clamped = center_ra_dec[1]
+                    center = SkyCoord(ra=ra_wrapped * u.deg, dec=dec_clamped * u.deg, frame="icrs")
                     try:
                         # Ensure ephemeris is set to a modern file; ignore errors
                         try:

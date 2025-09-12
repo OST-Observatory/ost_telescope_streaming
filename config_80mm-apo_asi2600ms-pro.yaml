@@ -308,7 +308,7 @@ overlay:
   # Secondary telescope FOV overlay settings
   secondary_fov:
     enabled: true  # Enable/disable secondary FOV display
-    type: "camera"  # "camera" or "eyepiece"
+    type: "eyepiece"  # "camera" or "eyepiece"
 
     # Secondary telescope parameters
     telescope:
@@ -326,7 +326,7 @@ overlay:
     # For eyepiece-based FOV
     eyepiece:
       focal_length: 36     # Eyepiece focal length in mm
-      afov: 68             # Apparent Field of View in degrees
+      afov: 72             # Apparent Field of View in degrees
 
     # Display settings
     display:
